@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# Node
+node_modules/
+.vite/
+*.tsbuildinfo
+
+# Blocky runtime data
+*.db
+*.db-journal
+*.sqlite3
+extensions/*/.venv/
+.blocky/
+
+# Secrets — 絕不進版控
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
