@@ -1,0 +1,12 @@
+title: items[1.0] 合法且等同 items[1]；items[1.5] 是錯誤
+spec: §4.3 number 是 double
+tags:
+- index
+- D15
+expect:
+  status: error
+  logs:
+  - 甲
+  error:
+    code: index
+    message_contains: 必須是整數

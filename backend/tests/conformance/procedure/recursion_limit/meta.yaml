@@ -1,0 +1,10 @@
+title: 遞迴深度超過 200 → 拋錯而非堆疊爆掉
+spec: §5.4 變數作用域
+tags:
+- procedure
+- recursion
+expect:
+  status: error
+  error:
+    code: recursion_limit
+    message_contains: '200'

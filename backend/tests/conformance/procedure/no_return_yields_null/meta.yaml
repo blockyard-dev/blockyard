@@ -1,0 +1,8 @@
+title: 跑完 body 沒遇到 return → 回傳 null
+spec: §4.6 執行語意
+tags:
+- procedure
+expect:
+  status: ok
+  logs:
+  - 'null'

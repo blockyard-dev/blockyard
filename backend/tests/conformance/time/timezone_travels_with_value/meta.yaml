@@ -1,0 +1,11 @@
+title: 時區跟著值走：同一個時間戳在不同時區格式化結果不同
+spec: §4.9 時間戳的表示
+tags:
+- time
+clock: 1756281600000
+timezone: Asia/Taipei
+expect:
+  status: ok
+  logs:
+  - '2025-08-27 16:00:00'
+  - '2025-08-27 08:00:00'

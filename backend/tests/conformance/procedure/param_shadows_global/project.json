@@ -1,0 +1,150 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {
+    "p_s": {
+      "name": "回傳 x",
+      "params": [
+        {
+          "id": "a1",
+          "name": "x",
+          "type": "string"
+        }
+      ],
+      "returns": "string",
+      "body": "blk_8",
+      "definitionBlock": "blk_7"
+    }
+  },
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "data.set",
+      "parent": "blk_1",
+      "next": "blk_3",
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": "全域"
+        }
+      },
+      "fields": {
+        "name": "x"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": "blk_5",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_4"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "procedure.call",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "a1": {
+          "kind": "literal",
+          "value": "參數"
+        }
+      },
+      "fields": {},
+      "mutation": {
+        "proc": "p_s"
+      },
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "debug.log",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_6"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "data.get",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "name": "x"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "procedure.definition",
+      "parent": null,
+      "next": "blk_8",
+      "inputs": {},
+      "fields": {
+        "proc": "p_s"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "procedure.return",
+      "parent": "blk_7",
+      "next": null,
+      "inputs": {
+        "value": {
+          "kind": "block",
+          "id": "blk_9"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_9": {
+      "opcode": "data.get",
+      "parent": "blk_8",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "name": "x"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

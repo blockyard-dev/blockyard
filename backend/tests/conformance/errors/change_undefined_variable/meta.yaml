@@ -1,0 +1,9 @@
+title: change 未建立的變數是錯誤，不是從 0 起算
+spec: §4.5 執行語意
+tags:
+- variables
+expect:
+  status: error
+  error:
+    code: undefined_variable
+    message_contains: 還沒建立

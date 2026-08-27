@@ -1,0 +1,11 @@
+title: 索引 0 有專屬錯誤訊息：「索引從 1 開始」
+spec: §4.3 索引規則
+tags:
+- index
+- D11
+expect:
+  status: error
+  error:
+    code: index
+    message_contains: 索引從 1 開始
+    hint_contains: 你是不是要 1

@@ -1,0 +1,130 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "data.set",
+      "parent": "blk_1",
+      "next": "blk_4",
+      "inputs": {
+        "value": {
+          "kind": "block",
+          "id": "blk_3"
+        }
+      },
+      "fields": {
+        "name": "items"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "data.new_list",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "data.list_add",
+      "parent": "blk_2",
+      "next": "blk_5",
+      "inputs": {
+        "item": {
+          "kind": "literal",
+          "value": "甲"
+        }
+      },
+      "fields": {
+        "name": "items"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "debug.log",
+      "parent": "blk_4",
+      "next": "blk_7",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_6"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "data.list_item",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "index": {
+          "kind": "literal",
+          "value": 1.0
+        }
+      },
+      "fields": {
+        "name": "items"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "debug.log",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_8"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "data.list_item",
+      "parent": "blk_7",
+      "next": null,
+      "inputs": {
+        "index": {
+          "kind": "literal",
+          "value": 1.5
+        }
+      },
+      "fields": {
+        "name": "items"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

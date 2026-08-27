@@ -1,0 +1,11 @@
+title: 寫入即建立：沒碰過任何「建立變數」按鈕
+spec: §4.5 執行語意
+tags:
+- variables
+- D7
+expect:
+  status: ok
+  logs:
+  - '10'
+  vars:
+    count: 10

@@ -1,0 +1,8 @@
+title: $${ 逸出成字面的 ${；其餘 $ 一律字面
+spec: §4.7 語法
+tags:
+- template
+expect:
+  status: ok
+  logs:
+  - ${HOME} 要 $5 元

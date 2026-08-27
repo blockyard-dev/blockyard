@@ -1,0 +1,12 @@
+title: 0 是 falsy，但 type.is_empty(0) 為 false——刻意的不一致
+spec: §4.3 「空」與 falsy 是兩件事
+tags:
+- falsy
+- is_empty
+expect:
+  status: ok
+  logs:
+  - 'true'
+  - 'false'
+  - 'true'
+  - 'true'

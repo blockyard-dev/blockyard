@@ -1,0 +1,13 @@
+title: 5.0 字串化為 "5"，10/2 也是——語意層只有 double（D15）
+spec: §4.3 number 是 double
+tags:
+- number
+- D15
+expect:
+  status: ok
+  logs:
+  - '5'
+  - '5'
+  - '0.3333333333333333'
+  - '0.30000000000000004'
+  - 1e+21

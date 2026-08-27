@@ -1,0 +1,9 @@
+title: ${items[last]} 與 ${items[-1]} 等價
+spec: §4.7 語法
+tags:
+- template
+- index
+expect:
+  status: ok
+  logs:
+  - 乙/乙

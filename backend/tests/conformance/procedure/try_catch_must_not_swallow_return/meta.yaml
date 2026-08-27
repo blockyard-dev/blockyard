@@ -1,0 +1,10 @@
+title: try_catch 不可捕捉 ProcedureReturn——最容易寫錯的一題
+spec: §4.6 執行語意 / §5.6
+tags:
+- procedure
+- try_catch
+- unwind
+expect:
+  status: ok
+  logs:
+  - 回傳成功

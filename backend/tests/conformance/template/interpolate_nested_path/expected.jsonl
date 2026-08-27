@@ -1,0 +1,15 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "var.set", "threadId": "t1", "name": "i", "value": 3}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4", "value": {"items": [{"title": "甲"}, {"title": "乙"}]}}
+{"op": "var.set", "threadId": "t1", "name": "resp", "value": {"items": [{"title": "甲"}, {"title": "乙"}]}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "第 3 筆：甲", "blockId": "blk_5"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

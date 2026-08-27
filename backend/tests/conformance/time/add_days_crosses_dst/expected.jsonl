@@ -1,0 +1,25 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3", "value": {"__type": "timestamp", "epochMs": 1741453200000.0, "tz": "America/New_York"}}
+{"op": "var.set", "threadId": "t1", "name": "t", "value": {"__type": "timestamp", "epochMs": 1741453200000.0, "tz": "America/New_York"}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6", "value": {"__type": "timestamp", "epochMs": 1741453200000.0, "tz": "America/New_York"}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5", "value": "2025-03-08 12:00:00"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "2025-03-08 12:00:00", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_8"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_9"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_10"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_10", "value": {"__type": "timestamp", "epochMs": 1741453200000.0, "tz": "America/New_York"}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_9", "value": {"__type": "timestamp", "epochMs": 1741536000000.0, "tz": "America/New_York"}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_8", "value": "2025-03-09 12:00:00"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "2025-03-09 12:00:00", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_7"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

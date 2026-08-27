@@ -1,0 +1,11 @@
+title: 加「天」走行事曆運算，跨日光節約時間仍是同一個鐘點
+spec: §4.9 日期時間積木
+tags:
+- time
+- dst
+timezone: America/New_York
+expect:
+  status: ok
+  logs:
+  - '2025-03-08 12:00:00'
+  - '2025-03-09 12:00:00'

@@ -1,0 +1,9 @@
+title: 一個 thread 出錯，其餘 thread 繼續執行
+spec: §5.6 錯誤處理
+tags:
+- threads
+- errors
+expect:
+  status: error
+  logs:
+  - 我還活著

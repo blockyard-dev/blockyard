@@ -1,0 +1,9 @@
+title: object key 不存在是錯誤，不是 null
+spec: §4.3 索引規則
+tags:
+- object
+expect:
+  status: error
+  error:
+    code: key
+    message_contains: 沒有 "b" 這個欄位

@@ -1,0 +1,11 @@
+title: 整格取值保留原型別，可直接餵進 for each
+spec: §4.7 整格取值 vs 字串拼接
+tags:
+- template
+expect:
+  status: ok
+  logs:
+  - list
+  - '6'
+  vars:
+    sum: 6

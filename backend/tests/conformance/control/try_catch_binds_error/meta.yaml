@@ -1,0 +1,9 @@
+title: try_catch 綁定 error 變數（含 message / code / blockId）
+spec: §5.6 錯誤處理
+tags:
+- try_catch
+expect:
+  status: ok
+  logs:
+  - 接到了：undefined_variable
+  - 繼續執行

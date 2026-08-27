@@ -1,0 +1,14 @@
+title: 全域變數不跨 Run 存活；persist_* 才會（D12）
+spec: §5.4 全域變數的生命週期
+tags:
+- persist
+- D12
+persist:
+  累計: 7
+expect:
+  status: ok
+  logs:
+  - '7'
+  - '8'
+  persist:
+    累計: 8

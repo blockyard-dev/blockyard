@@ -1,0 +1,8 @@
+title: return 掛在 hat 底下 → 存檔期驗證錯誤，不是執行期
+spec: §4.6 執行語意
+tags:
+- procedure
+- validation
+expect:
+  status: load_error
+  load_error: 只能放在函式定義裡面

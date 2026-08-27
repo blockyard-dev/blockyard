@@ -1,0 +1,139 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "debug.log",
+      "parent": "blk_1",
+      "next": "blk_4",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_3"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "data.persist_get",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "default": {
+          "kind": "literal",
+          "value": 0
+        }
+      },
+      "fields": {
+        "name": "累計"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "data.persist_set",
+      "parent": "blk_2",
+      "next": "blk_7",
+      "inputs": {
+        "value": {
+          "kind": "block",
+          "id": "blk_5"
+        }
+      },
+      "fields": {
+        "name": "累計"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "operator.add",
+      "parent": "blk_4",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "block",
+          "id": "blk_6"
+        },
+        "b": {
+          "kind": "literal",
+          "value": 1
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "data.persist_get",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "default": {
+          "kind": "literal",
+          "value": 0
+        }
+      },
+      "fields": {
+        "name": "累計"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "debug.log",
+      "parent": "blk_4",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_8"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "data.persist_get",
+      "parent": "blk_7",
+      "next": null,
+      "inputs": {
+        "default": {
+          "kind": "literal",
+          "value": 0
+        }
+      },
+      "fields": {
+        "name": "累計"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

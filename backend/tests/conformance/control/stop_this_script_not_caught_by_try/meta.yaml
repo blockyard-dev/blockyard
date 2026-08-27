@@ -1,0 +1,8 @@
+title: control.stop 必須穿透 try_catch
+spec: §5.6 錯誤處理
+tags:
+- try_catch
+- stop
+expect:
+  status: ok
+  logs: []

@@ -1,0 +1,11 @@
+title: 讀取未建立的變數是錯誤，且附編輯距離建議
+spec: §4.5 執行語意
+tags:
+- variables
+- Q7
+expect:
+  status: error
+  error:
+    code: undefined_variable
+    message_contains: 未知變數 "conut"
+    hint_contains: 你是不是要 "count"

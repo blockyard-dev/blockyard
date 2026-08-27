@@ -1,0 +1,8 @@
+title: object.get 接了預設值孔就不報錯
+spec: §4.3 索引規則
+tags:
+- object
+expect:
+  status: ok
+  logs:
+  - 沒有

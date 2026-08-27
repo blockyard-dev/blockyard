@@ -1,0 +1,11 @@
+title: type.of 一律回 number，沒有 int
+spec: §4.3 number 是 double
+tags:
+- number
+- D15
+expect:
+  status: ok
+  logs:
+  - number
+  - number
+  - number

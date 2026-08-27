@@ -1,0 +1,8 @@
+title: ${a + b} 在存檔期就被擋，不是執行期
+spec: §4.7 核心限制 / D9
+tags:
+- template
+- D9
+expect:
+  status: load_error
+  load_error: 不支援運算

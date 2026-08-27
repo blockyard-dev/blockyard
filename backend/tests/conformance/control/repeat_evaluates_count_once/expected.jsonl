@@ -1,0 +1,37 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "var.set", "threadId": "t1", "name": "n", "value": 3}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "var.set", "threadId": "t1", "name": "hits", "value": 0}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5", "value": 3}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "var.set", "threadId": "t1", "name": "hits", "value": 1}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "var.set", "threadId": "t1", "name": "n", "value": 13}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "var.set", "threadId": "t1", "name": "hits", "value": 2}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "var.set", "threadId": "t1", "name": "n", "value": 23}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "var.set", "threadId": "t1", "name": "hits", "value": 3}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "var.set", "threadId": "t1", "name": "n", "value": 33}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_8"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_9"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_9", "value": 3}
+{"op": "log", "threadId": "t1", "level": "info", "text": "3", "blockId": "blk_8"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_8"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

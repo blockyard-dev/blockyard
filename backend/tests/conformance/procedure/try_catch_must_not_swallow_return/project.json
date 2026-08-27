@@ -1,0 +1,135 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {
+    "p_t": {
+      "name": "在 try 裡回傳",
+      "params": [],
+      "returns": "string",
+      "body": "blk_5",
+      "definitionBlock": "blk_4"
+    }
+  },
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "debug.log",
+      "parent": "blk_1",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_3"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "procedure.call",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {},
+      "fields": {},
+      "mutation": {
+        "proc": "p_t"
+      },
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "procedure.definition",
+      "parent": null,
+      "next": "blk_5",
+      "inputs": {},
+      "fields": {
+        "proc": "p_t"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "control.try_catch",
+      "parent": "blk_4",
+      "next": "blk_8",
+      "inputs": {
+        "try": {
+          "kind": "stack",
+          "id": "blk_6"
+        },
+        "catch": {
+          "kind": "stack",
+          "id": "blk_7"
+        }
+      },
+      "fields": {
+        "error_name": "error"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "procedure.return",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": "回傳成功"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "procedure.return",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": "被吞掉了"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "procedure.return",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": "穿透失敗"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "debug.log",
+      "parent": "blk_1",
+      "next": "blk_4",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_3"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "data.persist_has",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "name": "沒設過"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_5"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "data.persist_get",
+      "parent": "blk_4",
+      "next": null,
+      "inputs": {
+        "default": {
+          "kind": "literal",
+          "value": "預設"
+        }
+      },
+      "fields": {
+        "name": "沒設過"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

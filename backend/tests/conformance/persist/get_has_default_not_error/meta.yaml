@@ -1,0 +1,10 @@
+title: persist_get 有預設值孔而非報錯——第一次執行必然不存在
+spec: §5.4 第 4 層
+tags:
+- persist
+- D12
+expect:
+  status: ok
+  logs:
+  - 'false'
+  - 預設

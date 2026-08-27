@@ -1,0 +1,11 @@
+title: -1 是倒數第一，last 是最後一項
+spec: §4.3 索引規則
+tags:
+- index
+expect:
+  status: ok
+  logs:
+  - 甲
+  - 丙
+  - 丙
+  - 乙

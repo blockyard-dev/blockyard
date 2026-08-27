@@ -1,0 +1,104 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "data.set",
+      "parent": "blk_1",
+      "next": "blk_3",
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": 3
+        }
+      },
+      "fields": {
+        "name": "i"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "data.set",
+      "parent": "blk_2",
+      "next": "blk_5",
+      "inputs": {
+        "value": {
+          "kind": "block",
+          "id": "blk_4"
+        }
+      },
+      "fields": {
+        "name": "resp"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "object.parse_json",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "{\"items\":[{\"title\":\"甲\"},{\"title\":\"乙\"}]}"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "debug.log",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "template",
+          "value": "第 ${i} 筆：${resp.items[1].title}",
+          "refs": [
+            {
+              "root": "i",
+              "path": []
+            },
+            {
+              "root": "resp",
+              "path": [
+                "items",
+                1,
+                "title"
+              ]
+            }
+          ],
+          "whole": false
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

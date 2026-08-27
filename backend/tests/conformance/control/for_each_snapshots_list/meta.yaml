@@ -1,0 +1,10 @@
+title: for each 迭代前先複製：迴圈體改原清單不影響迭代範圍
+spec: §4.4 control
+tags:
+- control
+expect:
+  status: ok
+  logs:
+  - '2'
+  vars:
+    n: 2

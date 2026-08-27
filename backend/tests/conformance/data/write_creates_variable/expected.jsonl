@@ -1,0 +1,44 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 0}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 1}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 2}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 3}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 4}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 5}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 6}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 7}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 8}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 9}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "count", "value": 10}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6", "value": 10}
+{"op": "log", "threadId": "t1", "level": "info", "text": "10", "blockId": "blk_5"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

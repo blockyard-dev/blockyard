@@ -1,0 +1,7 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_3", "error": {"type": "TypeCoercionError", "code": "type", "message": "不能比較文字與數字的大小", "blockId": "blk_3", "hint": "請先用「轉為數字」把兩邊變成同一種型別"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

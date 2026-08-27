@@ -1,0 +1,6 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_2", "error": {"type": "UndefinedVariableError", "code": "undefined_variable", "message": "未知變數 \"count\"，「改變」不能用在還沒建立的變數上", "blockId": "blk_2", "hint": "請先用「設定」建立它"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

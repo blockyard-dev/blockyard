@@ -1,0 +1,153 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "debug.log",
+      "parent": "blk_1",
+      "next": "blk_3",
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": 5.0
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": "blk_5",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_4"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "operator.divide",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": 10
+        },
+        "b": {
+          "kind": "literal",
+          "value": 2
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "debug.log",
+      "parent": "blk_3",
+      "next": "blk_7",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_6"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "operator.divide",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": 1
+        },
+        "b": {
+          "kind": "literal",
+          "value": 3
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "debug.log",
+      "parent": "blk_5",
+      "next": "blk_9",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_8"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "operator.add",
+      "parent": "blk_7",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": 0.1
+        },
+        "b": {
+          "kind": "literal",
+          "value": 0.2
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_9": {
+      "opcode": "debug.log",
+      "parent": "blk_7",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": 1e+21
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

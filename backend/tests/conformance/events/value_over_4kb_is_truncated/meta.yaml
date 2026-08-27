@@ -1,0 +1,8 @@
+title: block.exit 的 value 超過 4KB 會被截斷並標記
+spec: §6.2 流量控制
+tags:
+- events
+expect:
+  status: ok
+  logs:
+  - '5000'

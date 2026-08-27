@@ -1,0 +1,20 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3", "value": ["甲"]}
+{"op": "var.set", "threadId": "t1", "name": "items", "value": ["甲"]}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "items", "value": ["甲"]}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6", "value": "甲"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "甲", "blockId": "blk_5"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_8"}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_8", "error": {"type": "BadIndexError", "code": "index", "message": "索引必須是整數，收到 1.5", "blockId": "blk_8"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

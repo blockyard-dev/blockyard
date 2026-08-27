@@ -1,0 +1,10 @@
+title: repeat 的次數只在進入迴圈前求值一次
+spec: §4.4 control
+tags:
+- control
+expect:
+  status: ok
+  logs:
+  - '3'
+  vars:
+    hits: 3

@@ -1,0 +1,11 @@
+title: 相等比較不做型別轉換："5" 不等於 5
+spec: §4.4 operator 比較語意
+tags:
+- operator
+- comparison
+expect:
+  status: ok
+  logs:
+  - 'false'
+  - 'true'
+  - 'true'

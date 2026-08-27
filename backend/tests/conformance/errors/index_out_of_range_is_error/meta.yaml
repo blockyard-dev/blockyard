@@ -1,0 +1,9 @@
+title: 越界是執行期錯誤，不回 null
+spec: §4.3 索引規則
+tags:
+- index
+expect:
+  status: error
+  error:
+    code: index
+    message_contains: 超出範圍

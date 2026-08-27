@@ -1,0 +1,11 @@
+title: 清單與物件是兩種型別；null 是獨立型別——都違反 JS 直覺
+spec: §4.8 兩個違反 JS 直覺的地方
+tags:
+- type
+expect:
+  status: ok
+  logs:
+  - 'false'
+  - 'true'
+  - 'false'
+  - 'true'

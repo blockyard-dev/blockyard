@@ -1,0 +1,11 @@
+title: return 在 repeat 迴圈內 → 中斷整個函式，不只跳出迴圈
+spec: §4.6 執行語意
+tags:
+- procedure
+- unwind
+expect:
+  status: ok
+  logs:
+  - '3'
+  vars:
+    i: 3

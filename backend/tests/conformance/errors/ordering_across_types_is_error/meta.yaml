@@ -1,0 +1,10 @@
+title: 大小比較不接受型別混用，訊息提示先轉型
+spec: §4.4 operator 比較語意
+tags:
+- operator
+- comparison
+expect:
+  status: error
+  error:
+    code: type
+    hint_contains: 轉為數字

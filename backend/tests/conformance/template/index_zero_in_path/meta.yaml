@@ -1,0 +1,10 @@
+title: ${items[0]} 走同一套索引規則，拿到專屬訊息
+spec: §4.7 錯誤語意
+tags:
+- template
+- index
+expect:
+  status: error
+  error:
+    code: index
+    message_contains: 索引從 1 開始

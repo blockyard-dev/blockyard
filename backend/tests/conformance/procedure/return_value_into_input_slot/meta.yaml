@@ -1,0 +1,9 @@
+title: 有回傳值的函式，呼叫積木可塞進 log 的輸入孔
+spec: §4.6 自訂函式與回傳值
+tags:
+- procedure
+- D8
+expect:
+  status: ok
+  logs:
+  - '6'

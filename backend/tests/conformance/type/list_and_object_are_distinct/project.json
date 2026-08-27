@@ -1,0 +1,167 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "debug.log",
+      "parent": "blk_1",
+      "next": "blk_5",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_3"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "type.is",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "value": {
+          "kind": "block",
+          "id": "blk_4"
+        }
+      },
+      "fields": {
+        "type": "object"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "data.new_list",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": "blk_8",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_6"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "type.is",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "value": {
+          "kind": "block",
+          "id": "blk_7"
+        }
+      },
+      "fields": {
+        "type": "list"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "data.new_list",
+      "parent": "blk_6",
+      "next": null,
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "debug.log",
+      "parent": "blk_5",
+      "next": "blk_10",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_9"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_9": {
+      "opcode": "type.is",
+      "parent": "blk_8",
+      "next": null,
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": null
+        }
+      },
+      "fields": {
+        "type": "object"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_10": {
+      "opcode": "debug.log",
+      "parent": "blk_8",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_11"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_11": {
+      "opcode": "type.is",
+      "parent": "blk_10",
+      "next": null,
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": null
+        }
+      },
+      "fields": {
+        "type": "null"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

@@ -1,0 +1,11 @@
+title: → string 的轉換表：true/null/list/object
+spec: §4.3 值模型與型別轉換
+tags:
+- coercion
+expect:
+  status: ok
+  logs:
+  - 'true'
+  - ''
+  - '[]'
+  - '123'

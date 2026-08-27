@@ -1,0 +1,10 @@
+title: ${str.foo} 的錯誤訊息提示「是不是需要先用解析 JSON」
+spec: §4.7 錯誤語意
+tags:
+- template
+expect:
+  status: error
+  error:
+    code: template
+    message_contains: 是文字不是物件
+    hint_contains: 解析 JSON

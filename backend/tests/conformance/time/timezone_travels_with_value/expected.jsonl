@@ -1,0 +1,18 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4", "value": {"__type": "timestamp", "epochMs": 1756281600000, "tz": "Asia/Taipei"}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3", "value": "2025-08-27 16:00:00"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "2025-08-27 16:00:00", "blockId": "blk_2"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_7", "value": {"__type": "timestamp", "epochMs": 1756281600000, "tz": "UTC"}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6", "value": "2025-08-27 08:00:00"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "2025-08-27 08:00:00", "blockId": "blk_5"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

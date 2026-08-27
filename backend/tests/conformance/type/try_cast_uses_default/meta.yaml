@@ -1,0 +1,9 @@
+title: try_cast 轉不動就用預設值，省掉一整個 try_catch
+spec: §4.8 型別積木
+tags:
+- type
+expect:
+  status: ok
+  logs:
+  - '0'
+  - '42'

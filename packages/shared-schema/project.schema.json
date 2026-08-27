@@ -1,0 +1,455 @@
+{
+  "$defs": {
+    "Block": {
+      "additionalProperties": false,
+      "properties": {
+        "opcode": {
+          "title": "Opcode",
+          "type": "string"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent"
+        },
+        "next": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "discriminator": {
+              "mapping": {
+                "block": "#/$defs/BlockInput",
+                "literal": "#/$defs/LiteralInput",
+                "stack": "#/$defs/StackInput",
+                "template": "#/$defs/TemplateInput"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/LiteralInput"
+              },
+              {
+                "$ref": "#/$defs/TemplateInput"
+              },
+              {
+                "$ref": "#/$defs/BlockInput"
+              },
+              {
+                "$ref": "#/$defs/StackInput"
+              }
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "fields": {
+          "additionalProperties": true,
+          "title": "Fields",
+          "type": "object"
+        },
+        "mutation": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mutation"
+        },
+        "ui": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ui"
+        }
+      },
+      "required": [
+        "opcode"
+      ],
+      "title": "Block",
+      "type": "object"
+    },
+    "BlockInput": {
+      "additionalProperties": false,
+      "description": "由 reporter / boolean 積木求值。",
+      "properties": {
+        "kind": {
+          "const": "block",
+          "default": "block",
+          "title": "Kind",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "BlockInput",
+      "type": "object"
+    },
+    "ExtensionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionRef",
+      "type": "object"
+    },
+    "LiteralInput": {
+      "additionalProperties": false,
+      "description": "使用者直接輸入的值。\n\n§4.7：`literal` 維持「笨資料」——解譯器**不掃描它找 `${`**。含插值的\n字串在存檔時就會被解析成 TemplateInput，因此一個正當寫著 `${HOME}` 的\nshell 指令不會被偷偷替換。",
+      "properties": {
+        "kind": {
+          "const": "literal",
+          "default": "literal",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "title": "LiteralInput",
+      "type": "object"
+    },
+    "Meta": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "default": "prj_local",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "未命名專案",
+          "title": "Name",
+          "type": "string"
+        },
+        "createdAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Createdat"
+        },
+        "updatedAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updatedat"
+        }
+      },
+      "title": "Meta",
+      "type": "object"
+    },
+    "ProcParam": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "any",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "ProcParam",
+      "type": "object"
+    },
+    "Procedure": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "params": {
+          "items": {
+            "$ref": "#/$defs/ProcParam"
+          },
+          "title": "Params",
+          "type": "array"
+        },
+        "returns": {
+          "anyOf": [
+            {
+              "enum": [
+                "any",
+                "number",
+                "string",
+                "boolean",
+                "list",
+                "object"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Returns"
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body"
+        },
+        "definitionBlock": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definitionblock"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Procedure",
+      "type": "object"
+    },
+    "Script": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "top": {
+          "title": "Top",
+          "type": "string"
+        },
+        "x": {
+          "default": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "default": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "top"
+      ],
+      "title": "Script",
+      "type": "object"
+    },
+    "StackInput": {
+      "additionalProperties": false,
+      "description": "C 型積木的內部堆疊（迴圈體、if 分支）。",
+      "properties": {
+        "kind": {
+          "const": "stack",
+          "default": "stack",
+          "title": "Kind",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        }
+      },
+      "title": "StackInput",
+      "type": "object"
+    },
+    "TemplateInput": {
+      "additionalProperties": false,
+      "description": "含 `${}` 插值的字串（§4.7）。",
+      "properties": {
+        "kind": {
+          "const": "template",
+          "default": "template",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "refs": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Refs",
+          "type": "array"
+        },
+        "whole": {
+          "default": false,
+          "title": "Whole",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "TemplateInput",
+      "type": "object"
+    },
+    "VariableIndex": {
+      "additionalProperties": false,
+      "description": "§4.5：這**不是宣告的結果，而是索引**。\n\n存檔時掃過所有積木彙整而成，只供變數監看面板、名稱自動完成與靜態檢查使用。\n刪掉整個欄位再重新產生不影響執行語意。",
+      "properties": {
+        "firstSeen": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Firstseen"
+        }
+      },
+      "title": "VariableIndex",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "formatVersion": {
+      "default": 1,
+      "title": "Formatversion",
+      "type": "integer"
+    },
+    "meta": {
+      "$ref": "#/$defs/Meta"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/ExtensionRef"
+      },
+      "title": "Extensions",
+      "type": "array"
+    },
+    "variables": {
+      "additionalProperties": {
+        "$ref": "#/$defs/VariableIndex"
+      },
+      "title": "Variables",
+      "type": "object"
+    },
+    "procedures": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Procedure"
+      },
+      "title": "Procedures",
+      "type": "object"
+    },
+    "scripts": {
+      "items": {
+        "$ref": "#/$defs/Script"
+      },
+      "title": "Scripts",
+      "type": "array"
+    },
+    "blocks": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Block"
+      },
+      "title": "Blocks",
+      "type": "object"
+    }
+  },
+  "title": "Blocky Project IR",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blocky.dev/schema/project.schema.json",
+  "description": "積木專案的中介表示（IR）。設計文件 §4。"
+}

@@ -1,0 +1,10 @@
+title: time.part 與 time.diff
+spec: §4.9 日期時間積木
+tags:
+- time
+expect:
+  status: ok
+  logs:
+  - '7'
+  - '3'
+  - '8'

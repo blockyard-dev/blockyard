@@ -1,0 +1,9 @@
+title: 第 ${i} 筆：${resp.items[1].title} 能正確取值
+spec: §4.7 語法
+tags:
+- template
+- D9
+expect:
+  status: ok
+  logs:
+  - 第 3 筆：甲

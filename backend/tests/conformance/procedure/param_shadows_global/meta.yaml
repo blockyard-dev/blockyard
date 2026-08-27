@@ -1,0 +1,10 @@
+title: 名稱解析順序：參數 → thread-local → 全域
+spec: §5.4 變數作用域
+tags:
+- procedure
+- scope
+expect:
+  status: ok
+  logs:
+  - 參數
+  - 全域

@@ -1,0 +1,11 @@
+title: '"123" 對 type.is 是 false，對 can_cast 是 true——所以必須是兩顆積木'
+spec: §4.8 為什麼 is 和 can_cast 必須是兩顆
+tags:
+- type
+expect:
+  status: ok
+  logs:
+  - 'false'
+  - 'true'
+  - 'true'
+  - 'false'

@@ -1,0 +1,10 @@
+title: cast 的下拉不含物件——把字串變成物件只可能是 JSON parse
+spec: §4.8 下拉選項 / D10
+tags:
+- type
+- D10
+expect:
+  status: error
+  error:
+    code: type
+    hint_contains: 解析 JSON

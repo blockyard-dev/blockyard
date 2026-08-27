@@ -1,0 +1,10 @@
+title: parse 永不自動：字串就是字串，直到有一顆看得見的積木
+spec: §4.8 JSON / D10
+tags:
+- type
+- D10
+expect:
+  status: ok
+  logs:
+  - string
+  - object
