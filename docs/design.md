@@ -2,14 +2,28 @@
 
 | 項目 | 內容 |
 |---|---|
-| 版本 | Draft v0.3 |
+| 版本 | Draft v0.4 |
 | 日期 | 2026-08-27 |
-| 狀態 | 已審閱，P0 施工中 |
+| 狀態 | 已審閱，P0a 完成，P1 施工中 |
 | 代號 | `blocky`（暫定，套件名 `blocky-runtime`） |
 
 ---
 
-## 0.0 v0.3 變更摘要
+## 0.0 變更摘要
+
+### v0.4（P1 施工中）
+
+P0a 的語意核心完成、開始做擴充系統之後的修訂。前三條都是**實作撞出來的**，不是重新設計：
+
+| 類別 | 變更 | 章節 |
+|---|---|---|
+| **修訂** | `HostChannel` 的 `log` 與 `is_cancelled` 改為同步，只有 `emit` 維持 async | D18、§7.5 |
+| **修訂** | Host 邊界的參數正規化改為**套用 §4.3 那張轉換表**，不再是「除 json / number 外一律嚴格」 | D19、§7.5 |
+| **補洞** | 積木形狀與位置沒有驗證的地方。執行期撞到會讓 Thread 安靜死掉——形狀錯誤不是 BlockyError，發不出 `block.error` | D20、§4.2 |
+| **新增** | `backend/blocky/extensions/`：manifest schema、`ExtensionHost` / `HostChannel`、`InProcessHost`、邊界的正規化與驗證 | §7 |
+| **新增** | `backend/tests/contract/`：§17.4 的 Host 合約測試，對 host 實作參數化，SubprocessHost 進來時題目一題都不用改 | §17.4 |
+
+### v0.3
 
 v0.2 經審閱後的修訂。原稿的整體結構與 D1～D11 全數保留，以下是實質變動：
 
@@ -54,6 +68,9 @@ v0.2 經審閱後的修訂。原稿的整體結構與 D1～D11 全數保留，�
 | D15 | `number` 語意上是 **IEEE754 double**，字串化規則跟隨 JS | Python 端 int/float 之別若洩漏到語意層，`5` 與 `5.0`、`items[1.0]` 這類問題會散落各處。釘死在 JSON 的數字模型上，未來任何第二套 runtime 都能對齊 |
 | D17 | 比較不做型別轉換：`=` 型別不同即不等（不報錯），`<` 型別混用則報錯 | 「一不一樣」對任何輸入都有答案；「誰比較大」對文字與數字則沒有意義。Scratch 的隱式嗅探會讓 `"10" < "9"` 的結果取決於看不見的規則 |
 | D16 | 積木只能透過 **inputs 進、return 出**；取消 `ctx.get_var/set_var` | 讓 extension 能直接改專案變數會同時破壞靜態檢查、跨 process 邊界與可追溯性，換得的便利可由「回傳值 + `data.set`」完全取代 |
+| D18 | `HostChannel` 的 `log` 與 `is_cancelled` 是**同步**的，只有 `emit` 非同步 | §7.3 的 `ctx.log(...)` 沒有 await，而 log 事件必須當場落在 `block.enter` / `block.exit` 之間，否則 §17 的黃金軌跡不是決定性的。跨 process 時 extension 那一側寫 stdout 本來就是同步的，非同步的是 host 的 reader task——那是實作，不是介面。`is_cancelled` 讀的是推過來的旗標；若每次檢查都往返一次 IPC，沒有人會捨得把它放進迴圈 |
+| D19 | Host 邊界套用的是 **§4.3 那張轉換表本身**，`object` / `list` 是唯一例外 | 積木包的參數孔與內建積木的參數孔在畫面上長得一模一樣，使用者沒有辦法知道哪顆會轉、哪顆不會。`object` / `list` 例外，是因為 §4.3 根本沒有「轉成物件」這一格——那只可能是 JSON parse，而 parse 必須看得見（D10）；要自動處理的參數應該宣告成 `json` |
+| D20 | 積木**形狀**與位置在**載入期**驗證；認不得的 opcode 例外 | 形狀錯誤留到執行期，錯的那半邊可以躺著好幾個月不被走到，而且它是 ValidationError 而非 BlockyError，漏出來時發不出 `block.error`，Thread 只是安靜停掉。認不得的 opcode 反過來**必須**留到執行期，否則 §13.3 的佔位符就不成立 |
 
 ---
 
@@ -217,6 +234,22 @@ v0.2 經審閱後的修訂。原稿的整體結構與 D1～D11 全數保留，�
 - 語意屬性不准放進 `ui`，呈現屬性不准放進 `fields`。混在一起之後，diff 專案與 AI 生成 IR 都會被雜訊淹沒。
 
 目前定義的 key 只有一個：`ui.multiline: string[]`，列出要渲染成多行的 input 名稱（見 §7.2、§8.5）。
+
+#### 積木形狀在載入期驗證（D20）
+
+每顆積木有三種形狀：`command`（接在堆疊上）、`reporter` / `boolean`（插在輸入孔裡）、`hat`（只能在腳本最上面）。形狀與位置不符是**載入期錯誤**：
+
+| 位置 | 必須是 |
+|---|---|
+| `Script.top` | hat |
+| `next` 的目標、`kind: stack` 的目標 | command |
+| `kind: block` 的目標 | reporter / boolean |
+
+留到執行期有兩個後果，都很難查：`if` 的另一半可以躺著錯好幾個月才被走到；而且形狀錯誤是 ValidationError 而非 BlockyError，它從 Thread 漏出來時發不出 `block.error`，前端只會看到一個安靜停掉的 Thread。§4.6 對 `return` 的位置本來就是載入期驗證，這裡只是把同一條原則套到所有積木上。
+
+形狀從哪裡來：內建積木來自註冊表，積木包的積木來自 manifest 的 `type`（§7.2）——所以這一步必須在積木包**載入之後**才做得了。
+
+**認不得的 opcode 不算錯。** 那是 §13.3 的佔位符：積木包還沒安裝，或這份專案來自更新版的 runtime。它保留到執行期，以 `unknown_block` 錯誤呈現。
 
 ### 4.3 值模型與型別轉換
 
@@ -789,7 +822,9 @@ blocks:
 
 `object` / `list` 是**嚴格宣告**：值不是該型別就是錯誤，不做任何轉換。`json` 是**結構化資料入口**，Host 在 dispatch 前正規化（§7.5）：物件與清單直接放行，字串則嘗試 parse。
 
-任何「要把資料送出去」的參數都應宣告成 `json`。這樣 `main.py` 裡永遠拿到 dict / list，**不必寫一行防呆**（D10）。
+任何「要把資料送出去」的參數都應宣告成 `json`。這樣 `main.py` 裡永遠拿到 dict / list，**不必寫一行防呆**（D10）——連 parse 出純量都是錯誤，否則這個承諾就有例外。
+
+其餘型別（`string` `code` `secret` `dropdown` `number` `boolean`）依 §4.3 的轉換表處理，見 D19。
 
 ### 7.3 main.py
 
@@ -867,10 +902,12 @@ class ExtensionHost(Protocol):
 
 ```python
 class HostChannel(Protocol):
-    async def log(self, ctx_token: str, level: str, message: str) -> None: ...
+    def log(self, ctx_token: str, level: str, message: str) -> None: ...
     async def emit(self, ctx_token: str, payload: dict) -> None: ...   # trigger yield
-    async def is_cancelled(self, ctx_token: str) -> bool: ...
+    def is_cancelled(self, ctx_token: str) -> bool: ...
 ```
+
+**只有 `emit` 是非同步的**（D18）。`log` 同步的理由有兩個：§7.3 的 `ctx.log(...)` 沒有 await，而且 log 事件必須當場落在 `block.enter` 與 `block.exit` 之間，否則 §17 的黃金軌跡就不是決定性的。跨 process 時 extension 那一側寫 stdout 本來就是同步的，非同步的是 host 那一側的 reader task——那是 host 的內部實作，不是介面。`is_cancelled` 讀的是 host **推**過來的旗標，不是每次檢查都發一次 RPC；長迴圈裡的檢查點若要往返一次 IPC，沒有人會捨得放進迴圈。`emit` 維持 async，因為 trigger 的 yield 跨越 await 邊界且需要背壓。
 
 in-process 實作是直接呼叫，subprocess 實作是 stdio JSON-RPC 的另一個方向。**兩種實作從 P1 就都要存在**，並用同一份 §17 的題庫驗證行為一致。
 
@@ -880,14 +917,22 @@ in-process 實作是直接呼叫，subprocess 實作是 stdio JSON-RPC 的另一
 
 ```python
 # 進：依 manifest 的 args 型別正規化
-#   type: json    → object / list 直接放行
-#                   string 試 parse；失敗則錯誤「參數 body 收到的文字不是合法 JSON」
-#                   其他型別 → 錯誤
-#   type: number  → 依 §4.3 轉換，失敗則錯誤
-#   其餘型別      → 嚴格檢查，不做轉換
+#   type: json            → object / list 直接放行
+#                           string 試 parse；失敗則錯誤
+#                             「參數 body 收到的文字不是合法 JSON」
+#                           parse 出純量也是錯誤——`json` 的承諾是「永遠拿到 dict / list」
+#                           其他型別 → 錯誤
+#   type: object / list   → 嚴格檢查，不做轉換（§7.2）
+#   其餘型別              → **依 §4.3 的轉換表**（D19）
+#                           string / code / secret / dropdown → to_string（全函數）
+#                           boolean                           → to_boolean（全函數）
+#                           number                            → to_number（會失敗）
+#                           number 另外檢查 manifest 宣告的 min / max
 #
 # 出：依 manifest 的 returns 驗證
 #   宣告 returns: object 卻回了 string → 立刻錯誤，訊息指向該 extension
+#   command 形狀的積木回了非 null      → 錯誤（它沒有輸出孔，值無處可去）
+#   回傳值不是 §4.3 的六種值（例如 set）→ 錯誤（可 JSON 序列化的約束）
 ```
 
 回傳值驗證看似瑣碎，但它把「宣告 object 卻回了字串」擋在源頭，而不是三顆積木之後才以「文字沒有 items」的形式爆開（§4.7）。成本近乎為零（反正已經要求 JSON 可序列化），對 AI 生成的積木包尤其重要——它只要填對 manifest 就不會錯。
@@ -1149,6 +1194,8 @@ def migrate(block: dict) -> dict:
 ### 13.3 缺少 extension 的處理
 專案用到未安裝的積木包時：**保留該積木為佔位符**（灰色、顯示原 opcode 與參數），不刪除、不報廢整個專案。提供一鍵安裝。這是 Scratch 做得不好而 n8n 做得好的地方。
 
+同一條原則延伸到**任何**認不得的 opcode（例如專案來自更新版的 runtime）：它不是載入期錯誤，而是保留為佔位符，執行到它時給出 `unknown_block` 錯誤。因此形狀驗證（§4.2）刻意跳過認不得的 opcode——否則佔位符會在開檔時就把整份專案擋掉。
+
 ---
 
 ## 14. 專案目錄結構
@@ -1324,6 +1371,7 @@ tags: [procedure, control, unwind]
 
 | 章節 | 題目 |
 |---|---|
+| §4.2 | 回報型積木接在堆疊上／指令型積木插進輸入孔／hat 夾在堆疊中間 → **載入期**錯誤 |
 | §4.3 | `${items[0]}` 回專用錯誤訊息；越界是錯誤而非 `null`；`-1` / `last` 正確 |
 | §4.3 / D15 | `5.0` 字串化為 `"5"`；`0.1+0.2` 的字串化；`items[1.0]` 合法、`items[1.5]` 錯誤 |
 | §4.3 | `0` 是 falsy 但 `type.is_empty(0)` 為 **false** |
@@ -1350,7 +1398,11 @@ tags: [procedure, control, unwind]
 | §5.6 | 一個 thread 出錯，其餘 thread **繼續執行** |
 | §6.2 | 熱迴圈聚合成 `block.hot`；`value` 超過 4KB 標記 `truncated` |
 | §6.3 | `block.enter/exit` **不**進 SQLite，`log` / `block.error` 進 |
+| §7.2 | `type: json` 的字串參數被 parse；非法 JSON 有專用訊息；`object` / `list` 嚴格不轉換 |
+| §7.5 | 宣告 `returns: object` 卻回字串 → 邊界就錯，訊息指名該積木包 |
+| §7.5 | 其餘型別依 §4.3 轉換：數字進 `string` 參數會轉，不是報錯（D19） |
 | §12.2 | secret 值不出現在任何事件與 traceback 中 |
+| §13.3 | 認不得的 opcode **不是**載入期錯誤，執行到才以 `unknown_block` 呈現 |
 
 ### 17.3 併發題目怎麼比對
 
