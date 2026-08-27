@@ -2,10 +2,33 @@
 
 | 項目 | 內容 |
 |---|---|
-| 版本 | Draft v0.2 |
+| 版本 | Draft v0.3 |
 | 日期 | 2026-08-27 |
-| 狀態 | 待審閱 |
+| 狀態 | 已審閱，P0 施工中 |
 | 代號 | `blocky`（暫定，套件名 `blocky-runtime`） |
+
+---
+
+## 0.0 v0.3 變更摘要
+
+v0.2 經審閱後的修訂。原稿的整體結構與 D1～D11 全數保留，以下是實質變動：
+
+| 類別 | 變更 | 章節 |
+|---|---|---|
+| **補洞** | 全域變數的生命週期原本完全未定義。定為「一次 Run」，跨 Run 記憶改用顯式的 `persist_*` 積木 | D12、§5.4 |
+| **補洞** | `number` 是 int 還是 float 未定義。釘死為 IEEE754 double，字串化跟隨 JS | D15、§4.3 |
+| **補洞** | 完全沒有日期時間積木，但這是排程工具的日常。新增 `time` 命名空間，cron 補上必填 timezone | §4.9、§9.1 |
+| **補洞** | 事件沒有落地策略，`forever` 迴圈會寫爆 SQLite。區分「送給前端」與「存進硬碟」 | §6.3 |
+| **補洞** | secret 收進了 keyring，卻會沿著事件流與 traceback 明文外流 | §12.2 |
+| **補洞** | 內建 hat（cron / webhook）沒有地方宣告 `concurrency` | §5.1 |
+| **補洞** | `refs` 是快取卻存進 IR，與「IR 可手寫」的目標衝突必然漂移。定為衍生欄位，載入時一律重新解析 | §4.7 |
+| **新增** | 原稿沒有測試策略。新增一致性題庫（conformance corpus）作為規格的可執行版本 | §17 |
+| **砍除** | Transpile 模式——維護第二套執行語意的代價遠超它多解決的 10% 需求 | D14、§10.2 |
+| **砍除** | broadcast——唯一會產生不可追溯控制流的機制 | D14、§4.4 |
+| **砍除** | `ctx.get_var / set_var`——破壞靜態檢查、process 邊界與可追溯性的後門 | D16、§7.4 |
+| **提前** | SubprocessHost 從 v2 提前到 P1。in-process 的 `sys.path` 隔離在首批三個包上就會失效 | D13、§7.6 |
+| **重排** | P0 拆成 P0a（語意核心，無前端）與 P0b（編輯器）。時程從樂觀的 3～4 週修正為現實的 6～9 個月全程 | §15 |
+| **新增** | Q10「目標使用者到底是誰」——非工程師與工程師把 roadmap 拉向相反方向 | §16 |
 
 ---
 
@@ -24,6 +47,11 @@
 | D9 | 字串輸入框支援 `${路徑}` 插值，但**只支援路徑，永不支援運算式** | 沒有插值，取一個巢狀值就得堆 `join` 巢狀積木；但一旦允許 `${a+b}`，`${}` 就會滑成一套藏在文字框裡的迷你語言，與 D4 直接衝突 |
 | D10 | JSON 的 **parse 不自動、stringify 自動**，兩者都由 manifest 宣告 + Host 邊界執行 | parse 是偏函數（會失敗、型別由伺服器決定），stringify 是全函數；把責任放在 manifest 而非 extension 作者，手寫的不會忘、AI 生成的不會漏 |
 | D11 | list 索引鎖死 **1-based，不可設定** | 可設定的索引基底會讓同一份專案在別人機器上語意不同，且 `${items[1]}` 就無法自我描述 |
+| D12 | 全域變數的生命週期 = **一次 Run**；跨 Run 記憶另用 `data.persist_*` 積木 | 「關掉瀏覽器仍會執行」意味著 Run 會被排程反覆觸發，變數若隱式跨 Run 存活，語意就取決於後端何時重啟——那是不可推理的。把持久化變成看得見的積木，符合全文「不要魔法」的原則 |
+| D13 | **SubprocessHost 提前到 P1**，v1 不做 in-process 的假隔離 | 同一個 process 內 `sys.path` 前置只有第一次 import 有效，而首批三個包（http / discord / openai）全都依賴 httpx/aiohttp——衝突不是風險而是必然。且 `ctx` 反向呼叫的 RPC 設計晚做等於重寫 |
+| D14 | **砍掉 Transpile 模式與 broadcast** | 兩者都是「實作成本低、語意表面成本高」的陷阱。Bundle 模式已滿足 90% 離線需求；procedure + trigger 已覆蓋 broadcast 的用途，而 broadcast 是唯一會產生不可追溯控制流的機制 |
+| D15 | `number` 語意上是 **IEEE754 double**，字串化規則跟隨 JS | Python 端 int/float 之別若洩漏到語意層，`5` 與 `5.0`、`items[1.0]` 這類問題會散落各處。釘死在 JSON 的數字模型上，未來任何第二套 runtime 都能對齊 |
+| D16 | 積木只能透過 **inputs 進、return 出**；取消 `ctx.get_var/set_var` | 讓 extension 能直接改專案變數會同時破壞靜態檢查、跨 process 邊界與可追溯性，換得的便利可由「回傳值 + `data.set`」完全取代 |
 
 ---
 
@@ -192,6 +220,21 @@
 
 支援型別：`null` / `boolean` / `number` / `string` / `list` / `object`。
 
+#### `number` 是 double，不是 int（D15）
+
+語意層**只有一種數字型別**：IEEE754 double，與 JSON 的數字模型一致。Python 實作內部可以是 `int` 或 `float`，但那是實作細節，不得洩漏到任何可觀察的行為：
+
+| 觀察點 | 規則 |
+|---|---|
+| `type.of` | 一律回 `"number"`，沒有 `"int"` |
+| 字串化 | 跟隨 JS `Number.prototype.toString`：`5.0` → `"5"`、`0.1+0.2` → `"0.30000000000000004"`、`1e21` → `"1e+21"` |
+| 相等比較 | `5 == 5.0` 為 true |
+| 索引 | `items[1.0]` 合法且等同 `items[1]`；`items[1.5]` 是錯誤（「索引必須是整數」） |
+| 除法 | `10 / 2` → `5`（字串化後無 `.0`），`1 / 3` → `0.3333333333333333` |
+| 安全整數 | 超出 ±2^53 的整數運算不保證精度，與 JSON 相同；不另做 bigint |
+
+釘死在 JSON 的數字模型上，是為了讓未來任何第二套 runtime（JS、Go）都能對齊同一份 §17 的測試題庫。
+
 比 Scratch 多了 `object`，因為工作流必然要處理 API 回傳的 JSON。轉換規則明確定義（避免 Scratch 那種到處隱式轉字串的混亂）：
 
 | 目標 | 規則 |
@@ -227,16 +270,19 @@ object 以 key 存取（`object.get` 積木或 `${obj.key}`）；**key 不存在
 
 | namespace | 內容 |
 |---|---|
-| `event` | `when_flag_clicked` `when_cron` `when_webhook` `broadcast` `when_broadcast_received` |
+| `event` | `when_flag_clicked` `when_cron` `when_webhook`（broadcast 已砍，見 D14） |
 | `control` | `if` `if_else` `repeat` `repeat_until` `forever` `for_each` `wait` `wait_until` `stop` `try_catch` |
-| `data` | `set` `change` `get` `new_list`；list 操作（add/delete/insert/replace/item/length/contains）。變數無需宣告，見 §4.5 |
+| `data` | `set` `change` `get` `new_list`；list 操作（add/delete/insert/replace/item/length/contains）；`persist_set` `persist_get` `persist_has` `persist_delete`（跨 Run 記憶，見 §5.4）。變數無需宣告，見 §4.5 |
 | `object` | `get` `set` `keys` `has` `parse_json` `to_json`；parse 永不自動，見 §4.8 |
 | `operator` | 算術、比較、邏輯、字串（join/letter/length/contains/regex） |
 | `procedure` | `definition`（可宣告回傳型別）、`call`（依定義呈現 command 或 reporter）、`return`（終止積木），見 §4.6 |
 | `type` | `cast` `try_cast` `is` `can_cast` `of` `is_empty`，見 §4.8 |
+| `time` | `now` `format` `parse` `add` `diff` `timestamp` `timezone`，見 §4.9 |
 | `debug` | `log` `inspect` |
 
-相對於 Scratch，這裡有五處**刻意的偏離**，都是工作流場景必需：`try_catch`（§5.6）、**可回傳值的自訂函式**（§4.6）、**免宣告的變數積木**（§4.5）、**字串插值**（§4.7）、**顯式型別積木**（§4.8）。
+相對於 Scratch，這裡有六處**刻意的偏離**，都是工作流場景必需：`try_catch`（§5.6）、**可回傳值的自訂函式**（§4.6）、**免宣告的變數積木**（§4.5）、**字串插值**（§4.7）、**顯式型別積木**（§4.8）、**日期時間命名空間**（§4.9）。
+
+反過來，有一處 Scratch 有而這裡**刻意不做**：`broadcast`（D14）。它是唯一會產生「畫布上看不出誰呼叫誰」的控制流，而 procedure（同步、有回傳值）與 trigger（非同步、有來源）已經覆蓋它的全部用途。
 
 
 ### 4.5 變數模型（免宣告）
@@ -322,11 +368,11 @@ Scratch / Blockly 原生的變數模型是「id + 名稱對照表」，好處是
 - 跑完 body 沒遇到 `return` → 回傳 `null`。若 `returns` 非 `null`，編輯器靜態檢查提示「有路徑未回傳」（警告，不阻擋）。
 - `return` 放在定義積木的 body 之外（例如直接掛在 hat 底下）→ **存檔時驗證錯誤**，不是執行期才報。
 - 遞迴沿用 §5.4 的深度上限 200。
-- **求值順序**：reporter 形狀的呼叫積木必然帶副作用（函式體可以發 HTTP、寫變數）。解譯器一律**由左而右、深度優先**求值輸入孔，順序在 §10.2 轉譯時也必須保持（副作用型 reporter 提升為暫存變數）。
+- **求值順序**：reporter 形狀的呼叫積木必然帶副作用（函式體可以發 HTTP、寫變數）。解譯器一律**由左而右、深度優先**求值輸入孔。這條規則進 §17 題庫，因為它是唯一無法從畫面上看出來、但會改變結果的語意。
 
 #### 事件與 UI
 
-呼叫積木照常送 `block.enter` / `block.exit`，reporter 形狀的 `block.exit` 帶 `value` = 回傳值，前端直接以數值氣泡顯示——**函式的回傳值和內建 reporter 一樣可以即時觀察**，這是解譯執行相對於轉譯的主要好處。
+呼叫積木照常送 `block.enter` / `block.exit`，reporter 形狀的 `block.exit` 帶 `value` = 回傳值，前端直接以數值氣泡顯示——**函式的回傳值和內建 reporter 一樣可以即時觀察**，這是解譯執行相對於產生原始碼的主要好處。
 
 ---
 
@@ -382,7 +428,17 @@ Scratch / Blockly 原生的變數模型是「id + 名稱對照表」，好處是
 }
 ```
 
-`refs` 是解析快取，三個好處：§4.5 的靜態檢查直接吃它來驗證 `i` / `resp` 是否曾被 `data.set`（現有機制零成本延伸）；§10.2 轉譯不必重新 parse；執行期錯誤能指到第幾段。`kind: "literal"` 因此維持「笨資料」——這對 AI 生成 IR 特別重要。
+`refs` 是解析快取，兩個好處：§4.5 的靜態檢查直接吃它來驗證 `i` / `resp` 是否曾被 `data.set`（現有機制零成本延伸）；執行期錯誤能指到第幾段。`kind: "literal"` 因此維持「笨資料」——這對 AI 生成 IR 特別重要。
+
+#### `refs` 是衍生欄位，永不作為執行依據
+
+既然「IR 可手寫、AI 可生成」是明確目標（D5），那 `value` 與 `refs` 就**一定會漂移**——而漂移的後果正是本節開頭想避免的「字串被偷偷替換成別的東西」。因此定一條硬規則：
+
+- 載入專案時，後端**一律重新 parse `value`**，執行期只認重新解析的結果。
+- `refs` 只用於**驗證**：與重新解析的結果不符 → 存檔／載入期報錯，指出該 blockId。
+- 存檔時由後端重新產生 `refs`，不信任前端送來的版本。
+
+也就是說，把整個 `refs` 欄位刪掉不影響任何執行結果——與 §4.2 的 `ui` 同一條原則。
 
 不含 `${}` 的字串一律存成 `literal`，不存成 `whole: false` 的空 template。
 
@@ -463,12 +519,60 @@ Scratch / Blockly 原生的變數模型是「id + 名稱對照表」，好處是
 
 ---
 
+### 4.9 日期時間積木
+
+一個以**排程**為核心的工具卻沒有日期時間積木是說不通的：「只在平日執行」「檔名帶今天日期」「這筆資料是不是三天內的」是自動化流程的日常。這組積木進 P0，不是 P1。
+
+| opcode | 形狀 | 外觀 | 語意 |
+|---|---|---|---|
+| `time.now` | reporter | `現在時間` | 回**時間戳**（見下） |
+| `time.timestamp` | reporter | `(時間) 的毫秒數` | 轉成 epoch 毫秒（number） |
+| `time.format` | reporter | `格式化 (時間) 為 [YYYY-MM-DD ▼]` | 依所選格式轉字串 |
+| `time.parse` | reporter | `解析時間 (文字)` | ISO 8601 字串 → 時間戳；失敗即錯誤 |
+| `time.add` | reporter | `(時間) 加上 (3) [天 ▼]` | 單位下拉：毫秒／秒／分／時／天／週 |
+| `time.diff` | reporter | `(時間A) 與 (時間B) 相差幾 [天 ▼]` | 回 number，A − B |
+| `time.part` | reporter | `(時間) 的 [星期幾 ▼]` | 年／月／日／時／分／秒／星期幾／第幾週 |
+
+#### 時間戳的表示：object，不是 number
+
+`time.now` 回的是一個 `object`：
+
+```jsonc
+{ "__type": "timestamp", "epochMs": 1756276800000, "tz": "Asia/Taipei" }
+```
+
+不用裸 number 的理由是**時區必須跟著值走**。若時間戳是裸數字，`格式化(現在時間)` 就得另外問「用哪個時區」，而那個問題會在每一顆時間積木上重複出現。把 tz 綁在值上，一次決定、全程正確。
+
+代價是 `type.of` 對它回 `"object"`——這是可接受的，因為 §4.8 的型別系統本來就不打算長出第七種型別。`time.timestamp` 提供了逃生口，需要裸數字時明確要一次。
+
+#### 時區的來源順序
+
+1. 積木顯式指定（`time.now` 的選填時區孔）
+2. 專案設定的預設時區
+3. 系統時區
+
+**`event.when_cron` 必須有 timezone 參數**（§9.1）。沒有它，同一份專案在不同機器上會在不同時刻觸發——這與 D11 拒絕「可設定索引基底」是同一個理由。
+
+---
+
 ## 5. Runtime 執行模型
 
 ### 5.1 併發模型
 - 每個 Script 的一次執行 = 一個 `asyncio.Task`（稱 Thread）。
-- 多個 hat 同時觸發 → 多個 Task 並行，共享全域變數。
-- 同一個 hat 重複觸發時的行為由 manifest 的 `concurrency` 決定：`parallel`（預設）/ `queue` / `drop`（前一輪未結束就丟棄新事件）/ `restart`。
+- 多個 hat 同時觸發 → 多個 Task 並行，共享同一個 Run 的全域變數（§5.4）。
+- 同一個 hat 重複觸發時的行為由 `concurrency` 決定：`parallel`（預設）/ `queue` / `drop`（前一輪未結束就丟棄新事件）/ `restart`。
+
+#### `concurrency` 存在哪裡
+
+擴充的 hat 由 manifest 宣告，但 `event.when_cron` / `when_webhook` 是**內建的、沒有 manifest**——而「上一輪還沒跑完就又到點了」正是最需要 `drop` / `queue` 的場景。因此：
+
+| 來源 | 宣告位置 | 優先 |
+|---|---|---|
+| 擴充 hat | manifest 的 `concurrency` | 預設值 |
+| 內建 hat | 內建 hat 有一份**合成 manifest**，格式與擴充完全相同 | 預設值 |
+| 任何 hat | IR 中該 hat block 的 `fields.concurrency` | **覆寫上者** |
+
+讓使用者能在積木上覆寫是必要的：同一顆 `when_webhook`，用在「收單」要 `queue`，用在「刷新快取」要 `drop`。內建 hat 走合成 manifest 而非特例分支，是為了讓 §7.5 的 Host 邊界只有一條路徑。
 
 ### 5.2 沒有 frame clock
 Scratch 以 30fps 為單位讓出控制權。本專案**不採用**：這裡沒有畫面要渲染，迴圈應以最快速度執行。做法是每執行 N 顆積木（預設 512）或遇到 await 點時 `await asyncio.sleep(0)` 讓出 event loop，確保取消訊號與 WebSocket 能被處理。
@@ -478,15 +582,49 @@ Scratch 以 30fps 為單位讓出控制權。本專案**不採用**：這裡沒�
 
 **已知限制**：執行緒中的同步呼叫**無法被中途取消**，按下「停止」時該顆積木會跑完才結束。manifest 需宣告 `blocking: true` 讓 UI 提示。長時間操作建議擴充作者提供 async 版本。
 
-### 5.4 變數作用域
+### 5.4 變數作用域與生命週期
 
 變數沒有宣告（§4.5），所以**作用域完全由名稱解析順序決定**，由內而外：
 
+| # | 層 | 生命週期 | 可寫 | 可見範圍 |
+|---|---|---|---|---|
+| 1 | **Procedure 參數** | 一次呼叫（frame） | 唯讀 | 該 frame |
+| 2 | **Thread-local** | 一個 Thread | 唯讀 | 該 Thread |
+| 3 | **全域變數** | **一次 Run** | `data.set` | 該 Run 的所有 Thread |
+| 4 | **持久化儲存** | **永久（SQLite）** | `data.persist_set` | 跨 Run、跨後端重啟 |
+
 1. **Procedure 參數** — 呼叫時建立 frame，遞迴深度上限 200（超出拋錯，避免堆疊爆掉）。參數在 frame 內唯讀，`data.set` 同名視為寫全域並在編輯器警告 shadowing。
 2. **Thread-local** — hat 提供的欄位（如 `on_message` 的 `content`、`author`）與 `try_catch` 綁定的 `error`，只在該 thread 可見，唯讀。
-3. **全域變數** — 整個專案共享，跨 thread 可見。並發寫入以 asyncio 單執行緒語意保證原子性（不會有 torn read）。
+3. **全域變數** — 見下方生命週期。並發寫入以 asyncio 單執行緒語意保證原子性（不會有 torn read）。
 
 `data.set` **一律寫入全域層**（前兩層唯讀）。也就是說：目前沒有「函式區域變數」，遞迴函式若用同名變數當暫存會互相覆蓋——見 §16 Q6。
+
+#### 全域變數的生命週期 = 一次 Run（D12）
+
+**Run 開始時全域層是空的，Run 結束時整個丟棄。** 這條規則必須明講，因為它是 §1.3「關掉瀏覽器仍會準時執行」的直接後果：cron 會讓同一份專案被觸發成千上萬次，若變數隱式跨 Run 存活，那 `count` 的值就取決於「後端上次重啟是什麼時候」——那是不可推理的，而且無法寫進 §17 的測試題庫。
+
+由此推出三條：
+
+- 每次 trigger 觸發 = 一個新 Run = 一組乾淨的全域變數。同一個 Run 內的多個 Thread 才共享。
+- 因此 §4.5「讀取未建立的變數 → 錯誤」在跨 Run 場景下**符合直覺**：昨天設的值今天讀不到，是報錯而不是拿到過期資料。
+- 「Webhook 設值 → cron 讀值」這種跨 Run 溝通**必須顯式**，用第 4 層。
+
+#### 第 4 層：持久化積木
+
+| opcode | 型 | 外觀 |
+|---|---|---|
+| `data.persist_set` | command | `記住 [名稱] 為 (值)` |
+| `data.persist_get` | reporter | `記住的 [名稱]，沒有時 (預設值)` |
+| `data.persist_has` | boolean | `記住過 [名稱] 嗎?` |
+| `data.persist_delete` | command | `忘記 [名稱]` |
+
+- 儲存於 SQLite，以專案為範圍（scope 為 `project_id`），跨 Run、跨後端重啟存活。
+- 值必須可 JSON 序列化（與 §7.5 同一條約束）。
+- **`persist_get` 有預設值孔而非報錯**，這是本設計中少數刻意的寬鬆：持久值的「第一次執行」必然不存在，強迫每個人先寫一顆 `persist_has` 是純粹的儀式。
+- 寫入是 read-modify-write，**不保證跨 Run 的原子性**。需要計數器語意時用 `data.persist_change`（P2 再加，v1 不做）。
+- 編輯器提供面板檢視／清除持久值——不然使用者永遠不知道裡面存了什麼。
+
+這個切法讓「變數」回到 Scratch 的直覺（一次執行的暫存），而把「記憶」變成一顆**寫著「記住」的積木**。使用者看得見自己在寫入永久儲存，這正是 §4.8「parse 不自動」同一個原則的延伸。
 
 ### 5.5 停止與清理
 - `stop all` / 使用者按停止 → 對所有 Task 呼叫 `cancel()`。
@@ -529,6 +667,21 @@ Scratch 以 30fps 為單位讓出控制權。本專案**不採用**：這裡沒�
 - 若某 blockId 在一個窗口內觸發超過 **20 次**，改送聚合事件：
   `{"op":"block.hot","blockId":"blk_7","count":4210,"lastValue":...}` — 前端顯示為「持續執行中 ×4210」而非逐次高亮。
 - `value` 欄位序列化上限 **4KB**，超過則截斷並標記 `"truncated": true`，完整值需由 `GET /api/runs/{id}/values/{blockId}` 取得。
+
+### 6.3 落地策略：不是每個事件都要進 SQLite
+
+§6.2 管的是「送多少給前端」，這裡管的是「存多少到硬碟」——兩者必須分開，否則一個掛著跑三天的 `forever` 迴圈會寫進幾億列。
+
+| 事件 | 落地 |
+|---|---|
+| `run.start` `run.end` `thread.start` `thread.end` | **一律存**。這是執行歷史的骨架 |
+| `block.error` | **一律存**，含完整 traceback |
+| `log` | **一律存**，每個 Run 上限 10,000 筆，超過丟棄最舊者並標記 |
+| `block.enter` `block.exit` `var.set` `block.hot` | **不存**。只在有 WS client 連著時即時送出 |
+
+`block.enter/exit` 是**除錯用的即時訊號，不是稽核紀錄**。想事後重播的話，走「Trace 模式」：使用者明確開啟後才對該次 Run 全量落地，並強制設上限（預設 100MB 或 100 萬事件，先到為準）。
+
+沒有這條規則，`GET /api/runs/{id}/events`（附錄 A）在 P2 的常駐場景下會是第一個炸掉的東西。
 
 ---
 
@@ -656,9 +809,19 @@ async def on_message(ctx):
 | `ctx.state` | 該 extension 的常駐狀態（連線池、client） |
 | `ctx.log(msg, level)` | 推 `log` 事件到前端 |
 | `ctx.block_id` | 當前執行的積木 id（錯誤定位用） |
-| `ctx.get_var / set_var` | 讀寫專案全域變數 |
 | `ctx.http` | 共用的 httpx client（帶逾時與重試預設值） |
 | `ctx.cancelled` | 協作式取消檢查點，長迴圈中應主動檢查 |
+
+#### 沒有 `ctx.get_var / set_var`（D16）
+
+早期草稿有這兩個 API，已刪除。積木的合約是**吃 inputs、吐 return value**，沒有例外。讓 extension 直接改專案全域變數會同時打破四件事：
+
+1. §4.5 的靜態檢查——「這個變數被誰設過」不再可靜態判定。
+2. §7.5 的 process 邊界——它是反向呼叫，是 SubprocessHost 裡最貴的一類 RPC。
+3. 可追溯性——畫布上看不出這顆積木改了什麼。
+4. 併發語意——寫進哪一層？呼叫端的 frame 還是全域？
+
+而它換來的便利，`回傳值 + 一顆 data.set` 完全可以取代，且看得見。
 
 ### 7.5 Extension Host 抽象（重要）
 
@@ -673,7 +836,20 @@ class ExtensionHost(Protocol):
     async def unload(self, ext_id: str) -> None: ...
 ```
 
-隱含約束：**args 與回傳值必須可 JSON 序列化**。從第一天就強制執行，否則 v2 換 IPC 時會發現到處在傳 Python 物件。
+隱含約束：**args 與回傳值必須可 JSON 序列化**。從第一天就強制執行，否則換 IPC 時會發現到處在傳 Python 物件。
+
+#### 反向通道（extension → host）
+
+`ExtensionHost` 只描述了 host → extension 的方向，但 `ctx.log`、trigger 的 `yield`、`ctx.cancelled` 都是**反過來**的。這條反向通道必須在 P1 就跟 §7.6 的 SubprocessHost 一起設計，因為它是「in-process 時看不見、跨 process 時全部要重寫」的典型：
+
+```python
+class HostChannel(Protocol):
+    async def log(self, ctx_token: str, level: str, message: str) -> None: ...
+    async def emit(self, ctx_token: str, payload: dict) -> None: ...   # trigger yield
+    async def is_cancelled(self, ctx_token: str) -> bool: ...
+```
+
+in-process 實作是直接呼叫，subprocess 實作是 stdio JSON-RPC 的另一個方向。**兩種實作從 P1 就都要存在**，並用同一份 §17 的題庫驗證行為一致。
 
 #### 邊界的正規化與驗證
 
@@ -693,8 +869,21 @@ class ExtensionHost(Protocol):
 
 回傳值驗證看似瑣碎，但它把「宣告 object 卻回了字串」擋在源頭，而不是三顆積木之後才以「文字沒有 items」的形式爆開（§4.7）。成本近乎為零（反正已經要求 JSON 可序列化），對 AI 生成的積木包尤其重要——它只要填對 manifest 就不會錯。
 
-### 7.6 依賴隔離
-每個 extension 一個獨立 venv，用 `uv venv` + `uv pip install`（速度是 pip 的數十倍，對「安裝積木包」的體驗差異很大）。v1 in-process 時以 `sys.path` 前置該 venv 的 site-packages 載入；有版本衝突風險，v2 subprocess 後自然消失。
+### 7.6 依賴隔離：P1 直接做 SubprocessHost（D13）
+
+每個 extension 一個獨立 venv，用 `uv venv` + `uv pip install`（速度是 pip 的數十倍，對「安裝積木包」的體驗差異很大）。
+
+**早期草稿打算 v1 用 `sys.path` 前置該 venv 的 site-packages、in-process 載入，把 subprocess 留到 v2。這條路已放棄**，理由是它在 P1 驗收當天就會爆：
+
+- 同一個 process 內，`import httpx` **第一次贏，且永久生效**。後載入的 extension 拿到的是別人的版本。
+- 首批要手寫的三個包——`http`（httpx）、`discord`（discord.py → aiohttp）、`openai`（httpx）——**全部依賴同一批 HTTP 函式庫**。衝突不是理論風險，是必然。
+- 假的隔離比沒有隔離更糟：使用者看到「每個包有自己的 venv」的 UI，卻在執行期拿到別人的版本，這種 bug 極難診斷。
+
+因此 P1 的 Host 實作直接是 **SubprocessHost**：每個 extension 一個 process，以 stdio JSON-RPC 雙向通訊（§7.5）。增量成本約 1～1.5 週，其中真正的工作在反向通道，而那正是晚做等於重寫的部分。
+
+`InProcessHost` 仍然保留，但**只用於內建積木與測試**——它是 §17 題庫的快速路徑，不承載第三方程式碼。
+
+附帶好處：§12.2 的實質隔離從「未來的架構改造」降級成「在既有 process 邊界上加 OS 限制」，那是可以漸進做的。
 
 ---
 
@@ -787,7 +976,7 @@ object / list **不新增積木形狀**。理由是形狀會說謊：`data.get (
 | Trigger | 積木 | 實作 |
 |---|---|---|
 | 手動 | `event.when_flag_clicked` | 前端 POST `/api/runs` |
-| 排程 | `event.when_cron (expr)` | APScheduler，支援 cron 與 interval |
+| 排程 | `event.when_cron (expr) (timezone)` | APScheduler，支援 cron 與 interval。**timezone 為必填**（§4.9）——沒有它，同一份專案在不同機器上會在不同時刻觸發 |
 | Webhook | `event.when_webhook (path)` | FastAPI 動態路由 `/hooks/{token}/{path}`，payload 綁成 `body` / `headers` / `query` |
 | 擴充 | 任何 `type: hat` | extension 的 async generator |
 
@@ -804,9 +993,9 @@ object / list **不新增積木形狀**。理由是形狀會說謊：`data.get (
 
 ## 10. 匯出 Python
 
-兩種模式，優先級不同。
+只有一種模式。原草稿的第二種（Transpile）已砍除，理由見 §10.2。
 
-### 10.1 Bundle 模式（P3 先做，工作量小）
+### 10.1 Bundle 模式（P3）
 ```
 export/
 ├── project.json
@@ -821,38 +1010,30 @@ Runtime.from_file("project.json").run_forever()
 ```
 使用者可 `python run.py`、`docker build`、丟上 VPS 常駐。**這滿足 90% 的「我要離開 GUI 自己跑」需求**，且與解譯器共用同一份程式碼，零維護成本。
 
-### 10.2 Transpile 模式（P3 後段）
-產生可讀的 Python 原始碼。
+### 10.2 Transpile 模式 — **已砍除**（D14）
 
-映射規則：
-| IR | Python |
-|---|---|
-| script（單一 hat） | `async def script_1():` |
-| 多個 script | `asyncio.gather(script_1(), script_2(), ...)` |
-| `control.repeat(n)` | `for _ in range(n):` |
-| `control.forever` | `while True:` + `await asyncio.sleep(0)` |
-| `control.wait(s)` | `await asyncio.sleep(s)` |
-| `data.set` / `data.change` | 模組層變數指派 / `+=`；名稱 slugify + 衝突加後綴 |
-| `procedure.definition`（`returns: null`） | `async def proc_x(...) -> None:` |
-| `procedure.definition`（有 `returns`） | `async def proc_x(...) -> T:`，落到函式尾端補 `return None` |
-| `procedure.return` | `return <expr>` |
-| reporter 形狀的 `procedure.call` | `await proc_x(...)`；巢狀在其他運算式中時提升為暫存變數以保證求值順序 |
-| reporter 巢狀 | 依運算子優先級決定是否加括號；副作用型 reporter 提升為暫存變數以保證求值順序 |
-| 變數 | 全域變數 → 模組層變數，名稱經 slugify + 衝突加後綴 |
-| `kind: "template"`（`whole: false`） | f-string |
-| `kind: "template"`（`whole: true`） | 裸運算式，保留型別 |
-| `${a.b[1]}` 路徑 | helper `_path(a, "b", 1)`，內含 1-based → 0-based 轉換與越界檢查 |
-| list 索引積木 | 一律經 `_path` / `_item`，**不直接下標** |
-| `type.cast` / `type.try_cast` | `_cast(v, "number")` / `_try_cast(v, "number", 0)` |
-| `type.is` / `can_cast` / `of` / `is_empty` | 對應 helper |
-| `blocks[].ui` | 忽略（§4.2） |
-| cron hat | 產生 APScheduler 樣板 |
+早期草稿規劃產生可讀的 Python 原始碼，附一張完整的 IR → Python 映射表。**v1 不做，且短期內不打算做。**
 
-helper 一律輸出到產出檔頂端的 `# --- blocky runtime helpers ---` 區塊。**索引基底的轉換只能存在於 `_path` 一處**——散開來就會長出 off-by-one 的鬼故事。
+理由是文件自己已經寫出來的兩句話：
 
-參考 Blockly 內建的 Python generator 架構（優先級表、變數命名、縮排管理），但輸出目標是 asyncio 而非同步程式碼。
+1. §10.1 承認 Bundle 模式「**滿足 90% 的『我要離開 GUI 自己跑』需求**，且與解譯器共用同一份程式碼，零維護成本」。
+2. 原草稿承認 `stop all`、broadcast 的語意「轉譯後不完全等價」。
 
-**已知限制**：`stop all`、broadcast 的語意在轉譯後不完全等價，需在產出檔頂端以註解標示。這是可接受的——transpile 的定位是「產生可繼續手改的起點」，不是「保證等價」。
+一個滿足 10% 額外需求、卻**不保證等價**的功能，代價是**永久維護第二套執行語意**——每加一顆積木都要在兩處實作，每改一條規則都要在 §17 的題庫上跑兩遍並解釋差異。這是本設計中投入產出比最差的一項，估 2～3 週且逐年攤還。
+
+#### 如果將來真的要做
+
+條件是「有人具體說出 Bundle 模式解決不了的需求」，而不是「產生原始碼看起來比較厲害」。屆時的定位必須寫死成：
+
+> **一次性的 scaffold 產生器，不保證語意等價，不隨積木更新而維護。**
+
+放在 `blocky export --scaffold` 這種明確的次要位置，而不是與 Bundle 模式並列的「兩種模式」。
+
+#### 對其他章節的影響
+
+- §4.6 提到「求值順序在轉譯時也必須保持」——**求值順序的規定仍然有效**（由左而右、深度優先），它是解譯器自己的語意，與是否轉譯無關。
+- §4.7 的 `refs` 少了一個使用者，但另外兩個理由（靜態檢查、錯誤定位）仍然成立。
+- §4.2 的 `ui` 忽略規則不變。
 
 ---
 
@@ -897,12 +1078,31 @@ LLM ← 注入：manifest JSON Schema + ctx API 型別定義 + 2 個完整範例
 | 綁定 localhost | 後端預設只監聽 127.0.0.1；Webhook 需外部存取時由使用者自行決定是否開放 |
 | CSRF | REST API 要求 `Origin` 檢查 + 啟動時產生的 session token |
 
-### 12.2 v2 措施（實質隔離）
-- SubprocessHost：每個 extension 獨立 process，透過 stdio JSON-RPC 通訊。
+### 12.2 敏感資料的傳播邊界
+
+§12.1 把 secret 收進 OS keyring，但那只管**靜態儲存**。真正的洩漏路徑在事件流：
+
+- §8.5 規定 `block.enter` 附帶「展開後的字串」——使用者把 token 寫進 `${}` 或變數，展開值就沿著 WS 廣播出去。
+- §6.2 規定 `block.exit` 帶 `value`（上限 4KB）——一顆 `http.get` 的回應可能含 `Authorization` 回音或 session token。
+- §6.3 雖然不落地 `block.enter/exit`，但 `log` 與 `block.error` 的 traceback **會存進 SQLite 明文**，而 traceback 最常見的內容就是「帶著 header 的 request 物件」。
+
+對一個賣點是「接 Discord bot token 和 LLM API key」的工具，這必須有明確措施：
+
+| 措施 | 做法 |
+|---|---|
+| **值遮蔽** | Host（§7.5）持有本次 Run 用到的所有 secret 明文集合。事件序列化前做子字串比對，命中則替換為 `***`。粗暴但有效，成本約一天 |
+| **參數遮蔽** | manifest 宣告 `type: secret` 的參數，其值**永不進入任何事件**，一律以 `***` 呈現 |
+| **traceback 清洗** | 存進 SQLite 前套用同一組遮蔽規則 |
+| **不記錄 request body** | `ctx.http` 的預設錯誤處理只記 status 與 URL（且 URL 去除 query string 中的 `token` / `key` / `secret` 類參數），不記 headers |
+
+**已知限制**：子字串比對擋不住經過編碼或切割的 secret（例如 base64 後的 token）。這是知情的取捨——完整方案需要污點追蹤，成本遠超 v1 的預算。UI 上要誠實告知：「執行歷史可能含敏感資料，分享前請檢查」。
+
+### 12.3 v2 措施（實質隔離）
+- ~~SubprocessHost~~ — 已提前至 P1，見 §7.6（D13）。
 - 逐步加入 OS 層限制（Linux seccomp/namespace、macOS sandbox-exec、Windows Job Object）。
 - 選配的 container 執行模式。
 
-**架構要求**：§7.5 的 ExtensionHost 介面與「args 必須可 JSON 序列化」的約束**從 P0 就強制**，否則 v2 等同重寫。
+**架構要求**：§7.5 的 ExtensionHost 介面與「args 必須可 JSON 序列化」的約束**從 P0 就強制**。由於 §7.6 已把 SubprocessHost 提前到 P1，process 邊界屆時就存在，本節剩下的工作是「在既有邊界上加 OS 限制」，可以漸進進行。
 
 ---
 
@@ -946,9 +1146,12 @@ blocky/
 │   │   ├── interpreter/        # 解譯器核心 + 內建 opcode 實作
 │   │   ├── extensions/         # Host / Registry / Loader / venv 管理
 │   │   ├── triggers/           # cron / webhook / stream
-│   │   ├── codegen/            # bundle + transpile
+│   │   ├── codegen/            # bundle 匯出（transpile 已砍，見 §10.2）
 │   │   └── storage/            # SQLite + keyring
 │   └── tests/
+│       ├── conformance/        # §17 一致性題庫（規格的可執行版本）
+│       ├── unit/
+│       └── contract/           # Host 邊界，InProcess 與 Subprocess 跑同一份
 ├── extensions/                 # 內建與使用者安裝的積木包
 │   ├── http/
 │   ├── discord/
@@ -962,10 +1165,23 @@ blocky/
 
 ## 15. Roadmap
 
-### P0 — 骨架（目標 3～4 週）
-**範圍**：Blockly zelos 編輯器；內建積木（control / data / operator / object / type / procedure / debug）；免宣告變數積木（§4.5）；自訂函式含回傳值（§4.6）；字串插值（§4.7）；型別積木（§4.8）；整合變數名稱 / 插值 / 多行的 `FieldText`（§8.5）；IR schema 與序列化；Python 解譯器；WebSocket 事件與高亮；SQLite 存讀檔。只有 `when_flag_clicked` 一種觸發。**不做**擴充系統、不做匯出。
+### 施工順序的總原則
 
-> `FieldText` 是 P0 前端唯一的高風險項（估 2～3 天，且是三種行為的交集）。務必一次做成一個類別，不要先做三個再合併。
+**先鎖語意，再接介面。** 前端、擴充系統、真實 API 都是「晚一步做成本不變、早一步做會反覆改」的東西；而 IR schema 與直譯器語意是「晚改成本十倍」的東西。因此 P0 刻意把前端往後排，讓語意問題在只有題庫與直譯器的環境下解決——那時候改一條規則是改一行。
+
+### P0a — 語意核心（目標 3～4 週，**無前端**）
+
+**範圍**：`shared-schema` 的 IR JSON Schema（唯一真實來源，產生 pydantic 與 TS 型別）；§17 題庫框架與前 40 題；Python 直譯器涵蓋 `control` / `data` / `operator` / `object` / `type` / `time` / `procedure` / `debug`；免宣告變數（§4.5）；含回傳值的自訂函式（§4.6）；字串插值（§4.7）；`persist_*`（§5.4）。**沒有 HTTP server、沒有 WebSocket、沒有 Blockly。** 題庫用 CLI 直接驅動直譯器。
+
+**驗收**：`pytest tests/conformance` 全綠，且 §17.2 表格中每一列都有對應題目。此時「這個語言是什麼」已經完全確定且可執行。
+
+> 這一階段的產出是一份**手寫的 `project.json` 可以跑出正確事件序列**。看起來不像產品，但它是後面所有東西的地基。
+
+### P0b — 編輯器（目標 4～6 週）
+
+**範圍**：Blockly zelos 工作區；IR ↔ Blockly 雙向轉換（§8.4）；整合變數名稱／插值／多行的 `FieldText`（§8.5）；FastAPI + WebSocket 事件與高亮；SQLite 存讀檔；只有 `when_flag_clicked` 一種觸發。
+
+> `FieldText` 是這階段唯一的高風險項。原稿估 2～3 天，**修正為 1～1.5 週**——它要同時做 `${}` pill 行內渲染、autocomplete popup、multiline textarea、運算式紅線，而 Blockly 的自訂 field API 在富渲染上很難纏（popup 在 textarea 內的定位、workspace 縮放時的座標換算）。務必一次做成一個類別，不要先做三個再合併。
 
 **驗收**：
 1. 能拉出「重複 10 次 → `改變 count 增加 1` → log」，過程中**沒碰過任何「建立變數」按鈕**；執行後看到積木逐顆高亮、變數面板即時變動、按停止能立即中斷。
@@ -973,22 +1189,42 @@ blocky/
 3. 在 `log ()` 的文字框直接打 `第 ${i} 筆：${resp.items[1].title}` 能正確取值；打 `${items[0]}` 得到「索引從 1 開始」的專屬錯誤；打 `${a + b}` 在**存檔前**就被標為錯誤。
 4. 貼一段三行文字進積木欄位，欄位自動變成 textarea；空欄位可用右鍵強制切換，且切換狀態存檔重開後仍在。
 
-> 這一階段跑通，整個專案的技術風險就解除了八成。
+> P0a + P0b 跑通，整個專案的技術風險就解除了八成。
 
-### P1 — 擴充系統（3～4 週）
-**範圍**：manifest 格式與 loader；ExtensionHost 介面 + InProcess 實作；動態積木註冊；動態下拉；憑證管理（keyring）；uv venv 依賴隔離。手寫 `http` / `discord` / `openai` 三個包。
+### P1 — 擴充系統（4～6 週）
 
-**驗收**：新增一個資料夾、重啟後端，新積木自動出現在工具箱且可執行；三個包能串成「抓 API → 丟給 LLM 摘要 → 發到 Discord」。
+**範圍**：manifest 格式與 loader；ExtensionHost 介面 + **SubprocessHost**（D13）與反向通道（§7.5）；動態積木註冊；動態下拉；憑證管理（keyring）與 §12.2 的值遮蔽；uv venv 依賴隔離。
+
+**手寫三個包的順序刻意如此**：
+
+1. `http` — 沒有外部帳號、沒有 SDK 依賴，純粹驗證 manifest → 積木 → 執行這條路。**先用本地起的假伺服器**，不打真 API。
+2. `openai` — 驗證 secret 管理與長時間請求。
+3. `discord` — 最後做，因為它是唯一需要**長連線 trigger**（§7.3 的 async generator）的，複雜度最高。
+
+**驗收**：新增一個資料夾、重啟後端，新積木自動出現在工具箱且可執行；三個包能串成「抓 API → 丟給 LLM 摘要 → 發到 Discord」；§17.4 的 Host 合約測試在 InProcess 與 Subprocess 兩種實作下都綠。
 
 ### P2 — 自動化（3～4 週）
-**範圍**：Trigger Manager（cron / webhook / stream）；專案 active 狀態與後端重啟恢復；執行歷史與日誌檢視；`try_catch`；錯誤重試策略。
+**範圍**：Trigger Manager（cron / webhook / stream，含 §4.9 的 timezone）；專案 active 狀態與後端重啟恢復；§6.3 的事件落地策略；執行歷史與日誌檢視；`try_catch`；錯誤重試策略。
 
 **驗收**：設定每天 09:00 的流程，關閉瀏覽器，隔天檢查執行歷史有紀錄且 Discord 收到訊息。**此時產品才真正等價於 n8n**。
 
 ### P3 — 擴散（4～6 週）
-**範圍**：AI 生成積木包（含驗證管線）；匯出 Bundle；Transpile 模式；積木包分享/匯入；Tauri 桌面打包。
+**範圍**：AI 生成積木包（含 §11.2 驗證管線）；匯出 Bundle（§10.1）；積木包分享／匯入；Tauri 桌面打包。
 
 **驗收**：口述一個需求，10 分鐘內產出可用的積木包並成功執行。
+
+### 時程的誠實版本
+
+原稿的 P0 3～4 週是把前端與語意合併估的。拆開並修正 `FieldText` 後，**單人現實估計**：
+
+| 階段 | 估計 |
+|---|---|
+| P0a 語意核心 | 3～4 週 |
+| P0b 編輯器 | 4～6 週 |
+| P1 擴充系統 | 4～6 週 |
+| P2 自動化 | 3～4 週 |
+| P3 擴散 | 4～6 週 |
+| **合計** | **約 6～9 個月** |
 
 **打包策略**：P0～P2 只做 `pip install blocky && blocky serve`（自動開瀏覽器）。Tauri/Electron 留到 P3，過早引入會吃掉大量時間在建置與簽章上。
 
@@ -999,14 +1235,123 @@ blocky/
 | # | 問題 | 影響 | 建議 |
 |---|---|---|---|
 | Q1 | 單機工具 vs 可自架伺服器多人共用？ | 若要多人，權限模型、憑證隔離、執行佇列必須在 P0 進資料模型 | 暫定單機。但 SQLite schema 從 P0 就加 `owner_id` 欄位（單機時固定為 `local`），事後擴充成本趨近於零 |
-| Q2 | 是否支援 Scratch 的 broadcast？ | 影響控制流複雜度 | 建議支援，這是 Scratch 使用者的既有心智模型，且實作成本低（等同事件匯流排） |
+| Q2 | ~~是否支援 Scratch 的 broadcast？~~ | — | **已決議：不做**（D14）。實作成本確實低，但語意表面成本高（要不要 broadcast-and-wait？會排隊嗎？跨專案嗎？），且它是唯一會產生「畫布上看不出誰呼叫誰」的控制流。procedure 與 trigger 已覆蓋其用途 |
 | Q3 | 專案檔要不要包含 extension 原始碼？ | 影響可攜性與安全 | 建議只記錄 id + version + 來源 URL，不內嵌程式碼（避免分享專案 = 分享任意程式碼） |
 | Q4 | LLM 呼叫由誰付費？ | 影響 AI 生成功能的商業模式 | v1 使用者自帶 API key |
 | Q5 | 積木文字的 i18n？ | manifest 的 `text` 欄位是否要支援多語 | 建議 P1 就把 `text` 設計成可為 `{en: "...", "zh-TW": "..."}`，事後改格式代價高 |
-| Q6 | 需不需要「函式區域變數」？ | §5.4 目前 `data.set` 一律寫全域，遞迴函式用同名暫存變數會互相覆蓋 | P0 先只有「參數 + 全域」，觀察是否真的有人踩到。要加就加 `區域設定 [名稱] 為 ()` 一顆積木（寫入當前 frame），語意單純且與現有解析順序相容——但不要為了假想需求先做 |
+| Q6 | 需不需要「函式區域變數」？ | §5.4 目前 `data.set` 一律寫全域，遞迴函式用同名暫存變數會互相覆蓋 | P0a 先只有「參數 + 全域」，觀察是否真的有人踩到。要加就加 `區域設定 [名稱] 為 ()` 一顆積木（寫入當前 frame），語意單純且與現有解析順序相容——但不要為了假想需求先做。§17 題庫先放一題記錄現況行為，將來改動時才看得出差異 |
 | Q7 | 免宣告變數的錯字風險是否可接受？ | §4.5 用「執行期嚴格報錯 + 執行前靜態檢查」補洞，但終究不如 id 綁定可靠 | 先做，並在 P0 驗收時實測：故意打錯字看提示是否夠明確。若使用者仍常被咬，退路是把 `FieldText` 的變數名稱模式改成「只能從既有名稱選 + 新增」的 combo，IR 格式不用動 |
 | Q8 | `${}` 要不要支援預設值（`${a.b ?? "無"}`）？ | §4.7 目前 key 不存在一律錯誤，容錯只能靠 `object.has` 或 `object.get` 的預設值孔 | **v1 不做，且這條線要守很硬**。開了預設值語法，下一步就是三元、就是函式呼叫，`${}` 會滑向一個迷你語言（違背 D9）。真的被咬再考慮 `${a.b?}` 這種「只加一個問號、不引入運算子」的最小形式 |
+| Q10 | **目標使用者到底是誰？** | §1.1 寫「非工程師」，但 §10 的 CLI 常駐、docker、匯出服務的是工程師。兩者把 roadmap 拉向相反方向：教育路線該投資教學 UX 與中文化、少而精的積木；開發者路線該投資整合數量與 CLI，且 §11 的 AI 生成積木包從「可有可無」升格為「唯一能對抗 n8n 500+ 整合的手段」 | **這是目前最該決定的一件事，但不阻擋 P0a**——語意核心對兩條路線完全相同。最遲要在 P1 開始前決定，因為它決定手寫哪三個包 |
+| Q11 | 持久化儲存要不要支援原子遞增？ | §5.4 的 `persist_set` 是 read-modify-write，兩個並發 Run 同時累加計數器會掉更新 | v1 不做。真的需要時加 `data.persist_change`，用 SQLite 的單一 UPDATE 語句實作。先在文件與 tooltip 講清楚限制 |
+| Q12 | secret 遮蔽用子字串比對夠嗎？ | §12.2 擋不住編碼過或被切割的 secret | 夠用於 v1，但 UI 必須誠實標示「執行歷史可能含敏感資料」。完整方案需要污點追蹤，成本遠超 v1 預算 |
 | Q9 | `blocks[].ui` 會不會長成雜物間？ | §4.2 允許任意未知 key，長期可能塞進一堆前端狀態 | 目前只有 `multiline` 一個 key。規則是「刪掉整個 `ui` 不影響執行結果」——任何違反這條的提案一律退回。若 key 超過 5 個就該檢討是不是有語意屬性混進來了 |
+
+---
+
+## 17. 測試策略
+
+原稿唯一提到測試的地方是 §8.4 的序列化 round-trip。但這個專案的核心是一台**直譯器**，而直譯器最高槓桿的投資只有一件事。
+
+### 17.1 核心：一致性題庫（conformance corpus）
+
+一份 `IR 輸入 → 預期事件序列` 的語料庫，存在 `backend/tests/conformance/`，每一題是一個資料夾：
+
+```
+conformance/
+├── control/
+│   ├── repeat_basic/
+│   │   ├── project.json      # 輸入 IR
+│   │   ├── expected.jsonl    # 預期的正規化事件序列
+│   │   └── meta.yaml         # 標題、對應章節、tags
+│   └── return_inside_loop/
+├── data/
+├── template/
+├── type/
+└── errors/
+```
+
+`meta.yaml` 必須指回設計文件的章節，題庫因此同時是**規格的可執行版本**：
+
+```yaml
+title: "return 在 repeat 迴圈內應中斷整個函式，而非只跳出迴圈"
+spec: "§4.6 執行語意"
+tags: [procedure, control, unwind]
+```
+
+#### 為什麼是事件序列而不是「最終輸出」
+
+只比對最終結果會漏掉本設計中一大半的語意：求值順序（§4.6）、`block.enter/exit` 的配對、變數寫入的時機、錯誤發生在哪一顆積木。這些都是「結果對了但過程錯了」的類型，而過程正是使用者在畫布上看得見的東西。
+
+#### 正規化：讓比對穩定
+
+原始事件含時間戳與時長，不可直接比對。跑題庫時套用正規化：
+
+| 欄位 | 處理 |
+|---|---|
+| `ts` `durationMs` | 移除 |
+| `runId` `threadId` | 依首次出現順序重編為 `r1` `t1` `t2` |
+| `blockId` | **保留原值**——它是題目的一部分，錯了就是定位錯了 |
+| `traceback` | 只保留例外型別與訊息首行 |
+| 事件順序 | 同一 thread 內嚴格有序；跨 thread 則依 §17.3 處理 |
+
+### 17.2 必須進題庫的項目
+
+這份清單直接來自本文件中「講了會踩雷但畫面上看不出來」的每一條規則。**任何一條沒有對應題目，那條規則就等於沒寫。**
+
+| 章節 | 題目 |
+|---|---|
+| §4.3 | `${items[0]}` 回專用錯誤訊息；越界是錯誤而非 `null`；`-1` / `last` 正確 |
+| §4.3 / D15 | `5.0` 字串化為 `"5"`；`0.1+0.2` 的字串化；`items[1.0]` 合法、`items[1.5]` 錯誤 |
+| §4.3 | `0` 是 falsy 但 `type.is_empty(0)` 為 **false** |
+| §4.5 | 讀取未建立的變數 → 錯誤，且訊息含編輯距離建議 |
+| §4.5 | `change` 未建立的變數 → 錯誤，不是從 0 起算 |
+| §4.6 | `return` 在 `repeat` 內 → 中斷整個 function，不只跳出迴圈 |
+| §4.6 | `try_catch` **不可**捕捉 `ProcedureReturn`（最容易寫錯的一題） |
+| §4.6 | 跑完 body 沒 `return` → 回 `null` |
+| §4.6 | 遞迴深度 200 → 拋錯而非堆疊爆掉 |
+| §4.6 | 輸入孔求值順序為由左而右、深度優先（用帶副作用的 reporter 驗證） |
+| §4.7 | `${items}` 整格取值保留 list 型別；`第${i}筆` 走字串拼接 |
+| §4.7 | `$${` 逸出 |
+| §4.7 | `${a + b}` 在**存檔驗證**期就被擋，不是執行期 |
+| §4.7 | `${str.foo}` 對字串取屬性 → 專用訊息「是不是需要先解析 JSON」 |
+| §4.7 | `refs` 與 `value` 不一致 → 載入期報錯（§4.7 衍生欄位規則） |
+| §4.8 | `type.is("123", 數字)` false 而 `type.can_cast` true |
+| §4.8 | `type.is([], 物件)` 為 **false**；`type.is(null, 物件)` 為 **false** |
+| §4.9 | 跨時區的 cron 與 `time.format`；跨日光節約時間的 `time.add` |
+| §5.1 | `drop` / `queue` / `restart` 三種 concurrency 的行為 |
+| §5.4 / D12 | 全域變數不跨 Run 存活；`persist_*` 跨 Run 存活 |
+| §5.4 | procedure 參數遮蔽全域時的解析順序 |
+| §5.5 | `CancelledError` 穿透 `try_catch`；`finally` 清理有 5 秒上限 |
+| §5.6 | 一個 thread 出錯，其餘 thread **繼續執行** |
+| §6.2 | 熱迴圈聚合成 `block.hot`；`value` 超過 4KB 標記 `truncated` |
+| §6.3 | `block.enter/exit` **不**進 SQLite，`log` / `block.error` 進 |
+| §12.2 | secret 值不出現在任何事件與 traceback 中 |
+
+### 17.3 併發題目怎麼比對
+
+跨 thread 的事件交錯順序**不確定**，直接比對必然 flaky。做法：
+
+- 預期檔可標記 `unordered: [t1, t2]`，比對時各 thread 的事件抽出來**分別**驗證順序，只對 thread 間有因果的點（`thread.start` 早於該 thread 任何事件）做全域斷言。
+- 需要確定性時，題目自己用 `control.wait` 建立順序——這比讓比對器變聰明可靠得多。
+
+### 17.4 其他層次
+
+| 層 | 工具 | 重點 |
+|---|---|---|
+| IR schema | `hypothesis` property test | §8.4 的 `deserialize(serialize(ws))` 等價；隨機 IR 必須要嘛通過驗證要嘛給出**指向具體 blockId** 的錯誤 |
+| 值轉換 | 參數化單元測試 | §4.3 的轉換表逐格覆蓋，含每一個錯誤情況 |
+| Host 邊界 | 合約測試 | §7.5 的正規化與驗證。**同一份測試同時跑 InProcessHost 與 SubprocessHost**，這是兩者行為一致的唯一保證 |
+| 積木包 | 每包自帶 `tests/` | 用假的 HTTP 層，不打真 API |
+| 端到端 | Playwright | 只做 §15 的驗收情境，數量控制在 5 個以內——e2e 很貴且脆 |
+
+### 17.5 題庫先於實作
+
+**P0 的做法是：先寫題目，再寫直譯器。**
+
+§15 的四條 P0 驗收標準直接寫成題庫的前四題。理由是本文件已經把語意想得很細（`return` 的 unwind 邊界、`${}` 的整格取值、索引 0 的專用訊息），這些決定**現在不落成可執行的形式，三個月後就會在實作中被悄悄改掉**——而且改的時候不會有人察覺，因為沒有東西會變紅。
+
+題庫也是後續每一個大決策的安全網：D13 換 SubprocessHost、將來若真的做原始碼產生器，都是「換一套執行器、跑同一份題庫」。沒有題庫，那些事情就只能靠手動點一點。
 
 ---
 
