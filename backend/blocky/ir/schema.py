@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Callable, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -208,11 +208,23 @@ class LoadedProject:
         return getattr(self.project, name)
 
 
-def load(data: dict[str, Any], *, strict_refs: bool = True) -> LoadedProject:
+ShapeResolver = Callable[[str], frozenset[str]]
+
+
+def load(
+    data: dict[str, Any],
+    *,
+    strict_refs: bool = True,
+    shapes: ShapeResolver | None = None,
+) -> LoadedProject:
     """從 dict 載入並驗證專案。
 
     strict_refs=False 讓手寫的題庫 fixture 可以省略 `refs`——因為它本來就是
     衍生欄位，要求人手維護等於自找漂移。
+
+    `shapes` 給了才做形狀驗證（見 `_validate_shapes`）。它是選填的，因為形狀
+    要問過擴充系統才知道，而 ir 層不該認識擴充系統；呼叫端載完積木包後把
+    `interpreter.registry.resolve_shape(...)` 傳進來。
     """
     project = Project.model_validate(data)
     templates: dict[tuple[str, str], tpl.Template] = {}
@@ -240,6 +252,8 @@ def load(data: dict[str, Any], *, strict_refs: bool = True) -> LoadedProject:
             inp.refs = [r.to_ir() for r in parsed.refs]
 
     _validate_structure(project)
+    if shapes is not None:
+        _validate_shapes(project, shapes)
     return LoadedProject(project, templates)
 
 
@@ -271,6 +285,70 @@ def _validate_structure(p: Project) -> None:
             )
         if block.next is not None:
             raise ValidationError("「回傳」是終止積木，下面不能接積木", block_id=bid)
+
+
+# --------------------------------------------------------------------------
+# 形狀驗證
+# --------------------------------------------------------------------------
+
+# 一顆積木被「誰」指到，就決定了它必須是什麼形狀。
+_WRONG_SHAPE = {
+    ("command", "value"): "{op} 是回報型積木，不能接在堆疊上",
+    ("command", "hat"): "{op} 是事件積木，只能放在腳本最上面",
+    ("value", "command"): "{op} 是指令型積木，不能插進輸入孔",
+    ("value", "hat"): "{op} 是事件積木，不能插進輸入孔",
+}
+
+
+def _validate_shapes(p: Project, resolve: ShapeResolver) -> None:
+    """積木形狀與它所在的位置必須相符。
+
+    這件事**必須在載入期做**。放到執行期有兩個後果：錯誤要等那條路徑真的被
+    走到才會出現（if 的另一半可以躺著錯好幾個月），而且它會以 ValidationError
+    的形式從 Thread 裡漏出來——那不是 BlockyError，發不出 `block.error`，
+    前端只會看到一個安靜停掉的 Thread。§4.6 對 `return` 的位置早就是載入期
+    驗證，這裡只是把同一條原則套到所有積木上。
+
+    **認不得的 opcode 不算錯**：那是 §13.3 的佔位符（積木包還沒安裝，或專案
+    來自更新版的 runtime），保留給執行期以 UnknownBlockError 呈現。
+    """
+    for bid, block in p.blocks.items():
+        for name, inp in block.inputs.items():
+            if isinstance(inp, BlockInput):
+                _require_shape(p, resolve, inp.id, "value", path=f"{bid}.{name}")
+            elif isinstance(inp, StackInput) and inp.id is not None:
+                _require_shape(p, resolve, inp.id, "command", path=f"{bid}.{name}")
+        if block.next is not None:
+            _require_shape(p, resolve, block.next, "command", path=bid)
+
+    for script in p.scripts:
+        top = p.block(script.top)
+        shapes = resolve(top.opcode)
+        if shapes and "hat" not in shapes:
+            raise ValidationError(
+                f"腳本最上面必須是事件積木，{top.opcode} 不是", block_id=script.top
+            )
+
+    for pid, proc in p.procedures.items():
+        d = proc.definitionBlock
+        if d is not None and p.block(d).opcode != "procedure.definition":
+            raise ValidationError(f"函式 {pid} 的定義積木不是「定義」積木", block_id=d)
+
+
+def _require_shape(
+    p: Project, resolve: ShapeResolver, bid: str, want: str, *, path: str
+) -> None:
+    op = p.block(bid).opcode
+    shapes = resolve(op)
+    if not shapes or want in shapes:
+        return
+    actual = sorted(shapes)[0]
+    template = _WRONG_SHAPE.get((want, actual))
+    raise ValidationError(
+        template.format(op=op) if template else f"{op} 不能放在這裡",
+        block_id=bid,
+        path=path,
+    )
 
 
 def _has_ancestor_in(p: Project, bid: str, targets: set[str | None]) -> bool:

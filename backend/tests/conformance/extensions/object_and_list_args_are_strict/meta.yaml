@@ -1,0 +1,11 @@
+title: object / list 是嚴格宣告，不轉換——要自動處理的參數應該宣告成 json
+spec: §7.2 json 與 object / list 的差別
+tags:
+- extension
+- host_boundary
+expect:
+  status: error
+  error:
+    code: extension
+    message_contains: 參數 items 需要清單，收到文字
+    hint_contains: 解析 JSON

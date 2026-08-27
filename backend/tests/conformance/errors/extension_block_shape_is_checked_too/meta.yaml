@@ -1,0 +1,9 @@
+title: 積木包的積木形狀一樣在載入期驗——形狀從 manifest 來
+spec: §4.2 Block 結構、§7.2 manifest.yaml
+tags:
+- validation
+- shape
+- extension
+expect:
+  status: load_error
+  load_error: 不能接在堆疊上

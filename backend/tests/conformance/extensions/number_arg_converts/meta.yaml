@@ -1,0 +1,9 @@
+title: 'type: number 依 §4.3 轉換——這是邊界上唯一會做轉換的型別'
+spec: §7.5 邊界的正規化與驗證
+tags:
+- extension
+- host_boundary
+expect:
+  status: ok
+  logs:
+  - '4'

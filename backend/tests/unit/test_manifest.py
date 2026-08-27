@@ -1,0 +1,164 @@
+"""manifest 的驗證（§7.2）。
+
+這些題目全部是「manifest 寫錯了」而不是「執行期出錯」。它們該在載入積木包
+時就爆，因為漂移的症狀——工具箱裡一顆按了沒反應的積木——要等到使用者真的
+拖出來用才會被發現。§11 的 AI 生成積木包更是完全靠這一層兜底。
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from blocky.errors import ExtensionError
+from blocky.extensions import DEFAULT_EXTENSIONS_ROOT, Manifest, discover, parse_manifest
+
+BASE = {"manifestVersion": 1, "id": "demo2", "name": "示範", "version": "0.1.0"}
+
+
+def mf(**over) -> dict:
+    return {**BASE, **over}
+
+
+def bad(data: dict, fragment: str) -> None:
+    with pytest.raises(ExtensionError, match=fragment):
+        parse_manifest(data, where="test")
+
+
+# ---- 命名空間 ----
+
+
+def test_id_cannot_shadow_a_builtin_namespace() -> None:
+    """否則 `data.set` 的意義會取決於使用者裝了什麼包（§4.4）。"""
+    bad(mf(id="data"), "內建命名空間")
+
+
+def test_id_must_be_an_identifier() -> None:
+    bad(mf(id="My-Pack"), "小寫識別字")
+
+
+def test_opcode_must_not_carry_the_namespace() -> None:
+    bad(
+        mf(blocks=[{"opcode": "demo2.echo", "type": "reporter", "text": "x"}]),
+        "不含命名空間前綴",
+    )
+
+
+def test_duplicate_opcode() -> None:
+    b = {"opcode": "echo", "type": "reporter", "text": "x"}
+    bad(mf(blocks=[b, dict(b)]), "opcode 重複")
+
+
+# ---- 積木宣告的內部一致性 ----
+
+
+def test_text_placeholder_without_an_arg() -> None:
+    """`%(message)` 沒有對應參數 = 前端渲染時會少一個孔。"""
+    bad(
+        mf(blocks=[{"opcode": "send", "type": "command", "text": "送出 %(message)"}]),
+        r"%\(message\) 沒有對應的參數",
+    )
+
+
+def test_command_cannot_declare_returns() -> None:
+    bad(
+        mf(blocks=[{"opcode": "go", "type": "command", "text": "go", "returns": "object"}]),
+        "不會回傳值",
+    )
+
+
+def test_dropdown_arg_needs_a_source() -> None:
+    bad(
+        mf(blocks=[{
+            "opcode": "pick", "type": "reporter", "text": "挑 %(x)",
+            "args": {"x": {"type": "dropdown"}},
+        }]),
+        "必須宣告 source",
+    )
+
+
+def test_min_max_only_on_numbers() -> None:
+    bad(
+        mf(blocks=[{
+            "opcode": "pick", "type": "reporter", "text": "挑 %(x)",
+            "args": {"x": {"type": "string", "max": 3}},
+        }]),
+        "只適用於 number",
+    )
+
+
+def test_yields_only_on_hat() -> None:
+    bad(
+        mf(blocks=[{
+            "opcode": "go", "type": "command", "text": "go",
+            "yields": [{"name": "x"}],
+        }]),
+        "只適用於 hat",
+    )
+
+
+def test_unknown_field_is_rejected() -> None:
+    """打錯的欄位靜靜被忽略，等同於那行宣告沒寫。"""
+    bad(mf(colour="#fff"), "colour")
+
+
+# ---- 語意細節 ----
+
+
+def test_absent_default_differs_from_explicit_null() -> None:
+    """「沒寫 default」是必填，`default: null` 是預設值為 null。"""
+    m = parse_manifest(
+        mf(blocks=[{
+            "opcode": "go", "type": "command", "text": "go %(a) %(b)",
+            "args": {"a": {"type": "string"}, "b": {"type": "string", "default": None}},
+        }]),
+        where="test",
+    )
+    args = m.blocks[0].args
+    assert not args["a"].has_default
+    assert args["b"].has_default
+
+
+def test_interpolate_defaults_follow_section_4_7() -> None:
+    """string 預設開插值、code 預設關——shell 指令裡的 `${HOME}` 不該被替換。"""
+    m = parse_manifest(
+        mf(blocks=[{
+            "opcode": "go", "type": "command", "text": "go %(a) %(b) %(c)",
+            "args": {
+                "a": {"type": "string"},
+                "b": {"type": "code"},
+                "c": {"type": "code", "interpolate": True},
+            },
+        }]),
+        where="test",
+    )
+    args = m.blocks[0].args
+    assert (args["a"].interpolates, args["b"].interpolates, args["c"].interpolates) == (
+        True, False, True
+    )
+
+
+def test_boolean_block_declares_its_return_by_its_shape() -> None:
+    m = parse_manifest(
+        mf(blocks=[{"opcode": "ok", "type": "boolean", "text": "ok"}]), where="test"
+    )
+    assert m.blocks[0].declared_return == "boolean"
+
+
+# ---- 磁碟 ----
+
+
+def test_demo_pack_is_valid() -> None:
+    sources = discover(DEFAULT_EXTENSIONS_ROOT)
+    assert "demo" in sources
+    assert isinstance(sources["demo"].manifest, Manifest)
+
+
+def test_directory_name_must_match_the_id(tmp_path) -> None:
+    """專案 IR 只記 id；若目錄名可以不同，「這顆積木是誰提供的」就不好回答。"""
+    d = tmp_path / "notdemo"
+    d.mkdir()
+    (d / "manifest.yaml").write_text(
+        "manifestVersion: 1\nid: demo\nname: x\nversion: 0.1.0\n", encoding="utf-8"
+    )
+    with pytest.raises(ExtensionError, match="不一致"):
+        discover(tmp_path)

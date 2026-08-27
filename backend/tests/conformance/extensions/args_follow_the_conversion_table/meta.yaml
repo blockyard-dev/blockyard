@@ -1,0 +1,13 @@
+title: 邊界套用的是 §4.3 那張轉換表本身——積木包的孔與內建積木的孔反應相同
+spec: §7.5 邊界的正規化與驗證
+tags:
+- extension
+- host_boundary
+expect:
+  status: ok
+  logs:
+  - echo 第 1 次
+  - hi, 5
+  - echo 第 2 次
+  - hi, []
+  - 字串 4 也是偶數

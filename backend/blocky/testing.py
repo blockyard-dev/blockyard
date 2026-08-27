@@ -117,6 +117,7 @@ def build(
     *,
     scripts: list[list[Blk]],
     procedures: dict[str, dict[str, Any]] | None = None,
+    extensions: list[tuple[str, str]] | None = None,
     name: str = "題目",
 ) -> dict[str, Any]:
     """組出一份完整的 project.json。
@@ -148,7 +149,7 @@ def build(
     return {
         "formatVersion": 1,
         "meta": {"id": "prj_test", "name": name},
-        "extensions": [],
+        "extensions": [{"id": i, "version": v} for i, v in (extensions or [])],
         "variables": {},
         "procedures": out_procs,
         "scripts": out_scripts,

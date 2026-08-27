@@ -1,0 +1,59 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "debug.log",
+      "parent": "blk_1",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_3"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "data.set",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": 1
+        }
+      },
+      "fields": {
+        "name": "x"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

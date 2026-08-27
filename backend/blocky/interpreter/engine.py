@@ -15,18 +15,20 @@ import asyncio
 import itertools
 import sys
 import time
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from blocky.errors import (
     BlockyError,
     ControlSignal,
+    ExtensionError,
     ProcedureReturn,
     RecursionLimitError,
     StopSignal,
+    UnknownBlockError,
     ValidationError,
 )
 from blocky.interpreter.events import EventSink, clip_value
-from blocky.interpreter.registry import COMMANDS, VALUES
+from blocky.interpreter.registry import COMMANDS, HAT_OPCODES, VALUES
 from blocky.interpreter.scope import (
     MAX_FRAME_DEPTH,
     InMemoryPersistStore,
@@ -38,6 +40,9 @@ from blocky.interpreter.scope import (
 from blocky.ir import template as tpl
 from blocky.ir.schema import Block, LoadedProject, TemplateInput
 from blocky.ir.values import to_boolean, to_number, to_string
+
+if TYPE_CHECKING:  # 只為型別。執行期沒有這條相依，extensions 才能反過來 import 本模組
+    from blocky.extensions.registry import ExtensionRegistry
 
 # §5.2：沒有 frame clock。每執行 N 顆積木讓出一次 event loop，
 # 確保取消訊號與 WebSocket 能被處理——但迴圈仍以最快速度跑。
@@ -55,14 +60,6 @@ _REQUIRED_RECURSION_LIMIT = MAX_FRAME_DEPTH * PYTHON_FRAMES_PER_BLOCKY_FRAME + 1
 def _ensure_recursion_headroom() -> None:
     if sys.getrecursionlimit() < _REQUIRED_RECURSION_LIMIT:
         sys.setrecursionlimit(_REQUIRED_RECURSION_LIMIT)
-
-_HAT_OPCODES = {
-    "event.when_flag_clicked",
-    "event.when_cron",
-    "event.when_webhook",
-    "procedure.definition",
-}
-
 
 class Thread:
     """一個 Script 的一次執行 = 一個 asyncio.Task（§5.1）。"""
@@ -128,8 +125,11 @@ class Interpreter:
         persist: PersistStore | None = None,
         clock: Callable[[], float] | None = None,
         timezone: str = "UTC",
+        extensions: ExtensionRegistry | None = None,
     ):
         self.project = project
+        # §7.5：積木包一律經過 Host 介面 dispatch。None 代表這個 Run 只用內建積木。
+        self.extensions = extensions
         self.sink = sink or EventSink()
         self.persist = persist or InMemoryPersistStore()
         # 可注入時鐘：題庫需要可重現的 time.now（§17.1）。
@@ -229,13 +229,9 @@ class Interpreter:
             await self._exec_block(thread, bid, block)
 
     async def _exec_block(self, thread: Thread, bid: str, block: Block) -> None:
-        handler = COMMANDS.get(block.opcode)
+        handler = COMMANDS.get(block.opcode) or self._ext_handler(block.opcode, want_value=False)
         if handler is None:
-            if block.opcode in VALUES:
-                raise ValidationError(
-                    f"{block.opcode} 是回報型積木，不能接在堆疊上", block_id=bid
-                )
-            raise ValidationError(f"未知的積木 {block.opcode}", block_id=bid)
+            raise self._no_handler(bid, block, want_value=False)
 
         await self._tick()
         self.sink.emit("block.enter", threadId=thread.id, blockId=bid)
@@ -254,13 +250,9 @@ class Interpreter:
         )
 
     async def _eval_block(self, thread: Thread, bid: str, block: Block) -> Any:
-        handler = VALUES.get(block.opcode)
+        handler = VALUES.get(block.opcode) or self._ext_handler(block.opcode, want_value=True)
         if handler is None:
-            if block.opcode in COMMANDS:
-                raise ValidationError(
-                    f"{block.opcode} 是指令型積木，不能插進輸入孔", block_id=bid
-                )
-            raise ValidationError(f"未知的積木 {block.opcode}", block_id=bid)
+            raise self._no_handler(bid, block, want_value=True)
 
         await self._tick()
         self.sink.emit("block.enter", threadId=thread.id, blockId=bid)
@@ -307,6 +299,46 @@ class Interpreter:
 
     def _bid(self, block: Block) -> str | None:
         return self._block_ids.get(id(block))
+
+    # ---- opcode 解析 ----
+
+    def _ext_handler(self, opcode: str, *, want_value: bool):
+        if self.extensions is None:
+            return None
+        return self.extensions.handler(opcode, want_value=want_value)
+
+    def _no_handler(self, bid: str, block: Block, *, want_value: bool) -> BaseException:
+        """查不到 handler 時，說出**為什麼**查不到。
+
+        四種原因的處置完全不同，混成一句「未知的積木」等於叫使用者自己猜：
+        形狀放錯、hat 放錯位置、積木包沒安裝（§13.3）、真的不存在。
+        """
+        op = block.opcode
+        shape = self.extensions.shape(op) if self.extensions is not None else None
+
+        if op in HAT_OPCODES or shape == "hat":
+            return ValidationError(f"{op} 是事件積木，只能放在腳本最上面", block_id=bid)
+        if want_value and (op in COMMANDS or shape == "command"):
+            return ValidationError(f"{op} 是指令型積木，不能插進輸入孔", block_id=bid)
+        if not want_value and (op in VALUES or shape in ("reporter", "boolean")):
+            return ValidationError(f"{op} 是回報型積木，不能接在堆疊上", block_id=bid)
+
+        # §13.3：專案宣告用到某個包，但它沒裝／沒載入。積木在畫布上是佔位符，
+        # 執行到它時要說得出「裝了就會好」，而不是「未知的積木」。
+        ns = block.namespace
+        if any(e.id == ns for e in self.project.extensions):
+            return ExtensionError(
+                f"這顆積木來自積木包「{ns}」，但它還沒安裝",
+                block_id=bid,
+                hint="安裝這個積木包後就能執行",
+            )
+        # 認不得的 opcode 同樣是佔位符（§13.3）：可能是更新版 runtime 存的專案。
+        # 用 BlockyError 而非 ValidationError，Thread 才不會安靜地死掉。
+        return UnknownBlockError(
+            f"這個版本不認得積木 {op}",
+            block_id=bid,
+            hint="這份專案可能來自比較新的版本",
+        )
 
     async def _tick(self) -> None:
         """§5.2：沒有 frame clock，但要定期讓出 event loop。"""

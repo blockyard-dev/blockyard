@@ -1,0 +1,10 @@
+title: manifest 宣告的 min / max 也在邊界檢查
+spec: §7.2 參數的三個修飾欄位
+tags:
+- extension
+- host_boundary
+expect:
+  status: error
+  error:
+    code: extension
+    message_contains: 參數 b 不能大於 100

@@ -1,0 +1,9 @@
+title: boolean 形狀的積木可插進條件孔；dropdown 參數送的是選項的 value
+spec: §7.2 manifest.yaml
+tags:
+- extension
+- host_boundary
+expect:
+  status: ok
+  logs:
+  - 黃色

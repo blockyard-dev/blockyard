@@ -1,0 +1,12 @@
+title: 'type: json 的參數在邊界正規化，main.py 永遠拿到 dict / list'
+spec: §7.2 json 與 object / list 的差別
+tags:
+- extension
+- host_boundary
+- D10
+expect:
+  status: ok
+  logs:
+  - '{"wrapped":{"a":1}}'
+  - '{"wrapped":[1,2]}'
+  - '{"wrapped":[]}'

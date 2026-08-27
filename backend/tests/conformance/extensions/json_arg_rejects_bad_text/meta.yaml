@@ -1,0 +1,10 @@
+title: 'type: json 收到不是 JSON 的文字 → 專用訊息，不是「object 沒有 items」'
+spec: §7.5 邊界的正規化與驗證
+tags:
+- extension
+- host_boundary
+expect:
+  status: error
+  error:
+    code: extension
+    message_contains: 參數 body 收到的文字不是合法 JSON

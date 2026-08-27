@@ -768,3 +768,235 @@ case(
     {"status": "load_error", "load_error": "只能放在函式定義裡面"},
     tags=["procedure", "validation"],
 )
+
+
+# ==========================================================================
+# §7.5 Extension Host 邊界
+#
+# 這些題目跑的是 `extensions/demo`——一個純函式、不打網路的假積木包。
+# 它們驗的不是那個包，是**邊界**：進去的參數怎麼正規化、出來的值怎麼驗證。
+# P1 換成 SubprocessHost 時，同一批題目必須原封不動地綠（§17.4）。
+# ==========================================================================
+
+DEMO = [("demo", "0.1.0")]
+
+
+def ext(*blocks, extensions=None):
+    return build(scripts=[hat(*blocks)], extensions=extensions if extensions is not None else DEMO)
+
+
+case(
+    "extensions/call_and_reverse_log",
+    "積木包的 reporter 能被呼叫，ctx.log 走反向通道落在 enter/exit 之間",
+    "§7.5 Extension Host 抽象",
+    ext(log(blk("demo.echo", text="world"))),
+    {"status": "ok", "logs": ["echo 第 1 次", "hi, world"]},
+    tags=["extension", "host_boundary"],
+)
+
+case(
+    "extensions/returns_contract_violation",
+    "宣告 returns: object 卻回字串 → 在 Host 邊界就錯，訊息指名那個積木包",
+    "§7.5 邊界的正規化與驗證",
+    ext(log(blk("demo.broken_returns"))),
+    {
+        "status": "error",
+        "error": {
+            "code": "extension",
+            "message_contains": "demo.broken_returns 宣告回傳物件，實際回傳文字",
+            "hint_contains": "積木包的問題",
+        },
+    },
+    tags=["extension", "host_boundary"],
+)
+
+case(
+    "extensions/json_arg_normalized",
+    "type: json 的參數在邊界正規化，main.py 永遠拿到 dict / list",
+    "§7.2 json 與 object / list 的差別",
+    ext(
+        log(blk("object.to_json", value=blk("demo.wrap", body='{"a":1}'))),
+        log(blk("object.to_json", value=blk("demo.wrap", body="[1,2]"))),
+        log(blk("object.to_json", value=blk("demo.wrap", body=blk("data.new_list")))),
+    ),
+    {
+        "status": "ok",
+        "logs": ['{"wrapped":{"a":1}}', '{"wrapped":[1,2]}', '{"wrapped":[]}'],
+    },
+    tags=["extension", "host_boundary", "D10"],
+)
+
+case(
+    "extensions/json_arg_rejects_bad_text",
+    "type: json 收到不是 JSON 的文字 → 專用訊息，不是「object 沒有 items」",
+    "§7.5 邊界的正規化與驗證",
+    ext(log(blk("demo.wrap", body="not json"))),
+    {
+        "status": "error",
+        "error": {"code": "extension", "message_contains": "參數 body 收到的文字不是合法 JSON"},
+    },
+    tags=["extension", "host_boundary"],
+)
+
+case(
+    "extensions/number_arg_converts",
+    "type: number 依 §4.3 轉換——這是邊界上唯一會做轉換的型別",
+    "§7.5 邊界的正規化與驗證",
+    ext(log(blk("demo.add", a="3", b=True))),
+    {"status": "ok", "logs": ["4"]},
+    tags=["extension", "host_boundary"],
+)
+
+case(
+    "extensions/number_arg_out_of_range",
+    "manifest 宣告的 min / max 也在邊界檢查",
+    "§7.2 參數的三個修飾欄位",
+    ext(log(blk("demo.add", a=1, b=999))),
+    {
+        "status": "error",
+        "error": {"code": "extension", "message_contains": "參數 b 不能大於 100"},
+    },
+    tags=["extension", "host_boundary"],
+)
+
+case(
+    "extensions/args_follow_the_conversion_table",
+    "邊界套用的是 §4.3 那張轉換表本身——積木包的孔與內建積木的孔反應相同",
+    "§7.5 邊界的正規化與驗證",
+    ext(
+        log(blk("demo.echo", text=5)),
+        log(blk("demo.echo", text=blk("data.new_list"))),
+        blk("control.if", condition=blk("demo.is_even", n="4"),
+            then=Stack([log("字串 4 也是偶數")])),
+    ),
+    {"status": "ok", "logs": ["echo 第 1 次", "hi, 5", "echo 第 2 次", "hi, []", "字串 4 也是偶數"]},
+    tags=["extension", "host_boundary"],
+)
+
+case(
+    "extensions/object_and_list_args_are_strict",
+    "object / list 是嚴格宣告，不轉換——要自動處理的參數應該宣告成 json",
+    "§7.2 json 與 object / list 的差別",
+    ext(log(blk("demo.count_items", items="[1,2,3]"))),
+    {
+        "status": "error",
+        "error": {
+            "code": "extension",
+            "message_contains": "參數 items 需要清單，收到文字",
+            "hint_contains": "解析 JSON",
+        },
+    },
+    tags=["extension", "host_boundary"],
+)
+
+case(
+    "extensions/args_eval_left_to_right",
+    "積木包的參數同樣由左而右、深度優先求值——求值在引擎這一側，不因第三方而異",
+    "§4.6 執行語意",
+    ext(log(blk("demo.add", a=blk("debug.inspect", value=1), b=blk("debug.inspect", value=2)))),
+    {"status": "ok", "logs": ["number: 1", "number: 2", "3"]},
+    tags=["extension", "eval_order"],
+)
+
+case(
+    "extensions/boolean_and_dropdown",
+    "boolean 形狀的積木可插進條件孔；dropdown 參數送的是選項的 value",
+    "§7.2 manifest.yaml",
+    ext(
+        blk("control.if", condition=blk("demo.is_even", n=4),
+            then=Stack([log(blk("demo.color_of", fruit="banana"))])),
+        blk("control.if", condition=blk("demo.is_even", n=3),
+            then=Stack([log("不該出現")])),
+    ),
+    {"status": "ok", "logs": ["黃色"]},
+    tags=["extension", "host_boundary"],
+)
+
+case(
+    "extensions/missing_pack_is_placeholder",
+    "專案用到沒安裝的積木包 → 積木保留為佔位符，執行時說得出「裝了就會好」",
+    "§13.3 缺少 extension 的處理",
+    ext(log(blk("nope.something")), extensions=[("nope", "1.0.0")]),
+    {
+        "status": "error",
+        "error": {
+            "code": "extension",
+            "message_contains": "積木包「nope」，但它還沒安裝",
+            "hint_contains": "安裝這個積木包",
+        },
+    },
+    tags=["extension", "missing_extension"],
+)
+
+case(
+    "extensions/pack_exception_names_the_pack",
+    "積木包內部炸掉 → 包成 ExtensionError，訊息指名是哪個包，不是使用者的流程壞了",
+    "§7.5 Extension Host 抽象",
+    ext(blk("demo.blow_up")),
+    {
+        "status": "error",
+        "error": {"code": "extension", "message_contains": "積木包「示範」的 demo.blow_up"},
+    },
+    tags=["extension", "host_boundary"],
+)
+
+
+# ==========================================================================
+# §4.2 積木形狀（載入期驗證）
+#
+# 形狀錯誤留到執行期有兩個後果：if 的另一半可以躺著錯好幾個月才被走到，
+# 而且它以 ValidationError 的形式從 Thread 漏出來——那不是 BlockyError，
+# 發不出 block.error，前端只看到一個安靜停掉的 Thread。
+# ==========================================================================
+
+case(
+    "errors/reporter_in_stack",
+    "回報型積木接在堆疊上 → 載入期就擋，不是執行到才發現",
+    "§4.2 Block 結構",
+    one(blk("operator.add", a=1, b=2)),
+    {"status": "load_error", "load_error": "不能接在堆疊上"},
+    tags=["validation", "shape"],
+)
+
+case(
+    "errors/command_in_input_hole",
+    "指令型積木插進輸入孔 → 載入期就擋",
+    "§4.2 Block 結構",
+    one(log(blk("data.set", fields={"name": "x"}, value=1))),
+    {"status": "load_error", "load_error": "不能插進輸入孔"},
+    tags=["validation", "shape"],
+)
+
+case(
+    "errors/hat_in_the_middle_of_a_stack",
+    "事件積木夾在堆疊中間 → 載入期就擋",
+    "§4.2 Block 結構",
+    one(blk(FLAG)),
+    {"status": "load_error", "load_error": "只能放在腳本最上面"},
+    tags=["validation", "shape"],
+)
+
+case(
+    "errors/extension_block_shape_is_checked_too",
+    "積木包的積木形狀一樣在載入期驗——形狀從 manifest 來",
+    "§4.2 Block 結構、§7.2 manifest.yaml",
+    ext(blk("demo.echo", text="x")),
+    {"status": "load_error", "load_error": "不能接在堆疊上"},
+    tags=["validation", "shape", "extension"],
+)
+
+case(
+    "errors/unknown_opcode_stays_a_placeholder",
+    "認不得的 opcode **不是**載入期錯誤——保留為佔位符，執行時才報，且報得出來",
+    "§13.3 缺少 extension 的處理",
+    one(log(blk("mystery.thing"))),
+    {
+        "status": "error",
+        "error": {
+            "code": "unknown_block",
+            "message_contains": "不認得積木 mystery.thing",
+            "hint_contains": "比較新的版本",
+        },
+    },
+    tags=["validation", "shape", "unknown_block"],
+)

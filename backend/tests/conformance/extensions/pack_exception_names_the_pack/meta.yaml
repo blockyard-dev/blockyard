@@ -1,0 +1,10 @@
+title: 積木包內部炸掉 → 包成 ExtensionError，訊息指名是哪個包，不是使用者的流程壞了
+spec: §7.5 Extension Host 抽象
+tags:
+- extension
+- host_boundary
+expect:
+  status: error
+  error:
+    code: extension
+    message_contains: 積木包「示範」的 demo.blow_up

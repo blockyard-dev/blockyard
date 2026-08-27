@@ -1,0 +1,10 @@
+title: 積木包的 reporter 能被呼叫，ctx.log 走反向通道落在 enter/exit 之間
+spec: §7.5 Extension Host 抽象
+tags:
+- extension
+- host_boundary
+expect:
+  status: ok
+  logs:
+  - echo 第 1 次
+  - hi, world

@@ -45,6 +45,11 @@ def test_corpus_covers_spec_table() -> None:
         "D15", "index", "variables", "procedure", "unwind", "try_catch",
         "template", "D9", "type", "D10", "persist", "D12", "time",
         "comparison", "eval_order", "threads", "events",
+        # §7.5 的 Host 邊界。合約測試（tests/contract）跑的是介面本身，
+        # 這裡跑的是「從積木到積木包」那條完整路徑。
+        "extension", "host_boundary", "missing_extension",
+        # §4.2 的形狀驗證：載入期擋掉，認不得的 opcode 除外
+        "shape", "unknown_block",
     }
     seen: set[str] = set()
     for d in _dirs():

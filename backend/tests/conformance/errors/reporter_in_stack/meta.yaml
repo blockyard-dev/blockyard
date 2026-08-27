@@ -1,0 +1,8 @@
+title: 回報型積木接在堆疊上 → 載入期就擋，不是執行到才發現
+spec: §4.2 Block 結構
+tags:
+- validation
+- shape
+expect:
+  status: load_error
+  load_error: 不能接在堆疊上

@@ -1,0 +1,11 @@
+title: '宣告 returns: object 卻回字串 → 在 Host 邊界就錯，訊息指名那個積木包'
+spec: §7.5 邊界的正規化與驗證
+tags:
+- extension
+- host_boundary
+expect:
+  status: error
+  error:
+    code: extension
+    message_contains: demo.broken_returns 宣告回傳物件，實際回傳文字
+    hint_contains: 積木包的問題

@@ -19,9 +19,11 @@ from typing import Any
 import yaml
 
 from blocky.errors import BlockyError, ValidationError
+from blocky.extensions import DEFAULT_EXTENSIONS_ROOT, open_registry
 from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
 from blocky.interpreter.engine import Interpreter
 from blocky.interpreter.events import EventSink, normalize
+from blocky.interpreter.registry import resolve_shape
 from blocky.interpreter.scope import InMemoryPersistStore
 from blocky.ir.schema import load
 
@@ -69,11 +71,28 @@ async def run_case(case: Case) -> Result:
     sink = EventSink()
     store = InMemoryPersistStore(case.persist)
 
+    # §7：題目宣告用到哪些積木包，就只載入哪些。沒宣告的 id 不載入，於是
+    # §13.3 的「缺少 extension」也寫得出題目——那條路徑正是靠不載入來觸發。
+    # 這一步在 load() **之前**：形狀驗證要問得到積木包，才知道 `demo.echo`
+    # 是 reporter 還是 command。
+    declared = [
+        e["id"]
+        for e in (case.project.get("extensions") or [])
+        if isinstance(e, dict) and "id" in e
+    ]
+    registry = (
+        await open_registry(DEFAULT_EXTENSIONS_ROOT, sink=sink, only=declared)
+        if declared
+        else None
+    )
+
     try:
-        project = load(case.project, strict_refs=True)
+        project = load(case.project, strict_refs=True, shapes=resolve_shape(registry))
     except ValidationError as e:
-        # §4.7 的 `${a+b}`、§4.6 的 return 位置——這些必須在**載入期**就爆，
-        # 不是執行期。題目用 expect.load_error 斷言。
+        # §4.7 的 `${a+b}`、§4.6 的 return 位置、§4.2 的積木形狀——這些必須在
+        # **載入期**就爆，不是執行期。題目用 expect.load_error 斷言。
+        if registry is not None:
+            await registry.unload_all()
         return Result("load_error", [], [], {}, store.snapshot(), None, load_error=str(e))
 
     interp = Interpreter(
@@ -82,8 +101,13 @@ async def run_case(case: Case) -> Result:
         persist=store,
         clock=(lambda: case.clock) if case.clock is not None else None,
         timezone=case.timezone,
+        extensions=registry,
     )
-    run = await interp.run()
+    try:
+        run = await interp.run()
+    finally:
+        if registry is not None:
+            await registry.unload_all()
 
     events = normalize(run.events)
     logs = [e["text"] for e in events if e["op"] == "log"]

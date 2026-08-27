@@ -1,0 +1,8 @@
+title: 指令型積木插進輸入孔 → 載入期就擋
+spec: §4.2 Block 結構
+tags:
+- validation
+- shape
+expect:
+  status: load_error
+  load_error: 不能插進輸入孔

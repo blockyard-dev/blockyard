@@ -1,0 +1,6 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_3", "error": {"type": "ExtensionError", "code": "extension", "message": "這顆積木來自積木包「nope」，但它還沒安裝", "blockId": "blk_3", "hint": "安裝這個積木包後就能執行"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

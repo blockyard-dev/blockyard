@@ -1,0 +1,11 @@
+title: 專案用到沒安裝的積木包 → 積木保留為佔位符，執行時說得出「裝了就會好」
+spec: §13.3 缺少 extension 的處理
+tags:
+- extension
+- missing_extension
+expect:
+  status: error
+  error:
+    code: extension
+    message_contains: 積木包「nope」，但它還沒安裝
+    hint_contains: 安裝這個積木包

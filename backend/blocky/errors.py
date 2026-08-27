@@ -74,6 +74,18 @@ class RecursionLimitError(BlockyError):
     code = "recursion_limit"
 
 
+class UnknownBlockError(BlockyError):
+    """§13.3 這個 runtime 不認得的積木。
+
+    刻意是 BlockyError 而非 ValidationError：專案用到不認得的積木時，**保留
+    為佔位符**而不報廢整個專案，所以它必然會走到執行期。既然會走到執行期，
+    它就得像其他執行期錯誤一樣看得見——能被 `try_catch` 接住、能發出
+    `block.error` 事件。
+    """
+
+    code = "unknown_block"
+
+
 class ExtensionError(BlockyError):
     """§7.5 Host 邊界的正規化／驗證失敗。"""
 

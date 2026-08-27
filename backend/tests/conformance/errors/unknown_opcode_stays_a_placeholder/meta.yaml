@@ -1,0 +1,12 @@
+title: 認不得的 opcode **不是**載入期錯誤——保留為佔位符，執行時才報，且報得出來
+spec: §13.3 缺少 extension 的處理
+tags:
+- validation
+- shape
+- unknown_block
+expect:
+  status: error
+  error:
+    code: unknown_block
+    message_contains: 不認得積木 mystery.thing
+    hint_contains: 比較新的版本

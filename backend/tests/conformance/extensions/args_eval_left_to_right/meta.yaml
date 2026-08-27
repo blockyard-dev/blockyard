@@ -1,0 +1,11 @@
+title: 積木包的參數同樣由左而右、深度優先求值——求值在引擎這一側，不因第三方而異
+spec: §4.6 執行語意
+tags:
+- extension
+- eval_order
+expect:
+  status: ok
+  logs:
+  - 'number: 1'
+  - 'number: 2'
+  - '3'
