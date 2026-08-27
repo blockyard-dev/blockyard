@@ -1,0 +1,5 @@
+node_modules
+dist
+
+# scripts/copy-media.mjs 從 node_modules 複製過來的
+public/media

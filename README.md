@@ -2,25 +2,50 @@
 
 Scratch 風格的積木編輯器，組出會做真事的自動化流程：HTTP、Discord、LLM、檔案。
 
-設計文件：[docs/design.md](docs/design.md)（v0.3）
+設計文件：[docs/design.md](docs/design.md)（v0.5）
 
 ---
 
-## 現況：P0a 語意核心
+## 現況：P0a 完成，P0b 第 1～3 步完成
 
-依 §15 的施工順序——**先鎖語意，再接介面**。目前完成的是「這個語言是什麼」，
-還沒有前端、沒有 HTTP server、沒有擴充系統。
+依 §15 的施工順序——**先鎖語意，再接介面**。語意（「這個語言是什麼」）已經
+鎖住；編輯器畫得出全部 98 顆積木，但**還存不了檔**（第 4 步）。
 
 | 模組 | 狀態 |
 |---|---|
 | `blocky/ir/values.py` | 值模型與轉換（§4.3、D15 的 IEEE754 語意） |
 | `blocky/ir/template.py` | `${}` 插值解析與求值（§4.7、D9） |
-| `blocky/ir/schema.py` | IR 的 pydantic 模型與載入期驗證（§4.1、§4.2） |
-| `blocky/interpreter/` | tree-walking 直譯器 + 84 顆內建積木 |
-| `tests/conformance/` | §17 一致性題庫，46 題 |
-| `packages/shared-schema/` | 由 pydantic 匯出的 IR JSON Schema |
+| `blocky/ir/schema.py` | IR 的 pydantic 模型與載入期驗證（§4.1、§4.2、D20 的形狀） |
+| `blocky/interpreter/` | tree-walking 直譯器 + 87 顆內建積木（`builtins/*.py` 實作、`builtins/*.yaml` 宣告，D21） |
+| `blocky/extensions/` | Host 邊界（§7.5）、manifest schema、`InProcessHost` |
+| `blocky/api/` | FastAPI：`/api/projects`、`/api/extensions`（附錄 A） |
+| `blocky/storage/` | SQLite 專案表 |
+| `blocky/cli.py` | `blocky serve` |
+| `tests/conformance/` | §17 一致性題庫，63 題 |
+| `packages/shared-schema/` | 由 pydantic 匯出的 IR 與 manifest JSON Schema |
+| `packages/editor/` | Blockly zelos 工作區、manifest → 積木的動態註冊（§8.1） |
 
-尚未開工：編輯器（P0b）、擴充系統（P1）、Trigger（P2）。
+下一步是 §15 P0b 第 4 步：IR ↔ Blockly 雙向轉換（§8.4），做完存讀檔才閉環。
+擴充系統其餘部分（P1）、Trigger（P2）未開工。
+
+### 跑起來看看
+
+```bash
+cd packages/editor && npm install && npm run build
+cd ../../backend && .venv/bin/python -m blocky.cli serve
+```
+
+`blocky serve` 會把 `packages/editor/dist/` 掛在 `/` 上，自動開瀏覽器。
+
+開發時分成兩個 process（前端有 HMR，dev server 把 `/api` 代理到 8787）：
+
+```bash
+cd backend && .venv/bin/python -m blocky.cli serve --no-open   # :8787
+cd packages/editor && npm run dev                              # :5173
+```
+
+`http://127.0.0.1:8787/api/extensions` 是前端畫積木的唯一資料來源，內建與積木包
+從同一個端點吐出（D21）——所以**新增積木不需要改前端一行程式碼**。
 
 ---
 
@@ -40,7 +65,8 @@ uv pip install -e ".[dev]"
 .venv/bin/python -m pytest                    # 全部測試
 .venv/bin/python tests/gen_corpus.py --check  # 只驗證題庫的 expect 斷言
 .venv/bin/python tests/gen_corpus.py          # 重新產生 fixture 與黃金軌跡
-.venv/bin/python tools/export_schema.py       # 重新匯出 IR JSON Schema
+.venv/bin/python tools/export_schema.py       # 重新匯出 IR 與 manifest JSON Schema
+.venv/bin/python -m blocky.cli serve          # 起 API（預設 127.0.0.1:8787）
 ```
 
 ---

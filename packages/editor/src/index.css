@@ -1,0 +1,49 @@
+:root {
+  --topbar-h: 3rem;
+  --fg: #33333d;
+  --muted: #6b6f80;
+  --line: #dcdfeb;
+  font-family: system-ui, -apple-system, 'Noto Sans TC', sans-serif;
+  color: var(--fg);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  height: var(--topbar-h);
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  flex: none;
+}
+
+.brand { font-weight: 600; }
+.summary { color: var(--muted); font-size: 0.8125rem; }
+
+/* Blockly 畫在固定尺寸的 SVG 上，容器必須有明確高度。 */
+.workspace { flex: 1; min-height: 0; }
+
+.notice {
+  margin: 2rem auto;
+  max-width: 34rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  line-height: 1.7;
+  background: #fff;
+}
+
+.notice-error { border-color: #e0a0a0; background: #fff6f6; }
+.notice code { background: #f2f3f8; padding: 0.1em 0.35em; border-radius: 0.25rem; }
+.notice p { margin: 0.5rem 0 0; }

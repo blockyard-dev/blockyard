@@ -1,0 +1,494 @@
+/**
+ * manifest → Blockly block definition（§8.1 第 2～3 步）。
+ *
+ * 這個檔案是「新增積木不需要改前端一行程式碼」那句話的實作。它只認識
+ * manifest 的欄位，不認識任何一個 opcode——`control.if` 與第三方的
+ * `discord.send_message` 走的是同一段程式碼（D21）。
+ *
+ * 後端刻意不折成「前端好用的形狀」（見 `api/extensions.py`），所以 `%(name)`
+ * → `%1` 的轉換在這裡。
+ */
+import * as Blockly from 'blockly/core';
+import type { ArgSpec, BlockSpec, Manifest } from '../types/manifest';
+import { FIELD_TEXT_TYPE, type FieldTextOptions } from './fields/FieldText';
+
+/** Blockly 的積木型別名稱 = IR 的 opcode，一字不差。 */
+export type BlockType = string;
+
+/**
+ * C 型積木的堆疊在 `text` 裡的位置記號。
+ *
+ * `stack` 參數不出現在 `%(name)` 裡（Blockly 把堆疊畫在文字**下方**而不是
+ * 文字裡），但兩個堆疊的積木需要知道文字怎麼分段：`if_else` 的「否則」要落在
+ * 第一個堆疊後面。`⋯` 就是那個分界。
+ */
+const STACK_MARK = '⋯';
+
+/** `text` 裡的參數參照。 */
+const ARG_REF = /%\((\w+)\)/g;
+
+/** 字面值的影子積木（shadow）型別。 */
+export const SHADOW_TEXT = 'blocky.shadow.text';
+export const SHADOW_NUMBER = 'blocky.shadow.number';
+/** 影子積木上那個欄位的名字。第 4 步的 IR 轉換靠它取字面值。 */
+export const SHADOW_FIELD = 'VALUE';
+/** 字面值格子的底色。Scratch 的字面值是白的，讓外面那顆積木的顏色去說話。 */
+const SHADOW_COLOUR = '#FFFFFF';
+
+/** 共用文字影子帶的欄位設定：沒有宣告任何修飾欄位的 `string` 參數就長這樣。 */
+const DEFAULT_TEXT_OPTIONS: FieldTextOptions = {
+  mode: 'text',
+  interpolate: true,
+  multiline: false,
+};
+
+/** 一顆積木在工具箱與 IR 轉換時都要用到的衍生資訊。 */
+export interface RegisteredBlock {
+  type: BlockType;
+  spec: BlockSpec;
+  manifest: Manifest;
+  /** 需要影子積木的輸入孔：孔名 → 影子的定義。 */
+  shadows: Record<string, ShadowSpec>;
+  /** 從工具箱拉出來時要預設好的欄位值（目前只有下拉，見 `fieldDefaults`）。 */
+  fields: Record<string, string>;
+}
+
+export interface ShadowSpec {
+  type: BlockType;
+  fields: Record<string, string | number>;
+}
+
+/**
+ * `type: variable` 的值存在 IR 的 `fields` 而不是 `inputs`——直譯器讀它用的是
+ * `t.field(b, "name")`（見 `interpreter/builtins/control.py`）。
+ *
+ * manifest 沒有在這些參數上寫 `field: true`，因為型別本身已經蘊含了：綁的是
+ * 名字不是值，塞不進別的積木（D22）。這裡把那條蘊含寫出來，免得它變成只有
+ * 讀過直譯器原始碼的人才知道的事。
+ */
+function isField(arg: ArgSpec): boolean {
+  return arg.field === true || arg.type === 'variable';
+}
+
+/**
+ * 把一份 manifest 轉成 Blockly 的定義並註冊。
+ *
+ * `dynamic: true` 的積木（`procedure.definition` / `procedure.call`）**不在
+ * 這裡註冊**：它們的參數來自 `project.procedures` 而不是 manifest，形狀也隨
+ * 函式有沒有宣告回傳型別而變（D22）。那是第 7 步的 mutator 的事。
+ */
+export function defineManifest(manifest: Manifest): RegisteredBlock[] {
+  const { definitions, blocks } = buildDefinitions(manifest);
+  Blockly.common.defineBlocksWithJsonArray(definitions as never);
+  return blocks;
+}
+
+/**
+ * 純函數版本：算出定義但不註冊。
+ *
+ * 分出來是為了讓測試吃得到——`defineBlocksWithJsonArray` 會寫進 Blockly 的全域
+ * 註冊表，一個測試檔裡跑兩次就會互相汙染。轉換邏輯本身沒有一行需要 Blockly。
+ */
+export function buildDefinitions(manifest: Manifest): {
+  definitions: Record<string, unknown>[];
+  blocks: RegisteredBlock[];
+} {
+  const blocks: RegisteredBlock[] = [];
+  const definitions: Record<string, unknown>[] = [];
+
+  for (const spec of manifest.blocks ?? []) {
+    if (spec.dynamic) continue;
+    const built = buildBlock(manifest, spec);
+    definitions.push(built.definition, ...built.shadowDefinitions);
+    blocks.push(built.registered);
+  }
+
+  return { definitions, blocks };
+}
+
+/**
+ * 字面值的影子積木。
+ *
+ * 大多數的孔共用這兩顆；**宣告了修飾欄位的參數例外**——`multiline` / `rows` /
+ * `interpolate` / `min` / `max` 是掛在欄位上的設定，一顆共用的影子帶不動它們
+ * （見 `shadowFor`）。
+ */
+export function defineShadowBlocks(): void {
+  Blockly.common.defineBlocksWithJsonArray([
+    {
+      type: SHADOW_TEXT,
+      message0: '%1',
+      args0: [
+        {
+          type: FIELD_TEXT_TYPE,
+          name: SHADOW_FIELD,
+          text: '',
+          // 寫明而不是靠 FieldText 的預設值：`isDefaultTextOptions` 用「與這裡
+          // 相同」來判斷一個參數要不要專屬影子，兩邊的預設值一旦分岔，判斷就
+          // 會挑錯影子。
+          ...DEFAULT_TEXT_OPTIONS,
+        },
+      ],
+      output: null,
+      // 影子積木沒有自己的顏色——Scratch 的字面值格子跟著外面那顆積木走。
+      colour: SHADOW_COLOUR,
+    },
+    {
+      type: SHADOW_NUMBER,
+      message0: '%1',
+      args0: [{ type: 'field_number', name: SHADOW_FIELD, value: 0 }],
+      output: null,
+      colour: SHADOW_COLOUR,
+    },
+  ] as never);
+}
+
+interface BuiltBlock {
+  definition: Record<string, unknown>;
+  /** 這顆積木專屬的影子積木（參數宣告了修飾欄位時才有）。 */
+  shadowDefinitions: Record<string, unknown>[];
+  registered: RegisteredBlock;
+}
+
+function buildBlock(manifest: Manifest, spec: BlockSpec): BuiltBlock {
+  const type = `${manifest.id}.${spec.opcode}`;
+  const args = spec.args ?? {};
+  const shadows: Record<string, ShadowSpec> = {};
+  const shadowDefinitions: Record<string, unknown>[] = [];
+
+  const definition: Record<string, unknown> = {
+    type,
+    colour: manifest.color ?? '#9966FF',
+    tooltip: tooltipOf(manifest, spec),
+    // inline 是 Scratch 的樣子：輸入孔長在文字那一行上，不是各自一列。
+    inputsInline: true,
+  };
+
+  // 文字依 `⋯` 分段，段與段之間插一個堆疊；沒有 `⋯` 就是「文字在上、堆疊在下」。
+  const chunks = spec.text.split(STACK_MARK);
+  const stackNames = Object.keys(args).filter((name) => args[name]?.type === 'stack');
+  const consumed = new Set<string>();
+
+  let messageIndex = 0;
+  const rowCount = Math.max(chunks.length, stackNames.length);
+
+  for (let row = 0; row < rowCount; row++) {
+    const chunk = chunks[row];
+    if (chunk !== undefined) {
+      // 只有第一段可以是空的（`try_catch` 的「嘗試 ⋯」之後接的是堆疊）；
+      // 空字串的 message 會讓 Blockly 產出一列什麼都沒有的東西。
+      const isLast = row === rowCount - 1;
+      const built = buildMessage(type, chunk, args, consumed, isLast);
+      if (built) {
+        definition[`message${messageIndex}`] = built.message;
+        definition[`args${messageIndex}`] = built.args;
+        collectShadows(type, built.inputs, args, shadows, shadowDefinitions);
+        messageIndex++;
+      }
+    }
+
+    const stackName = stackNames[row];
+    if (stackName !== undefined) {
+      definition[`message${messageIndex}`] = '%1';
+      definition[`args${messageIndex}`] = [{ type: 'input_statement', name: stackName }];
+      messageIndex++;
+    }
+  }
+
+  if (messageIndex === 0) {
+    // 純文字、沒有參數也沒有堆疊的積木（`forever` 之類）仍然要有 message0。
+    definition.message0 = escapePercent(spec.text);
+    definition.args0 = [];
+  }
+
+  applyShape(definition, spec);
+  return {
+    definition,
+    shadowDefinitions,
+    registered: { type, spec, manifest, shadows, fields: fieldDefaults(args) },
+  };
+}
+
+/**
+ * `field` 型參數的初始值，貼在工具箱條目上。
+ *
+ * 只有下拉需要：`FieldText` / `FieldNumber` / `FieldCheckbox` 的預設值寫得進
+ * 積木定義（`text:` / `value:` / `checked:`），但 `FieldDropdown` 的 JSON 只
+ * 收 `options`，不收「選哪一個」——不補這一手，`debug.log` 的 level 會停在
+ * 選項列的第一個（除錯）而不是宣告的 `info`。
+ */
+function fieldDefaults(args: Record<string, ArgSpec>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, arg] of Object.entries(args)) {
+    if (arg.type === 'dropdown' && isField(arg) && arg.default != null) {
+      out[name] = String(arg.default);
+    }
+  }
+  return out;
+}
+
+/**
+ * 積木的四種形狀（§4.2）。
+ *
+ * `reporter` 一律 `output: null` 而不是照 `returns` 給 check——§8.5 說得很
+ * 明白：型別提示用警告，不用形狀。`null` 在 Blockly 裡是「與任何孔相容」，
+ * 所以 reporter 插得進 boolean 孔，與 §4.2 的載入期規則（`kind: block` 的
+ * 目標只要是 reporter 或 boolean 即可）完全一致。
+ *
+ * 反過來 `boolean` 積木給 `output: 'Boolean'`，是為了讓 `if` 的孔畫成六角形：
+ * 孔的 check 是 `['Boolean']`，而形狀由 check 決定。六角形的**視覺文法**留住
+ * 了，連接的**限制**沒有跟著來——那正是 §8.5 想要的組合。
+ */
+function applyShape(definition: Record<string, unknown>, spec: BlockSpec): void {
+  switch (spec.type) {
+    case 'command':
+      definition.previousStatement = null;
+      definition.nextStatement = null;
+      break;
+    case 'reporter':
+      definition.output = null;
+      break;
+    case 'boolean':
+      definition.output = 'Boolean';
+      break;
+    case 'hat':
+      // hat 只有下方接點，且畫成帽子。`style` 物件在 jsonInit 裡只是 `hat` 的
+      // 載體，讀完就被清成 null，不會與上面的 `colour` 打架。
+      definition.nextStatement = null;
+      definition.style = { hat: 'cap' };
+      break;
+  }
+}
+
+interface BuiltMessage {
+  message: string;
+  args: Record<string, unknown>[];
+  inputs: string[];
+}
+
+/**
+ * 把一段 `text` 轉成 `messageN` / `argsN`。
+ *
+ * 最後一段負責收尾：沒有在 `text` 裡被 `%(name)` 參照到的參數（`debug.log`
+ * 的 `level` 就是）接在後面。積木作者少寫一個 `%()` 不該讓那個參數在畫面上
+ * 消失——消失的欄位使用者永遠設不到，而它照樣會被送進直譯器。
+ */
+function buildMessage(
+  blockType: string,
+  chunk: string,
+  args: Record<string, ArgSpec>,
+  consumed: Set<string>,
+  appendLeftovers: boolean,
+): BuiltMessage | null {
+  const parts: Record<string, unknown>[] = [];
+  const inputs: string[] = [];
+
+  const message = escapePercent(chunk).replace(ARG_REF, (whole, name: string) => {
+    const arg = args[name];
+    if (!arg) {
+      // manifest 參照了不存在的參數。後端的 §8.1 一致性測試守的是參數名對不
+      // 上，這裡守的是 `text` 對不上——原樣印出來比默默吞掉好查。
+      console.warn(`[blocky] ${blockType} 的 text 參照了未宣告的參數 ${name}`);
+      return whole;
+    }
+    consumed.add(name);
+    parts.push(toBlocklyArg(name, arg));
+    if (!isField(arg)) inputs.push(name);
+    return `%${parts.length}`;
+  });
+
+  // **在 replace 之後**才算誰沒被參照到：`consumed` 是在上面那段 replace 裡
+  // 才填起來的，先算會把 `%(condition)` 這種明明有參照的參數也算成漏網之魚，
+  // 於是同一個參數被畫兩次。
+  if (appendLeftovers) {
+    for (const name of unreferencedArgs(args, consumed)) {
+      const arg = args[name];
+      if (!arg) continue;
+      consumed.add(name);
+      parts.push(toBlocklyArg(name, arg));
+      if (!isField(arg)) inputs.push(name);
+    }
+  }
+
+  const text = message.trim();
+  if (!text && parts.length === 0) return null;
+
+  return { message: appendPlaceholders(text, parts), args: parts, inputs };
+}
+
+/** 宣告了、但整份 `text` 都沒有 `%(name)` 參照到的非堆疊參數。 */
+function unreferencedArgs(args: Record<string, ArgSpec>, consumed: Set<string>): string[] {
+  return Object.keys(args).filter(
+    (name) => args[name]?.type !== 'stack' && !consumed.has(name),
+  );
+}
+
+/**
+ * `text` 走完 `ARG_REF` 之後已經含有 `%1…%n`；extras 是在那之後才推進 `parts`
+ * 的，號碼還沒有人給，補在最後面。
+ */
+function appendPlaceholders(text: string, parts: unknown[]): string {
+  const used = (text.match(/%\d+/g) ?? []).length;
+  if (used >= parts.length) return text;
+  const tail = Array.from({ length: parts.length - used }, (_, i) => `%${used + i + 1}`);
+  return text ? `${text} ${tail.join(' ')}` : tail.join(' ');
+}
+
+/**
+ * Blockly 的 message 字串裡 `%` 有意義，manifest 的文字裡沒有。先把裸的 `%`
+ * 跳脫掉，`%(name)` 才不會在有裸 `%` 的積木上錯位。
+ */
+function escapePercent(text: string): string {
+  return text.replace(/%(?!\(|\d)/g, '%%');
+}
+
+/**
+ * 一個參數 → 一個 Blockly 欄位或輸入孔。
+ *
+ * 分岔點只有一個：`field` 的值存在 IR 的 `fields`（屬於積木自己），其餘存在
+ * `inputs`（是孔，可以插別的積木）。這條線與 §4.2 的 IR 結構是同一條。
+ */
+function toBlocklyArg(name: string, arg: ArgSpec): Record<string, unknown> {
+  if (!isField(arg)) {
+    return {
+      type: 'input_value',
+      name,
+      // 只有 boolean 孔帶 check，而且只為了畫成六角形——見 applyShape 的註解。
+      ...(arg.type === 'boolean' ? { check: 'Boolean' } : {}),
+      ...(arg.help ? { tooltip: arg.help } : {}),
+    };
+  }
+
+  switch (arg.type) {
+    case 'dropdown':
+      return {
+        type: 'field_dropdown',
+        name,
+        // `field: true` 的下拉一定有靜態 `options`（D22：動態的 `source` 是
+        // 積木包的路，而積木包不能用 `field`）。
+        options: (arg.options ?? []).map((o) => [o.label ?? o.value, o.value]),
+      };
+    case 'boolean':
+      return { type: 'field_checkbox', name, checked: arg.default === true };
+    case 'number':
+      return {
+        type: 'field_number',
+        name,
+        value: typeof arg.default === 'number' ? arg.default : 0,
+        ...(typeof arg.min === 'number' ? { min: arg.min } : {}),
+        ...(typeof arg.max === 'number' ? { max: arg.max } : {}),
+      };
+    default:
+      return { type: FIELD_TEXT_TYPE, name, text: String(arg.default ?? ''), ...fieldTextOptions(arg) };
+  }
+}
+
+/** manifest 的修飾欄位 → `FieldText` 的能力開關（§7.2、§8.5）。 */
+function fieldTextOptions(arg: ArgSpec): FieldTextOptions {
+  return {
+    mode: arg.type === 'variable' ? 'variable' : 'text',
+    // §4.7 的預設：`string` 開、`code` 關；manifest 的 `interpolate` 覆寫它。
+    interpolate: arg.interpolate ?? arg.type !== 'code',
+    multiline: arg.multiline ?? false,
+    ...(typeof arg.rows === 'number' ? { rows: arg.rows } : {}),
+  };
+}
+
+/**
+ * 輸入孔的影子積木。
+ *
+ * Blockly 的 JSON 積木定義放不了影子，只有工具箱條目可以——所以這裡先算好，
+ * 由 `toolbox.ts` 貼進工具箱。boolean 孔**沒有影子**：Scratch 的六角形孔本來
+ * 就是空的，塞一顆預設的 `false` 進去會讓「還沒填」與「填了 false」看起來
+ * 一模一樣。
+ *
+ * 使用者真正打字的地方是**影子上的欄位**，不是外面那顆積木——所以 §7.2 的修飾
+ * 欄位（`multiline` `rows` `interpolate` `min` `max`）必須跟著送到影子上。共用
+ * 的 `SHADOW_TEXT` / `SHADOW_NUMBER` 帶不動它們，於是宣告了修飾欄位的參數會
+ * 拿到一顆專屬的影子。
+ *
+ * 這不是可有可無的細節：`interpolate` 錯掉會讓 §4.7 的「`${HOME}` 是 shell 的
+ * 東西不是插值」失守，而那正是 D9 把插值鎖在路徑上想避免的事。
+ */
+function collectShadows(
+  blockType: string,
+  inputs: string[],
+  args: Record<string, ArgSpec>,
+  out: Record<string, ShadowSpec>,
+  definitions: Record<string, unknown>[],
+): void {
+  for (const name of inputs) {
+    const arg = args[name];
+    if (!arg || arg.type === 'boolean') continue;
+    out[name] = shadowFor(blockType, name, arg, definitions);
+  }
+}
+
+function shadowFor(
+  blockType: string,
+  name: string,
+  arg: ArgSpec,
+  definitions: Record<string, unknown>[],
+): ShadowSpec {
+  if (arg.type === 'number') {
+    const value = typeof arg.default === 'number' ? arg.default : 0;
+    const bounded = typeof arg.min === 'number' || typeof arg.max === 'number';
+    if (!bounded) return { type: SHADOW_NUMBER, fields: { [SHADOW_FIELD]: value } };
+
+    const type = `${SHADOW_NUMBER}#${blockType}.${name}`;
+    definitions.push({
+      type,
+      message0: '%1',
+      args0: [
+        {
+          type: 'field_number',
+          name: SHADOW_FIELD,
+          value,
+          ...(typeof arg.min === 'number' ? { min: arg.min } : {}),
+          ...(typeof arg.max === 'number' ? { max: arg.max } : {}),
+        },
+      ],
+      output: null,
+      colour: SHADOW_COLOUR,
+    });
+    return { type, fields: { [SHADOW_FIELD]: value } };
+  }
+
+  // `dropdown` 走到這裡代表它是動態的（`source` 指向積木包的 `@dropdown`
+  // 函式，D22）。選項要打 `POST /api/extensions/{id}/dropdown/{source}` 才問得
+  // 到，而那個端點還不存在——先用文字影子頂著，形狀與 IR 表示（`inputs` 裡的
+  // 字面值）與接上之後完全相同，屆時換掉的只有影子的型別。
+  const value = String(arg.default ?? '');
+  const options = fieldTextOptions(arg);
+  if (isDefaultTextOptions(options)) {
+    return { type: SHADOW_TEXT, fields: { [SHADOW_FIELD]: value } };
+  }
+
+  const type = `${SHADOW_TEXT}#${blockType}.${name}`;
+  definitions.push({
+    type,
+    message0: '%1',
+    args0: [{ type: FIELD_TEXT_TYPE, name: SHADOW_FIELD, text: value, ...options }],
+    output: null,
+    colour: SHADOW_COLOUR,
+  });
+  return { type, fields: { [SHADOW_FIELD]: value } };
+}
+
+/** `SHADOW_TEXT` 那顆共用影子帶的設定。與它相同就不必再生一顆。 */
+function isDefaultTextOptions(options: FieldTextOptions): boolean {
+  return (
+    options.mode === DEFAULT_TEXT_OPTIONS.mode &&
+    options.interpolate === DEFAULT_TEXT_OPTIONS.interpolate &&
+    options.multiline === DEFAULT_TEXT_OPTIONS.multiline &&
+    options.rows === undefined
+  );
+}
+
+function tooltipOf(manifest: Manifest, spec: BlockSpec): string {
+  const opcode = `${manifest.id}.${spec.opcode}`;
+  const parts = [opcode];
+  if (spec.returns) parts.push(`回傳 ${spec.returns}`);
+  if (spec.deprecated) parts.push('已淘汰');
+  return parts.join(' · ');
+}

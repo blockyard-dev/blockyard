@@ -1,0 +1,37 @@
+{
+  "name": "@blocky/editor",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run gen:types && tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "gen:types": "node scripts/gen-types.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run gen:types -- --check && tsc -b --noEmit && vitest run",
+    "copy:media": "node scripts/copy-media.mjs",
+    "predev": "npm run copy:media",
+    "prebuild": "npm run copy:media"
+  },
+  "dependencies": {
+    "@blockly/field-multilineinput": "^13.2.0",
+    "blockly": "^13.2.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.1.0",
+    "json-schema-to-typescript": "^15.0.4",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vitest": "^3.2.7",
+    "yaml": "^2.9.0"
+  }
+}
