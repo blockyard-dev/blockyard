@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, TypeVar
 
+from blocky.interpreter import declarations
+
 Handler = Callable[..., Awaitable[Any]]
 F = TypeVar("F", bound=Handler)
 
@@ -27,17 +29,10 @@ HAT_OPCODES = frozenset(
 )
 
 # 形狀。`value` 同時涵蓋 reporter 與 boolean——引擎不區分兩者，區分是編輯器
-# 的事（哪種孔吃哪種積木）。
-SHAPE_COMMAND = "command"
-SHAPE_VALUE = "value"
-SHAPE_HAT = "hat"
-
-_EXT_SHAPES: dict[str, frozenset[str]] = {
-    "command": frozenset({SHAPE_COMMAND}),
-    "reporter": frozenset({SHAPE_VALUE}),
-    "boolean": frozenset({SHAPE_VALUE}),
-    "hat": frozenset({SHAPE_HAT}),
-}
+# 的事（哪種孔吃哪種積木）。定義在 `declarations` 裡，內建與積木包共用同一張表。
+SHAPE_COMMAND = declarations.SHAPE_COMMAND
+SHAPE_VALUE = declarations.SHAPE_VALUE
+SHAPE_HAT = declarations.SHAPE_HAT
 
 # 這些 opcode 自行控制輸入孔的求值時機（迴圈條件要重複求值、
 # if 分支不能兩邊都算），因此引擎不對它們做自動的 enter/exit 包裝以外的事。
@@ -63,17 +58,16 @@ def value(opcode: str) -> Callable[[F], F]:
 def builtin_shapes(opcode: str) -> frozenset[str]:
     """一顆內建積木**可以**是哪些形狀。空集合 = 不認得這個 opcode。
 
+    答案來自**宣告**（`builtins/*.yaml`），不是從「handler 註冊在 COMMANDS 還是
+    VALUES」反推（D21）。反推看起來省事，但它讓形狀成為實作的副產物：一顆忘了
+    註冊的積木會變成「不認得」，而 §13.3 說不認得的 opcode 要當佔位符放行——
+    於是形狀驗證對它默默失效。宣告是獨立的第二個來源，兩者不一致由
+    `tests/unit/test_builtin_manifests.py` 的第一個測試抓。
+
     回集合而不是單一值，因為 `procedure.call` 兩者皆是：有宣告回傳型別時是
     reporter，沒有時是 command（§4.6）。
     """
-    shapes = set()
-    if opcode in COMMANDS:
-        shapes.add(SHAPE_COMMAND)
-    if opcode in VALUES:
-        shapes.add(SHAPE_VALUE)
-    if opcode in HAT_OPCODES:
-        shapes.add(SHAPE_HAT)
-    return frozenset(shapes)
+    return declarations.shapes(opcode)
 
 
 def resolve_shape(extensions: Any = None) -> Callable[[str], frozenset[str]]:
@@ -87,6 +81,6 @@ def resolve_shape(extensions: Any = None) -> Callable[[str], frozenset[str]]:
         if shapes := builtin_shapes(opcode):
             return shapes
         ext = extensions.shape(opcode) if extensions is not None else None
-        return _EXT_SHAPES.get(ext or "", frozenset())
+        return declarations.shapes_of(ext or "")
 
     return resolve

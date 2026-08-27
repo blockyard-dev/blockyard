@@ -1,0 +1,240 @@
+# operator 命名空間的宣告（D21、§4.4.1）。
+#
+# 關於 `default`：對積木包來說它是 Host 邊界的補值，對內建來說它是**編輯器的
+# 影子值**——輸入孔裡預先填好的那個數字。handler 自己還有一層 fallback（給
+# 手寫 IR 用），兩者刻意不一定相同，例如 `substring` 的 end 在 handler 裡是
+# 「整段長度」，那是宣告寫不出來的東西。
+manifestVersion: 1
+builtin: true
+id: operator
+name: 運算
+version: 1.0.0
+color: "#59C059"
+description: 算術、比較、邏輯、字串與正規表達式
+
+blocks:
+  # ---- 算術 ----
+
+  - opcode: add
+    type: reporter
+    returns: number
+    text: "%(a) + %(b)"
+    args: { a: { type: number, default: 0 }, b: { type: number, default: 0 } }
+
+  - opcode: subtract
+    type: reporter
+    returns: number
+    text: "%(a) − %(b)"
+    args: { a: { type: number, default: 0 }, b: { type: number, default: 0 } }
+
+  - opcode: multiply
+    type: reporter
+    returns: number
+    text: "%(a) × %(b)"
+    args: { a: { type: number, default: 0 }, b: { type: number, default: 0 } }
+
+  - opcode: divide
+    type: reporter
+    returns: number
+    text: "%(a) ÷ %(b)"
+    args: { a: { type: number, default: 0 }, b: { type: number, default: 1 } }
+
+  - opcode: mod
+    type: reporter
+    returns: number
+    text: "%(a) 除以 %(b) 的餘數"
+    args: { a: { type: number, default: 0 }, b: { type: number, default: 1 } }
+
+  - opcode: round
+    type: reporter
+    returns: number
+    # JS 的 Math.round：.5 一律進位到較大值
+    text: "四捨五入 %(value)"
+    args: { value: { type: number, default: 0 } }
+
+  - opcode: math_op
+    type: reporter
+    returns: number
+    text: "%(op) %(value)"
+    args:
+      op:
+        type: dropdown
+        field: true
+        default: abs
+        options:
+          - { value: abs, label: "絕對值" }
+          - { value: floor, label: "無條件捨去" }
+          - { value: ceiling, label: "無條件進位" }
+          - { value: sqrt, label: "平方根" }
+          - { value: sin, label: "sin" }
+          - { value: cos, label: "cos" }
+          - { value: tan, label: "tan" }
+          - { value: ln, label: "ln" }
+          - { value: log, label: "log" }
+          - { value: "e^", label: "e^" }
+          - { value: "10^", label: "10^" }
+      value: { type: number, default: 0 }
+
+  # ---- 比較（§4.4.1）。eq / neq 不做型別轉換；大小比較型別混用是錯誤。----
+
+  - opcode: eq
+    type: boolean
+    text: "%(a) = %(b)"
+    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+
+  - opcode: neq
+    type: boolean
+    text: "%(a) ≠ %(b)"
+    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+
+  - opcode: lt
+    type: boolean
+    text: "%(a) < %(b)"
+    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+
+  - opcode: gt
+    type: boolean
+    text: "%(a) > %(b)"
+    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+
+  - opcode: lte
+    type: boolean
+    text: "%(a) ≤ %(b)"
+    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+
+  - opcode: gte
+    type: boolean
+    text: "%(a) ≥ %(b)"
+    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+
+  # ---- 邏輯。and / or 短路，右邊的 reporter 可以帶副作用，所以短路是語意。----
+
+  - opcode: and
+    type: boolean
+    text: "%(a) 且 %(b)"
+    args: { a: { type: boolean, default: false }, b: { type: boolean, default: false } }
+
+  - opcode: or
+    type: boolean
+    text: "%(a) 或 %(b)"
+    args: { a: { type: boolean, default: false }, b: { type: boolean, default: false } }
+
+  - opcode: not
+    type: boolean
+    text: "不成立 %(value)"
+    args: { value: { type: boolean, default: false } }
+
+  # ---- 字串。索引 1-based（§4.3）。----
+
+  - opcode: join
+    type: reporter
+    returns: string
+    text: "連接 %(a) 和 %(b)"
+    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+
+  - opcode: join_list
+    type: reporter
+    returns: string
+    text: "用 %(separator) 連接 %(list)"
+    args:
+      list: { type: list }
+      separator: { type: string, default: "," }
+
+  - opcode: letter_of
+    type: reporter
+    returns: string
+    text: "%(text) 的第 %(index) 個字"
+    args:
+      text: { type: string, default: "" }
+      index: { type: number, default: 1 }
+
+  - opcode: length
+    type: reporter
+    returns: number
+    text: "%(text) 的長度"
+    args: { text: { type: string, default: "" } }
+
+  - opcode: contains
+    type: boolean
+    text: "%(a) 包含 %(b)"
+    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+
+  - opcode: substring
+    type: reporter
+    returns: string
+    text: "%(text) 的第 %(start) 到 %(end) 個字"
+    args:
+      text: { type: string, default: "" }
+      start: { type: number, default: 1 }
+      end: { type: number, default: 1 }
+
+  - opcode: replace
+    type: reporter
+    returns: string
+    text: "把 %(text) 裡的 %(find) 換成 %(replace)"
+    args:
+      text: { type: string, default: "" }
+      find: { type: string, default: "" }
+      replace: { type: string, default: "" }
+
+  - opcode: split
+    type: reporter
+    returns: list
+    # separator 為空字串時逐字切開
+    text: "用 %(separator) 分割 %(text)"
+    args:
+      text: { type: string, default: "" }
+      separator: { type: string, default: "," }
+
+  - opcode: trim
+    type: reporter
+    returns: string
+    text: "去除 %(text) 的頭尾空白"
+    args: { text: { type: string, default: "" } }
+
+  - opcode: case
+    type: reporter
+    returns: string
+    text: "把 %(text) 轉成 %(case)"
+    args:
+      text: { type: string, default: "" }
+      case:
+        type: dropdown
+        field: true
+        default: upper
+        options:
+          - { value: upper, label: "大寫" }
+          - { value: lower, label: "小寫" }
+
+  - opcode: regex_match
+    type: boolean
+    text: "%(text) 符合樣式 %(pattern)"
+    args:
+      pattern: { type: string, default: "" }
+      text: { type: string, default: "" }
+
+  - opcode: regex_extract
+    type: reporter
+    # 有群組時回群組清單，沒有時回整段符合的文字，找不到回空字串——所以是 any
+    returns: any
+    text: "從 %(text) 取出樣式 %(pattern)"
+    args:
+      pattern: { type: string, default: "" }
+      text: { type: string, default: "" }
+
+  - opcode: regex_replace
+    type: reporter
+    returns: string
+    text: "把 %(text) 裡符合 %(pattern) 的換成 %(replace)"
+    args:
+      pattern: { type: string, default: "" }
+      text: { type: string, default: "" }
+      replace: { type: string, default: "" }
+
+  - opcode: random
+    type: reporter
+    returns: number
+    text: "隨機取 %(from) 到 %(to)"
+    args:
+      from: { type: number, default: 1 }
+      to: { type: number, default: 10 }

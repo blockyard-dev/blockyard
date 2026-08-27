@@ -1,0 +1,92 @@
+# type 命名空間的宣告（D21、§4.8）。
+#
+# `is` 與 `can_cast` 的下拉**不一樣**：轉換的目標只有三種（把字串變成物件只
+# 可能是 JSON 解析），而詢問型別要問得到全部六種。共用一份選項會讓
+# 「轉成清單」出現在下拉裡卻永遠報錯。
+manifestVersion: 1
+builtin: true
+id: type
+name: 型別
+version: 1.0.0
+color: "#CF63CF"
+description: 型別詢問與轉換（§4.3 的六種值）
+
+blocks:
+  - opcode: cast
+    type: reporter
+    returns: any
+    text: "把 %(value) 轉成 %(type)"
+    args:
+      value: { type: string, default: "" }
+      type:
+        type: dropdown
+        field: true
+        default: string
+        options:
+          - { value: number, label: "數字" }
+          - { value: string, label: "文字" }
+          - { value: boolean, label: "是非值" }
+
+  - opcode: try_cast
+    type: reporter
+    returns: any
+    # 轉不動就用預設值。存在的理由是避免每個轉換都得包 try_catch。
+    text: "把 %(value) 轉成 %(type)，失敗就用 %(default)"
+    args:
+      value: { type: string, default: "" }
+      type:
+        type: dropdown
+        field: true
+        default: string
+        options:
+          - { value: number, label: "數字" }
+          - { value: string, label: "文字" }
+          - { value: boolean, label: "是非值" }
+      default: { type: string, default: "" }
+
+  - opcode: is
+    type: boolean
+    # 問**實際型別**：is([], 物件) 為 false，is(null, 物件) 也是
+    text: "%(value) 的型別是 %(type)"
+    args:
+      value: { type: string, default: "" }
+      type:
+        type: dropdown
+        field: true
+        default: string
+        options:
+          - { value: number, label: "數字" }
+          - { value: string, label: "文字" }
+          - { value: boolean, label: "是非值" }
+          - { value: list, label: "清單" }
+          - { value: object, label: "物件" }
+          - { value: "null", label: "空值" }
+
+  - opcode: can_cast
+    type: boolean
+    # 問**可轉換性**：can_cast("123", 數字) 為 true
+    text: "%(value) 可以轉成 %(type)"
+    args:
+      value: { type: string, default: "" }
+      type:
+        type: dropdown
+        field: true
+        default: string
+        options:
+          - { value: number, label: "數字" }
+          - { value: string, label: "文字" }
+          - { value: boolean, label: "是非值" }
+
+  - opcode: of
+    type: reporter
+    returns: string
+    text: "%(value) 的型別"
+    args:
+      value: { type: string, default: "" }
+
+  - opcode: is_empty
+    type: boolean
+    # "" [] {} null → true；**0 → false**（§4.3 的刻意不一致）
+    text: "%(value) 是空的"
+    args:
+      value: { type: string, default: "" }

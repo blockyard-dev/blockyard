@@ -1,0 +1,147 @@
+# data 命名空間的宣告（D21）。
+#
+# `name` 在變數積木上是 `variable` 型（§8.5 的名稱自動完成、重新命名要跟著
+# 走），但在 `persist_*` 上是普通字串 field——持久值是另一個命名空間（§5.4
+# 第 4 層），它的 key 不是變數，不該出現在變數面板，也不該被重新命名波及。
+manifestVersion: 1
+builtin: true
+id: data
+name: 資料
+version: 1.0.0
+color: "#FF8C1A"
+description: 免宣告變數、清單操作、跨執行的持久值
+
+blocks:
+  # ---- 變數（§4.5）。寫入即建立，讀取未建立的變數是錯誤。----
+
+  - opcode: set
+    type: command
+    text: "設定 %(name) 為 %(value)"
+    args:
+      name: { type: variable, default: "" }
+      value: { type: string, default: "" }
+
+  - opcode: change
+    type: command
+    # §4.5：同樣要求變數已存在。少打一顆 set，換來的是打錯字被靜默當成新變數。
+    text: "改變 %(name) 增加 %(value)"
+    args:
+      name: { type: variable, default: "" }
+      value: { type: number, default: 1 }
+
+  - opcode: get
+    type: reporter
+    returns: any
+    text: "%(name)"
+    args:
+      name: { type: variable, default: "" }
+
+  - opcode: new_list
+    type: reporter
+    returns: list
+    text: "空清單"
+
+  - opcode: new_object
+    type: reporter
+    returns: object
+    text: "空物件"
+
+  # ---- 清單。索引 1-based（§4.3）。----
+
+  - opcode: list_add
+    type: command
+    text: "把 %(item) 加到 %(name)"
+    args:
+      name: { type: variable, default: "" }
+      item: { type: string, default: "" }
+
+  - opcode: list_delete
+    type: command
+    text: "刪除 %(name) 的第 %(index) 項"
+    args:
+      name: { type: variable, default: "" }
+      index: { type: number, default: 1 }
+
+  - opcode: list_clear
+    type: command
+    text: "清空 %(name)"
+    args:
+      name: { type: variable, default: "" }
+
+  - opcode: list_insert
+    type: command
+    # 索引允許 length+1（接在最後面），見 data.py 的 normalize_index(…, len+1)
+    text: "把 %(item) 插入 %(name) 的第 %(index) 項"
+    args:
+      name: { type: variable, default: "" }
+      item: { type: string, default: "" }
+      index: { type: number, default: 1 }
+
+  - opcode: list_replace
+    type: command
+    text: "把 %(name) 的第 %(index) 項換成 %(item)"
+    args:
+      name: { type: variable, default: "" }
+      index: { type: number, default: 1 }
+      item: { type: string, default: "" }
+
+  - opcode: list_item
+    type: reporter
+    returns: any
+    text: "%(name) 的第 %(index) 項"
+    args:
+      name: { type: variable, default: "" }
+      index: { type: number, default: 1 }
+
+  - opcode: list_length
+    type: reporter
+    returns: number
+    text: "%(name) 的長度"
+    args:
+      name: { type: variable, default: "" }
+
+  - opcode: list_contains
+    type: boolean
+    text: "%(name) 包含 %(item)"
+    args:
+      name: { type: variable, default: "" }
+      item: { type: string, default: "" }
+
+  - opcode: list_index_of
+    type: reporter
+    returns: number
+    # 找不到回 0——1-based 用不到 0，正好是空出來的哨兵值（§4.3）
+    text: "%(item) 在 %(name) 的位置"
+    args:
+      name: { type: variable, default: "" }
+      item: { type: string, default: "" }
+
+  # ---- 持久值（§5.4 第 4 層、D12）。key 不是變數。----
+
+  - opcode: persist_set
+    type: command
+    text: "記住 %(name) 為 %(value)"
+    args:
+      name: { type: string, field: true, default: "" }
+      value: { type: string, default: "" }
+
+  - opcode: persist_get
+    type: reporter
+    returns: any
+    # 有預設值孔而非報錯——持久值的「第一次執行」必然不存在（§5.4）
+    text: "記住的 %(name)（沒有就用 %(default)）"
+    args:
+      name: { type: string, field: true, default: "" }
+      default: { type: string, default: "" }
+
+  - opcode: persist_has
+    type: boolean
+    text: "記得 %(name) 嗎"
+    args:
+      name: { type: string, field: true, default: "" }
+
+  - opcode: persist_delete
+    type: command
+    text: "忘記 %(name)"
+    args:
+      name: { type: string, field: true, default: "" }

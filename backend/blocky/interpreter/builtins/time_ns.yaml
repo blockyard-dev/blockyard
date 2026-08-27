@@ -1,0 +1,113 @@
+# time 命名空間的宣告（D21、§4.9）。檔名跟著 `time_ns.py` 走，id 才是命名空間。
+#
+# 時間戳是 **object 而不是裸 number**（時區要跟著值走），所以這些積木的
+# `returns` 寫 object。`type.of` 對它回 "object" 是可接受的代價；`timestamp`
+# 是需要裸數字時的逃生口。
+manifestVersion: 1
+builtin: true
+id: time
+name: 時間
+version: 1.0.0
+color: "#4C97FF"
+description: 現在時間、解析、格式化與加減
+
+blocks:
+  - opcode: now
+    type: reporter
+    returns: object
+    text: "現在時間 %(timezone)"
+    args:
+      timezone: { type: string, default: "", help: "留空則用專案時區，例如 Asia/Taipei" }
+
+  - opcode: timestamp
+    type: reporter
+    returns: number
+    text: "%(time) 的毫秒時間戳"
+    args:
+      time: { type: object }
+
+  - opcode: parse
+    type: reporter
+    returns: object
+    text: "解析時間 %(text) %(timezone)"
+    args:
+      text: { type: string, default: "", help: "ISO 8601，例如 2026-08-27T09:00:00" }
+      timezone: { type: string, default: "" }
+
+  - opcode: format
+    type: reporter
+    returns: string
+    # 用 YYYY/MM/DD 這類 token 而不是 strftime 的 %Y——使用者不會知道 %Y 是什麼。
+    # 下拉可自行輸入：除了這四個名稱以外，任何含 token 的字串都算數。
+    text: "格式化 %(time) 為 %(format)"
+    args:
+      time: { type: object }
+      format:
+        type: dropdown
+        field: true
+        default: date
+        options:
+          - { value: date, label: "日期（YYYY-MM-DD）" }
+          - { value: datetime, label: "日期時間（YYYY-MM-DD HH:mm:ss）" }
+          - { value: time, label: "時間（HH:mm:ss）" }
+          - { value: iso, label: "ISO 8601" }
+
+  - opcode: add
+    type: reporter
+    returns: object
+    # 天與週走行事曆運算，才能正確跨越日光節約時間（time_ns.py）
+    text: "%(time) 加上 %(amount) %(unit)"
+    args:
+      time: { type: object }
+      amount: { type: number, default: 1 }
+      unit:
+        type: dropdown
+        field: true
+        default: day
+        options:
+          - { value: millisecond, label: "毫秒" }
+          - { value: second, label: "秒" }
+          - { value: minute, label: "分鐘" }
+          - { value: hour, label: "小時" }
+          - { value: day, label: "天" }
+          - { value: week, label: "週" }
+
+  - opcode: diff
+    type: reporter
+    returns: number
+    text: "%(a) 減 %(b) 相差幾 %(unit)"
+    args:
+      a: { type: object }
+      b: { type: object }
+      unit:
+        type: dropdown
+        field: true
+        default: day
+        options:
+          - { value: millisecond, label: "毫秒" }
+          - { value: second, label: "秒" }
+          - { value: minute, label: "分鐘" }
+          - { value: hour, label: "小時" }
+          - { value: day, label: "天" }
+          - { value: week, label: "週" }
+
+  - opcode: part
+    type: reporter
+    returns: number
+    text: "%(time) 的 %(part)"
+    args:
+      time: { type: object }
+      part:
+        type: dropdown
+        field: true
+        default: day
+        options:
+          - { value: year, label: "年" }
+          - { value: month, label: "月" }
+          - { value: day, label: "日" }
+          - { value: hour, label: "時" }
+          - { value: minute, label: "分" }
+          - { value: second, label: "秒" }
+          - { value: weekday, label: "星期幾（1=週一）" }
+          - { value: week, label: "第幾週" }
+          - { value: yearday, label: "一年的第幾天" }

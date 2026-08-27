@@ -1,0 +1,38 @@
+# event 命名空間的宣告（D21）。
+#
+# 這個命名空間**沒有 event.py**：hat 積木不被「執行」，引擎從 `hat.next` 起跑
+# （§5.1）。所以這裡是純宣告——它同時是「引擎不認得的 hat 就是錯的」那條
+# 形狀驗證的資料來源（D20）。
+manifestVersion: 1
+builtin: true
+id: event
+name: 事件
+version: 1.0.0
+color: "#FFBF00"
+description: 腳本的起點。每個腳本最上面必須是一顆事件積木
+
+blocks:
+  - opcode: when_flag_clicked
+    type: hat
+    text: "當 ▶ 被點擊"
+    concurrency: parallel
+
+  - opcode: when_cron
+    type: hat
+    text: "當時間到 %(cron)"
+    args:
+      cron: { type: string, default: "0 9 * * *", help: "cron 運算式，例如 0 9 * * *" }
+    yields:
+      - { name: scheduled_at, type: object }
+    concurrency: drop
+
+  - opcode: when_webhook
+    type: hat
+    text: "當收到 webhook %(path)"
+    args:
+      path: { type: string, default: "/hook" }
+    yields:
+      - { name: body, type: object }
+      - { name: headers, type: object }
+      - { name: query, type: object }
+    concurrency: parallel

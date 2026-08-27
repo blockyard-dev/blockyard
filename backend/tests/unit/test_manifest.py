@@ -162,3 +162,107 @@ def test_directory_name_must_match_the_id(tmp_path) -> None:
     )
     with pytest.raises(ExtensionError, match="不一致"):
         discover(tmp_path)
+
+
+# ---- 內建與積木包的界線（D21）----
+#
+# 內建與積木包共用同一個 `Manifest` 模型，差別只有 `builtin` 這個旗標。這一組
+# 題目守的是那條界線：**共用模型不等於共用權限**。
+
+
+def test_a_pack_cannot_call_itself_builtin(tmp_path) -> None:
+    """否則寫一行 `builtin: true` 就能改寫 `data.set` 的意思。"""
+    d = tmp_path / "sneaky"
+    d.mkdir()
+    (d / "manifest.yaml").write_text(
+        "manifestVersion: 1\nid: sneaky\nname: x\nversion: 0.1.0\nbuiltin: true\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ExtensionError, match="不能標記 builtin"):
+        discover(tmp_path)
+
+
+def test_builtin_id_must_be_a_builtin_namespace() -> None:
+    bad(mf(id="whatever", builtin=True), "不是內建命名空間")
+
+
+def test_builtin_cannot_declare_dependencies() -> None:
+    """內建沒有 `main.py`，沒有東西可以裝、也沒有邊界可以守。"""
+    bad(mf(id="data", builtin=True, requirements=["httpx"]), "不能宣告 requirements")
+    bad(mf(id="data", builtin=True, permissions=["net"]), "不能宣告 requirements")
+
+
+def test_packs_cannot_declare_builtin_only_arg_types() -> None:
+    """`variable` 綁的是變數、`stack` 是 C 型積木——兩者都沒有值能過 §7.5 的邊界。"""
+    for arg_type in ("variable", "stack"):
+        bad(
+            mf(blocks=[{
+                "opcode": "go", "type": "command", "text": "go",
+                "args": {"x": {"type": arg_type}},
+            }]),
+            f"不能宣告 {arg_type} 型參數",
+        )
+
+
+def test_packs_cannot_declare_fields_or_static_dropdowns() -> None:
+    """積木包的參數一律是輸入孔；下拉一律是動態的（選項來自外部服務）。"""
+    bad(
+        mf(blocks=[{
+            "opcode": "go", "type": "command", "text": "go %(x)",
+            "args": {"x": {"type": "string", "field": True}},
+        }]),
+        "不能是 field",
+    )
+    bad(
+        mf(blocks=[{
+            "opcode": "go", "type": "command", "text": "go %(x)",
+            "args": {"x": {"type": "dropdown", "options": ["a", "b"]}},
+        }]),
+        "請用 source",
+    )
+
+
+def test_packs_cannot_declare_dynamic_blocks() -> None:
+    """dynamic 積木由專案資料生成（§4.6 的函式），只有內建有。"""
+    bad(
+        mf(blocks=[{"opcode": "go", "type": "reporter", "text": "go", "dynamic": True}]),
+        "只有內建有",
+    )
+
+
+def test_dropdown_needs_source_or_options() -> None:
+    base = {"opcode": "go", "type": "command", "text": "go %(x)"}
+    bad(mf(blocks=[{**base, "args": {"x": {"type": "dropdown"}}}]), "source（動態）或 options")
+    bad(
+        mf(id="data", builtin=True, blocks=[{
+            **base, "args": {"x": {"type": "dropdown", "source": "s", "options": ["a"]}},
+        }]),
+        "只能擇一",
+    )
+
+
+def test_option_shorthand_expands_to_value_only() -> None:
+    """`options: [upper, lower]` 是 `[{value: upper}, …]` 的簡寫。"""
+    m = parse_manifest(
+        mf(id="data", builtin=True, blocks=[{
+            "opcode": "go", "type": "command", "text": "go %(x)",
+            "args": {"x": {"type": "dropdown", "field": True, "options": ["upper", {
+                "value": "lower", "label": "小寫"}]}},
+        }]),
+        where="test",
+    )
+    opts = m.blocks[0].args["x"].options
+    assert [(o.value, o.label) for o in opts] == [("upper", None), ("lower", "小寫")]
+
+
+def test_variable_args_are_always_fields() -> None:
+    """變數名稱不能由積木求值——它是積木自己的欄位（§4.2、§8.5）。"""
+    m = parse_manifest(
+        mf(id="data", builtin=True, blocks=[{
+            "opcode": "go", "type": "command", "text": "設定 %(name) 為 %(value)",
+            "args": {"name": {"type": "variable"}, "value": {"type": "string"}},
+        }]),
+        where="test",
+    )
+    assert m.field_args("go").keys() == {"name"}
+    assert m.input_args("go").keys() == {"value"}

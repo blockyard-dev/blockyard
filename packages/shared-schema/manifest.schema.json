@@ -1,0 +1,451 @@
+{
+  "$defs": {
+    "ArgSpec": {
+      "additionalProperties": false,
+      "description": "一個參數的宣告。",
+      "properties": {
+        "type": {
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "dropdown",
+            "secret",
+            "object",
+            "list",
+            "json",
+            "code",
+            "variable",
+            "stack"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "default": {
+          "default": null,
+          "title": "Default"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "help": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Help"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "options": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/OptionSpec"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Options"
+        },
+        "field": {
+          "default": false,
+          "title": "Field",
+          "type": "boolean"
+        },
+        "multiline": {
+          "default": false,
+          "title": "Multiline",
+          "type": "boolean"
+        },
+        "rows": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rows"
+        },
+        "interpolate": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interpolate"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ArgSpec",
+      "type": "object"
+    },
+    "BlockSpec": {
+      "additionalProperties": false,
+      "description": "一顆積木的宣告。`opcode` 是**不帶命名空間**的短名。",
+      "properties": {
+        "opcode": {
+          "title": "Opcode",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "command",
+            "reporter",
+            "boolean",
+            "hat"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ArgSpec"
+          },
+          "title": "Args",
+          "type": "object"
+        },
+        "returns": {
+          "anyOf": [
+            {
+              "enum": [
+                "any",
+                "number",
+                "string",
+                "boolean",
+                "list",
+                "object"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Returns"
+        },
+        "blocking": {
+          "default": false,
+          "title": "Blocking",
+          "type": "boolean"
+        },
+        "deprecated": {
+          "default": false,
+          "title": "Deprecated",
+          "type": "boolean"
+        },
+        "dynamic": {
+          "default": false,
+          "title": "Dynamic",
+          "type": "boolean"
+        },
+        "yields": {
+          "items": {
+            "$ref": "#/$defs/YieldSpec"
+          },
+          "title": "Yields",
+          "type": "array"
+        },
+        "concurrency": {
+          "anyOf": [
+            {
+              "enum": [
+                "drop",
+                "queue",
+                "restart",
+                "parallel"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Concurrency"
+        }
+      },
+      "required": [
+        "opcode",
+        "type",
+        "text"
+      ],
+      "title": "BlockSpec",
+      "type": "object"
+    },
+    "ConfigSpec": {
+      "additionalProperties": false,
+      "description": "使用者要填的設定。`secret` 型別存進金鑰庫（§12.1）。",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "secret"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "help": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Help"
+        },
+        "default": {
+          "default": null,
+          "title": "Default"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "ConfigSpec",
+      "type": "object"
+    },
+    "OptionSpec": {
+      "additionalProperties": false,
+      "description": "靜態下拉的一個選項（內建積木用）。\n\n積木包的下拉是**動態**的（`source` 指向 `@dropdown` 函式），因為選項來自\n外部服務；內建積木的下拉是**固定**的（`unit` 只有那六個），選項就是宣告的\n一部分，沒有人可以去問。",
+      "properties": {
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "OptionSpec",
+      "type": "object"
+    },
+    "YieldSpec": {
+      "additionalProperties": false,
+      "description": "hat 綁進 thread-local 的變數（§5.4 第 2 層，唯讀）。",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "any",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "YieldSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "一個命名空間的積木宣告。內建與積木包共用（設計文件 §7.2、D21）。",
+  "properties": {
+    "manifestVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Manifestversion",
+      "type": "integer"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    },
+    "author": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Author"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "color": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Color"
+    },
+    "permissions": {
+      "items": {
+        "enum": [
+          "net",
+          "fs.read",
+          "fs.write",
+          "subprocess",
+          "env"
+        ],
+        "type": "string"
+      },
+      "title": "Permissions",
+      "type": "array"
+    },
+    "requirements": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Requirements",
+      "type": "array"
+    },
+    "config": {
+      "items": {
+        "$ref": "#/$defs/ConfigSpec"
+      },
+      "title": "Config",
+      "type": "array"
+    },
+    "blocks": {
+      "items": {
+        "$ref": "#/$defs/BlockSpec"
+      },
+      "title": "Blocks",
+      "type": "array"
+    },
+    "builtin": {
+      "default": false,
+      "title": "Builtin",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "version"
+  ],
+  "title": "Blocky Extension Manifest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blocky.dev/schema/manifest.schema.json"
+}

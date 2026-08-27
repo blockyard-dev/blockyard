@@ -1,0 +1,78 @@
+# object 命名空間的宣告（D21）。檔名跟著 `object_ns.py` 走，id 才是命名空間。
+#
+# D10 的核心在這裡看得見：**parse 不自動、stringify 自動**。`parse_json` 是
+# 一顆看得見的積木，因為它會失敗、而且結果型別由伺服器決定。
+manifestVersion: 1
+builtin: true
+id: object
+name: 物件
+version: 1.0.0
+color: "#9966FF"
+description: 物件欄位存取與 JSON
+
+blocks:
+  - opcode: get
+    type: reporter
+    returns: any
+    # key 不存在是錯誤（§4.3）——除非接了預設值孔
+    text: "%(object) 的 %(key)（沒有就用 %(default)）"
+    args:
+      object: { type: object }
+      key: { type: string, default: "" }
+      default: { type: string, default: null }
+
+  - opcode: set
+    type: command
+    text: "設定 %(object) 的 %(key) 為 %(value)"
+    args:
+      object: { type: object }
+      key: { type: string, default: "" }
+      value: { type: string, default: "" }
+
+  - opcode: delete
+    type: command
+    text: "刪除 %(object) 的 %(key)"
+    args:
+      object: { type: object }
+      key: { type: string, default: "" }
+
+  - opcode: has
+    type: boolean
+    text: "%(object) 有 %(key) 嗎"
+    args:
+      object: { type: object }
+      key: { type: string, default: "" }
+
+  - opcode: keys
+    type: reporter
+    returns: list
+    text: "%(object) 的所有欄位名"
+    args:
+      object: { type: object }
+
+  - opcode: values
+    type: reporter
+    returns: list
+    text: "%(object) 的所有值"
+    args:
+      object: { type: object }
+
+  - opcode: parse_json
+    type: reporter
+    returns: any
+    # 回傳型別是 any 而不是 object：伺服器回什麼就是什麼，那正是它必須顯式的理由
+    text: "解析 JSON %(text)"
+    args:
+      text: { type: string, default: "", multiline: true, rows: 3 }
+
+  - opcode: to_json
+    type: reporter
+    returns: string
+    text: "把 %(value) 轉成 JSON %(pretty)"
+    args:
+      value: { type: string, default: "" }
+      pretty:
+        type: boolean
+        field: true
+        default: false
+        label: "縮排"

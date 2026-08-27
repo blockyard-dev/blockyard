@@ -32,8 +32,16 @@ BUILTIN_NAMESPACES = frozenset(
 )
 
 ArgType = Literal[
-    "string", "number", "boolean", "dropdown", "secret", "object", "list", "json", "code"
+    "string", "number", "boolean", "dropdown", "secret", "object", "list", "json", "code",
+    # 以下只有內建積木用得到（D21）。積木包宣告它們會在載入期被擋下——
+    # 積木包的參數一律是輸入孔，沒有 C 型積木，也不綁變數。
+    "variable",   # 變數名稱欄位（§4.5、§8.5 的自動完成）
+    "stack",      # C 型積木的內部堆疊（§4.2 的 StackInput）
 ]
+
+# 積木包不得使用的參數型別與修飾（見上）
+BUILTIN_ONLY_ARG_TYPES = frozenset({"variable", "stack"})
+
 BlockShape = Literal["command", "reporter", "boolean", "hat"]
 Permission = Literal["net", "fs.read", "fs.write", "subprocess", "env"]
 Concurrency = Literal["drop", "queue", "restart", "parallel"]
@@ -46,6 +54,24 @@ _PLACEHOLDER = re.compile(r"%\((\w+)\)")
 _INTERPOLATE_BY_DEFAULT = {"string": True, "code": False}
 
 
+class OptionSpec(Strict):
+    """靜態下拉的一個選項（內建積木用）。
+
+    積木包的下拉是**動態**的（`source` 指向 `@dropdown` 函式），因為選項來自
+    外部服務；內建積木的下拉是**固定**的（`unit` 只有那六個），選項就是宣告的
+    一部分，沒有人可以去問。
+    """
+
+    value: str
+    label: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _shorthand(cls, v: Any) -> Any:
+        """`options: [upper, lower]` 是 `[{value: upper}, {value: lower}]` 的簡寫。"""
+        return {"value": v} if isinstance(v, str) else v
+
+
 class ArgSpec(Strict):
     """一個參數的宣告。"""
 
@@ -54,6 +80,11 @@ class ArgSpec(Strict):
     label: str | None = None
     help: str | None = None
     source: str | None = None          # dropdown 專用：提供選項的 @dropdown 函式名
+    options: list[OptionSpec] | None = None   # dropdown 專用：靜態選項（內建）
+    # §4.2：值存在 IR 的 `fields` 而不是 `inputs`。field 屬於積木自己，塞不進
+    # 別的積木——`重複 (10) 次` 的 10 是輸入孔，`停止 [這個腳本]` 的下拉不是。
+    # 積木包的參數一律是輸入孔，所以這個欄位只有內建會設。
+    field: bool = False
     multiline: bool = False            # string / code：渲染成 textarea（§7.2）
     rows: int | None = None
     interpolate: bool | None = None    # 覆寫 §4.7 的預設
@@ -71,12 +102,28 @@ class ArgSpec(Strict):
             return self.interpolate
         return _INTERPOLATE_BY_DEFAULT.get(self.type, False)
 
+    @property
+    def is_field(self) -> bool:
+        """存在 IR 的 `fields`（§4.2）。變數名稱永遠是 field——它不能由積木求值。"""
+        return self.field or self.type == "variable"
+
+    @property
+    def is_stack(self) -> bool:
+        """C 型積木的內部堆疊。它在 `inputs` 裡，但不是可求值的孔。"""
+        return self.type == "stack"
+
     @model_validator(mode="after")
     def _check(self) -> ArgSpec:
-        if self.type == "dropdown" and not self.source:
-            raise ValueError("dropdown 參數必須宣告 source")
+        if self.type == "dropdown" and not (self.source or self.options):
+            raise ValueError("dropdown 參數必須宣告 source（動態）或 options（靜態）")
+        if self.source and self.options:
+            raise ValueError("source 與 options 只能擇一：選項要嘛是問來的，要嘛是寫死的")
         if self.type != "dropdown" and self.source:
             raise ValueError("只有 dropdown 參數能宣告 source")
+        if self.type != "dropdown" and self.options is not None:
+            raise ValueError("只有 dropdown 參數能宣告 options")
+        if self.type == "stack" and (self.field or self.has_default):
+            raise ValueError("stack 參數是內部堆疊，不能是 field，也沒有預設值")
         if self.type not in ("string", "code") and (
             self.multiline or self.rows is not None or self.interpolate is not None
         ):
@@ -120,6 +167,11 @@ class BlockSpec(Strict):
     blocking: bool = False
     # §13.1：opcode 永不移除，只標記 deprecated（工具箱隱藏，既有專案仍可執行）
     deprecated: bool = False
+    # §4.6：積木由專案資料生成——`procedure.call` 的參數是函式的參數，
+    # `procedure.definition` 的也是。工具箱不列出它們（前端從 `project.procedures`
+    # 生成），而 reporter 形狀的 dynamic 積木同時也是 command 形狀：函式沒宣告
+    # 回傳型別時，呼叫積木沒有輸出孔。只有內建用得到。
+    dynamic: bool = False
     yields: list[YieldSpec] = Field(default_factory=list)
     concurrency: Concurrency | None = None
 
@@ -164,6 +216,14 @@ class BlockSpec(Strict):
 
 
 class Manifest(Strict):
+    """一個命名空間的宣告。**內建與積木包共用這一個模型**（D21）。
+
+    差別只有 `builtin` 這個旗標，以及它帶出的幾條規則：內建可以佔用內建命名
+    空間、可以宣告 `variable` / `stack` 參數與 `dynamic` 積木，但**不能**宣告
+    `requirements` / `permissions`——內建沒有 `main.py`，沒有東西可以裝、
+    也沒有邊界可以守。
+    """
+
     manifestVersion: Literal[1] = 1
     id: str
     name: str
@@ -175,18 +235,21 @@ class Manifest(Strict):
     requirements: list[str] = Field(default_factory=list)
     config: list[ConfigSpec] = Field(default_factory=list)
     blocks: list[BlockSpec] = Field(default_factory=list)
+    # D21：內建命名空間的宣告（`interpreter/builtins/*.yaml`）。載入積木包的
+    # 那條路徑（`discover`）會拒絕它，所以第三方沒辦法自稱內建。
+    builtin: bool = False
 
     @field_validator("id")
     @classmethod
     def _id_shape(cls, v: str) -> str:
         if not _IDENT.match(v):
             raise ValueError(f"積木包 id 必須是小寫識別字：{v}")
-        if v in BUILTIN_NAMESPACES:
-            raise ValueError(f'"{v}" 是內建命名空間（§4.4），積木包不能用這個 id')
         return v
 
     @model_validator(mode="after")
     def _check(self) -> Manifest:
+        self._check_builtin_boundary()
+
         seen: set[str] = set()
         for b in self.blocks:
             if b.opcode in seen:
@@ -200,6 +263,35 @@ class Manifest(Strict):
             keys.add(c.key)
         return self
 
+    def _check_builtin_boundary(self) -> None:
+        """把「內建才有」的宣告擋在積木包外面。
+
+        這些不是型別檢查擋得住的東西——`type: variable` 對 pydantic 完全合法。
+        但一個能綁變數名稱、能長 C 型堆疊的積木包，等於在 §7.5 的邊界上開洞：
+        那些東西沒有值可以送過 process 邊界。
+        """
+        if self.builtin:
+            if self.id not in BUILTIN_NAMESPACES:
+                raise ValueError(f'"{self.id}" 不是內建命名空間（§4.4），不能標記 builtin')
+            if self.requirements or self.permissions:
+                raise ValueError("內建沒有 main.py，不能宣告 requirements / permissions")
+            return
+
+        if self.id in BUILTIN_NAMESPACES:
+            raise ValueError(f'"{self.id}" 是內建命名空間（§4.4），積木包不能用這個 id')
+        for b in self.blocks:
+            if b.dynamic:
+                raise ValueError(f"{b.opcode}：dynamic 積木由專案資料生成，只有內建有")
+            for name, a in b.args.items():
+                if a.type in BUILTIN_ONLY_ARG_TYPES:
+                    raise ValueError(f"{b.opcode}.{name}：積木包不能宣告 {a.type} 型參數")
+                if a.field:
+                    raise ValueError(f"{b.opcode}.{name}：積木包的參數一律是輸入孔，不能是 field")
+                if a.options is not None:
+                    raise ValueError(
+                        f"{b.opcode}.{name}：積木包的下拉必須是動態的，請用 source"
+                    )
+
     # ---- 便利存取 ----
 
     def full_opcode(self, opcode: str) -> str:
@@ -209,6 +301,15 @@ class Manifest(Strict):
         """接受短名或 `id.短名`。"""
         short = opcode.split(".", 1)[1] if opcode.startswith(f"{self.id}.") else opcode
         return next((b for b in self.blocks if b.opcode == short), None)
+
+    def input_args(self, opcode: str) -> dict[str, ArgSpec]:
+        """存在 IR `inputs` 的參數（含 stack）。§8.1 的第二個一致性測試要用。"""
+        spec = self.block(opcode)
+        return {} if spec is None else {n: a for n, a in spec.args.items() if not a.is_field}
+
+    def field_args(self, opcode: str) -> dict[str, ArgSpec]:
+        spec = self.block(opcode)
+        return {} if spec is None else {n: a for n, a in spec.args.items() if a.is_field}
 
     def dropdown_sources(self) -> set[str]:
         return {a.source for b in self.blocks for a in b.args.values() if a.source}
@@ -269,6 +370,10 @@ def discover(root: Path) -> dict[str, ExtensionSource]:
         if not mf_path.exists():
             continue
         mf = load_manifest(mf_path)
+        if mf.builtin:
+            # 內建宣告住在 `interpreter/builtins/`，不在這裡。放行的話，一個包
+            # 只要寫 `builtin: true` 就能改寫 `data.set` 的意思。
+            raise ExtensionError(f"{mf_path}：積木包不能標記 builtin")
         if mf.id != d.name:
             raise ExtensionError(f"目錄名 {d.name} 與 manifest 的 id「{mf.id}」不一致")
         sources[mf.id] = ExtensionSource(id=mf.id, dir=d, manifest=mf)
@@ -284,11 +389,13 @@ def _first_error(e: PydanticError) -> str:
 
 __all__ = [
     "BUILTIN_NAMESPACES",
+    "BUILTIN_ONLY_ARG_TYPES",
     "ArgSpec",
     "BlockSpec",
     "ConfigSpec",
     "ExtensionSource",
     "Manifest",
+    "OptionSpec",
     "YieldSpec",
     "discover",
     "load_manifest",

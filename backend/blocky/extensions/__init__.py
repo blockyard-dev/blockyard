@@ -29,11 +29,13 @@ from blocky.extensions.host import (
 from blocky.extensions.inprocess import InProcessHost
 from blocky.extensions.manifest import (
     BUILTIN_NAMESPACES,
+    BUILTIN_ONLY_ARG_TYPES,
     ArgSpec,
     BlockSpec,
     ConfigSpec,
     ExtensionSource,
     Manifest,
+    OptionSpec,
     discover,
     load_manifest,
     parse_manifest,
@@ -46,6 +48,7 @@ DEFAULT_EXTENSIONS_ROOT = Path(__file__).resolve().parents[3] / "extensions"
 
 __all__ = [
     "BUILTIN_NAMESPACES",
+    "BUILTIN_ONLY_ARG_TYPES",
     "DEFAULT_EXTENSIONS_ROOT",
     "ArgSpec",
     "BlockSpec",
@@ -59,6 +62,7 @@ __all__ = [
     "HostChannel",
     "InProcessHost",
     "Manifest",
+    "OptionSpec",
     "TriggerHandle",
     "discover",
     "ensure_transportable",

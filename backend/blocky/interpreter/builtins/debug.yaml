@@ -1,0 +1,33 @@
+# debug 命名空間的宣告（D21）。
+manifestVersion: 1
+builtin: true
+id: debug
+name: 偵錯
+version: 1.0.0
+color: "#5CB1D6"
+description: log 與值的檢視
+
+blocks:
+  - opcode: log
+    type: command
+    # 多行是 §8.5 的第一層：積木作者最清楚訊息內文需要多行，應主動宣告
+    text: "記錄 %(text)"
+    args:
+      text: { type: string, default: "", multiline: true, rows: 2 }
+      level:
+        type: dropdown
+        field: true
+        default: info
+        options:
+          - { value: debug, label: "除錯" }
+          - { value: info, label: "資訊" }
+          - { value: warn, label: "警告" }
+          - { value: error, label: "錯誤" }
+
+  - opcode: inspect
+    type: reporter
+    returns: any
+    # 把值原樣傳回，順便 log。插在任何輸入孔上都不改變結果。
+    text: "檢視 %(value)"
+    args:
+      value: { type: string, default: "" }

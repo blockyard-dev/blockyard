@@ -1,0 +1,92 @@
+# control 命名空間的宣告（D21）。
+#
+# 與 `control.py` 並列，格式與 `extensions/*/manifest.yaml` 完全相同——這是
+# D21 的全部內容：內建積木不走第二條路。改 handler 時這份就在眼前。
+#
+# `stack` 型參數是 C 型積木的內部堆疊（§4.2 的 StackInput）；它沒有出現在
+# `text` 裡，因為 Blockly 的 C 型積木把堆疊畫在文字下方而不是文字裡。
+manifestVersion: 1
+builtin: true
+id: control
+name: 控制
+version: 1.0.0
+color: "#FFAB19"
+description: 條件、迴圈、等待、錯誤處理
+
+blocks:
+  - opcode: if
+    type: command
+    text: "如果 %(condition) 那麼"
+    args:
+      condition: { type: boolean, default: false }
+      then: { type: stack }
+
+  - opcode: if_else
+    type: command
+    text: "如果 %(condition) 那麼 ⋯ 否則"
+    args:
+      condition: { type: boolean, default: false }
+      then: { type: stack }
+      else: { type: stack }
+
+  - opcode: repeat
+    type: command
+    text: "重複 %(times) 次"
+    args:
+      # 次數在進入迴圈前求值一次（control.py），與 Scratch 一致
+      times: { type: number, default: 10 }
+      body: { type: stack }
+
+  - opcode: repeat_until
+    type: command
+    text: "重複直到 %(condition)"
+    args:
+      condition: { type: boolean, default: false }
+      body: { type: stack }
+
+  - opcode: forever
+    type: command
+    text: "重複無限次"
+    args:
+      body: { type: stack }
+
+  - opcode: for_each
+    type: command
+    text: "對 %(list) 的每一項 %(name)"
+    args:
+      name: { type: variable, default: "item", label: "項目變數" }
+      list: { type: list }
+      body: { type: stack }
+
+  - opcode: wait
+    type: command
+    text: "等待 %(seconds) 秒"
+    args:
+      seconds: { type: number, default: 1, min: 0 }
+
+  - opcode: wait_until
+    type: command
+    text: "等待直到 %(condition)"
+    args:
+      condition: { type: boolean, default: false }
+
+  - opcode: stop
+    type: command
+    text: "停止 %(scope)"
+    args:
+      scope:
+        type: dropdown
+        field: true
+        default: this_script
+        options:
+          - { value: this_script, label: "這個腳本" }
+          - { value: all, label: "全部" }
+
+  - opcode: try_catch
+    type: command
+    # §5.6：只捕捉積木層級的錯誤。return / stop / 取消必須穿透。
+    text: "嘗試 ⋯ 出錯時把錯誤存進 %(error_name)"
+    args:
+      try: { type: stack }
+      error_name: { type: variable, default: "error", label: "錯誤變數" }
+      catch: { type: stack }

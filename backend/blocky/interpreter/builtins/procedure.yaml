@@ -1,0 +1,32 @@
+# procedure 命名空間的宣告（D21、§4.6）。
+#
+# `definition` 與 `call` 是 **dynamic**：它們的參數來自 `project.procedures`
+# 而不是這份宣告，工具箱也不列出它們（前端從專案資料生成）。`call` 另外是這
+# 整份宣告裡唯一形狀不固定的積木——函式宣告了回傳型別它就是 reporter，沒宣告
+# 就是 command（沒有輸出孔）。宣告寫 reporter，`dynamic` 補上另一半。
+manifestVersion: 1
+builtin: true
+id: procedure
+name: 函式
+version: 1.0.0
+color: "#FF6680"
+description: 可回傳值的自訂函式
+
+blocks:
+  - opcode: definition
+    type: hat
+    dynamic: true
+    text: "定義函式"
+
+  - opcode: call
+    type: reporter
+    dynamic: true
+    returns: any
+    text: "呼叫函式"
+
+  - opcode: return
+    type: command
+    # cap block：下面不能接積木，且只能放在函式定義裡面（載入期驗證，§4.6）
+    text: "回傳 %(value)"
+    args:
+      value: { type: string, default: "" }
