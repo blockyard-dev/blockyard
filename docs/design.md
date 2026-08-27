@@ -4,16 +4,16 @@
 |---|---|
 | 版本 | Draft v0.4 |
 | 日期 | 2026-08-27 |
-| 狀態 | 已審閱，P0a 完成，P1 施工中 |
+| 狀態 | 已審閱，P0a 完成，P0b 施工中 |
 | 代號 | `blocky`（暫定，套件名 `blocky-runtime`） |
 
 ---
 
 ## 0.0 變更摘要
 
-### v0.4（P1 施工中）
+### v0.4
 
-P0a 的語意核心完成、開始做擴充系統之後的修訂。前三條都是**實作撞出來的**，不是重新設計：
+P0a 的語意核心完成、Host 邊界做完之後的修訂。前三條都是**實作撞出來的**，不是重新設計；後兩條是回到 P0b 之前的整理：
 
 | 類別 | 變更 | 章節 |
 |---|---|---|
@@ -22,6 +22,8 @@ P0a 的語意核心完成、開始做擴充系統之後的修訂。前三條都�
 | **補洞** | 積木形狀與位置沒有驗證的地方。執行期撞到會讓 Thread 安靜死掉——形狀錯誤不是 BlockyError，發不出 `block.error` | D20、§4.2 |
 | **新增** | `backend/blocky/extensions/`：manifest schema、`ExtensionHost` / `HostChannel`、`InProcessHost`、邊界的正規化與驗證 | §7 |
 | **新增** | `backend/tests/contract/`：§17.4 的 Host 合約測試，對 host 實作參數化，SubprocessHost 進來時題目一題都不用改 | §17.4 |
+| **重排** | P1 的 Host 邊界（§7.5）提前在 P0b 之前做掉，其餘 P1 延後。順序回到 P0a → **P0b** → P1 | §15 |
+| **修訂** | 內建積木改為宣告式，與積木包走同一條路。原本 §14 把內建定義放前端、§8.1 的積木包走後端動態註冊，同一件事有兩條路 | D21、§8.1、§14 |
 
 ### v0.3
 
@@ -70,6 +72,7 @@ v0.2 經審閱後的修訂。原稿的整體結構與 D1～D11 全數保留，�
 | D16 | 積木只能透過 **inputs 進、return 出**；取消 `ctx.get_var/set_var` | 讓 extension 能直接改專案變數會同時破壞靜態檢查、跨 process 邊界與可追溯性，換得的便利可由「回傳值 + `data.set`」完全取代 |
 | D18 | `HostChannel` 的 `log` 與 `is_cancelled` 是**同步**的，只有 `emit` 非同步 | §7.3 的 `ctx.log(...)` 沒有 await，而 log 事件必須當場落在 `block.enter` / `block.exit` 之間，否則 §17 的黃金軌跡不是決定性的。跨 process 時 extension 那一側寫 stdout 本來就是同步的，非同步的是 host 的 reader task——那是實作，不是介面。`is_cancelled` 讀的是推過來的旗標；若每次檢查都往返一次 IPC，沒有人會捨得把它放進迴圈 |
 | D19 | Host 邊界套用的是 **§4.3 那張轉換表本身**，`object` / `list` 是唯一例外 | 積木包的參數孔與內建積木的參數孔在畫面上長得一模一樣，使用者沒有辦法知道哪顆會轉、哪顆不會。`object` / `list` 例外，是因為 §4.3 根本沒有「轉成物件」這一格——那只可能是 JSON parse，而 parse 必須看得見（D10）；要自動處理的參數應該宣告成 `json` |
+| D21 | **內建積木也是宣告式的**：每個內建命名空間一份 manifest，與積木包共用同一套 `BlockSpec` 與同一個端點 | 前端需要 `text`、參數型別、顏色、形狀才畫得出積木。若內建的定義手寫在前端、積木包的來自後端，同一件事就有兩條路——而 §8.1「新增積木不需要改前端一行程式碼」會退化成只對第三方成立的半條承諾。§5.1 的內建 hat 早就用「合成 manifest」避免特例分支，D21 只是把同一招套到全部 84 顆。代價是補 84 份宣告（估 2～3 天），換來：D20 的形狀來源從「handler 註冊在哪張表」的副產品變成一份宣告；`%(x)` ↔ args 一致性、`min`/`max`、`multiline` 全部沿用 §7.2 既有的驗證；Q5 的 i18n 將來只有一個地方要改 |
 | D20 | 積木**形狀**與位置在**載入期**驗證；認不得的 opcode 例外 | 形狀錯誤留到執行期，錯的那半邊可以躺著好幾個月不被走到，而且它是 ValidationError 而非 BlockyError，漏出來時發不出 `block.error`，Thread 只是安靜停掉。認不得的 opcode 反過來**必須**留到執行期，否則 §13.3 的佔位符就不成立 |
 
 ---
@@ -314,6 +317,8 @@ object 以 key 存取（`object.get` 積木或 `${obj.key}`）；**key 不存在
 | `type` | `cast` `try_cast` `is` `can_cast` `of` `is_empty`，見 §4.8 |
 | `time` | `now` `format` `parse` `add` `diff` `timestamp` `timezone`，見 §4.9 |
 | `debug` | `log` `inspect` |
+
+每個命名空間有一份 manifest（`interpreter/builtins/<namespace>.yaml`），格式與積木包的 `manifest.yaml` 完全相同，差別只有沒有 `requirements` 與 `main.py`——**內建積木不是特例**（D21、§8.1）。
 
 相對於 Scratch，這裡有六處**刻意的偏離**，都是工作流場景必需：`try_catch`（§5.6）、**可回傳值的自訂函式**（§4.6）、**免宣告的變數積木**（§4.5）、**字串插值**（§4.7）、**顯式型別積木**（§4.8）、**日期時間命名空間**（§4.9）。
 
@@ -625,7 +630,7 @@ Scratch / Blockly 原生的變數模型是「id + 名稱對照表」，好處是
 | 來源 | 宣告位置 | 優先 |
 |---|---|---|
 | 擴充 hat | manifest 的 `concurrency` | 預設值 |
-| 內建 hat | 內建 hat 有一份**合成 manifest**，格式與擴充完全相同 | 預設值 |
+| 內建 hat | 內建 hat 的 manifest，格式與擴充完全相同（D21 之後這不再是特例：所有內建積木都有 manifest） | 預設值 |
 | 任何 hat | IR 中該 hat block 的 `fields.concurrency` | **覆寫上者** |
 
 讓使用者能在積木上覆寫是必要的：同一顆 `when_webhook`，用在「收單」要 `queue`，用在「刷新快取」要 `drop`。內建 hat 走合成 manifest 而非特例分支，是為了讓 §7.5 的 Host 邊界只有一條路徑。
@@ -960,12 +965,25 @@ in-process 實作是直接呼叫，subprocess 實作是 stdio JSON-RPC 的另一
 ### 8.1 動態積木註冊
 
 啟動流程：
-1. `GET /api/extensions` 取得所有 manifest。
+1. `GET /api/extensions` 取得所有 manifest——**含內建**（D21）。內建的以命名空間為 id（`control`、`data`、…）並標記 `builtin: true`，UI 據此不顯示「解除安裝」。
 2. 將 manifest 轉成 Blockly 的 block definition（`%(name)` → Blockly 的 `%1` + args 陣列）。
 3. `Blockly.defineBlocksWithJsonArray()` 註冊，並依 `color` 產生對應的 toolbox category。
 4. dropdown 型參數註冊為 dynamic dropdown，展開時才呼叫 `POST /api/extensions/{id}/dropdown/{source}`（附帶同積木其他已填參數，讓下拉可依賴前一個選項，例如先選 server 再列 channel）。結果快取 60 秒，並提供手動重新整理。
 
-因此**新增積木不需要改前端一行程式碼**。
+因此**新增積木不需要改前端一行程式碼**——這句話對內建與第三方**同樣成立**，因為兩者走的是同一條路（D21）。
+
+#### 內建積木的宣告放哪、怎麼不漂移
+
+宣告放在 handler 旁邊：`interpreter/builtins/control.yaml` 與 `control.py` 並列，如同積木包的 `manifest.yaml` 與 `main.py` 並列。同一個資料夾、同一個檔名前綴，改一邊時另一邊就在眼前。
+
+真正的漂移風險只有一個：**manifest 宣告的參數名與 handler 實際讀的 key 對不上**（`t.value(b, "condition")` vs `args: {cond: ...}`）。積木包靠 `_check_coverage` 在載入期比對 `@block` 與 manifest，但內建積木沒有 `@block` 可比。改用兩個測試守：
+
+| 測試 | 抓什麼 |
+|---|---|
+| manifest 宣告的 opcode 集合 == 註冊表（`COMMANDS` / `VALUES` / `HAT_OPCODES`）中該命名空間的集合，且形狀相符 | 少宣告、多宣告、形狀寫錯 |
+| §17 題庫每一份 `project.json` 裡用到的每個 input 名稱，都必須在該積木的 `args` 宣告過 | 參數名對不上——**題庫已經免費覆蓋大部分積木**，這條不必另外寫測資 |
+
+第二個測試順帶把 §17.2 那條「約半數積木沒有專屬題目」的債變成可量化的東西：沒有題目的積木，它的參數名就沒有人守。
 
 ### 8.2 狀態管理
 - `useWorkspaceStore`（zustand）：專案 meta、變數、髒標記。
@@ -1204,7 +1222,6 @@ def migrate(block: dict) -> dict:
 blocky/
 ├── packages/
 │   ├── editor/                 # React + Blockly 前端
-│   │   ├── src/blocks/         # 內建積木定義
 │   │   ├── src/ir/             # IR ↔ Blockly 轉換
 │   │   ├── src/runtime-client/ # WS 客戶端、事件套用
 │   │   └── src/components/
@@ -1213,7 +1230,8 @@ blocky/
 │   ├── blocky/
 │   │   ├── api/                # FastAPI 路由
 │   │   ├── ir/                 # pydantic 模型、驗證、遷移
-│   │   ├── interpreter/        # 解譯器核心 + 內建 opcode 實作
+│   │   ├── interpreter/        # 解譯器核心
+│   │   │   └── builtins/       # 每命名空間 control.py + control.yaml（D21）
 │   │   ├── extensions/         # Host / Registry / Loader / venv 管理
 │   │   ├── triggers/           # cron / webhook / stream
 │   │   ├── codegen/            # bundle 匯出（transpile 已砍，見 §10.2）
@@ -1239,6 +1257,17 @@ blocky/
 
 **先鎖語意，再接介面。** 前端、擴充系統、真實 API 都是「晚一步做成本不變、早一步做會反覆改」的東西；而 IR schema 與直譯器語意是「晚改成本十倍」的東西。因此 P0 刻意把前端往後排，讓語意問題在只有題庫與直譯器的環境下解決——那時候改一條規則是改一行。
 
+### 目前進度
+
+| 階段 | 狀態 |
+|---|---|
+| P0a 語意核心 | **完成**。63 題題庫、214 個測試 |
+| P1 的 Host 邊界（§7.5） | **提前完成**。manifest schema、`ExtensionHost` / `HostChannel`、`InProcessHost`、邊界的正規化與驗證、24 題合約測試 |
+| P0b 編輯器 | **進行中** ← 現在在這裡 |
+| P1 其餘（SubprocessHost、三個手寫包） | 延後 |
+
+**為什麼 Host 邊界提前、其餘 P1 延後**：介面不能晚做，實作可以。`ExtensionHost` / `HostChannel` 兩個方向的介面與 `boundary.py` 都已經定案，合約測試也已經對 host 實作參數化——SubprocessHost 之後接上去只要在 `HOSTS` 加一行，題目一題都不用改。反過來，P1 剩下的「手寫三個包」卡在 Q10（目標使用者未定），而 P0b 不卡任何未決問題。
+
 ### P0a — 語意核心（目標 3～4 週，**無前端**）
 
 **範圍**：`shared-schema` 的 IR JSON Schema（唯一真實來源，產生 pydantic 與 TS 型別）；§17 題庫框架與前 40 題；Python 直譯器涵蓋 `control` / `data` / `operator` / `object` / `type` / `time` / `procedure` / `debug`；免宣告變數（§4.5）；含回傳值的自訂函式（§4.6）；字串插值（§4.7）；`persist_*`（§5.4）。**沒有 HTTP server、沒有 WebSocket、沒有 Blockly。** 題庫用 CLI 直接驅動直譯器。
@@ -1258,6 +1287,34 @@ blocky/
 2. 能定義一個 `加總 (清單)` 函式，在函式體內用 `回傳 ()` 結束，並把呼叫積木塞進 `log ()` 的輸入孔拿到結果；`回傳` 放在 `重複` 迴圈裡也能正確中斷整個函式。
 3. 在 `log ()` 的文字框直接打 `第 ${i} 筆：${resp.items[1].title}` 能正確取值；打 `${items[0]}` 得到「索引從 1 開始」的專屬錯誤；打 `${a + b}` 在**存檔前**就被標為錯誤。
 4. 貼一段三行文字進積木欄位，欄位自動變成 textarea；空欄位可用右鍵強制切換，且切換狀態存檔重開後仍在。
+
+#### 開工前的先決條件（後端還缺的東西）
+
+P0b 不只是前端。以下五項在 P0a 都還沒碰，全部落在這個階段：
+
+| 缺口 | 影響 |
+|---|---|
+| `backend/blocky/api/` 不存在，依賴裡沒有 fastapi / uvicorn | 前端沒有東西可以連 |
+| `backend/blocky/storage/` 是空目錄 | 存不了檔 |
+| Run 沒有**外部**停止 API（只有 `control.stop` 積木內部的 `StopSignal`） | 驗收 1 的「按停止能立即中斷」做不出來 |
+| §6.2 的 50ms 批次與 `block.hot` 聚合沒實作 | `forever` 迴圈會打爆 WebSocket，這是 §6.2 標「必須做」的原因 |
+| 內建的 84 顆積木還沒有 manifest（D21 已定做法，宣告待補） | 前端畫不出積木——這是第 2 步的全部內容 |
+
+#### 施工順序
+
+| # | 步驟 | 估計 | 為什麼排這裡 |
+|---|---|---|---|
+| 1 | 後端 API 殼 + SQLite 存讀檔（`/api/projects`）、`blocky serve` | 0.5 週 | IR 已經定案，這一步幾乎沒有設計風險；前端第一天就有東西可吃 |
+| 2 | 補 84 顆內建積木的 manifest（D21）+ §8.1 的兩個一致性測試 + `GET /api/extensions` | 2～3 天 | 純後端、可立即測試，且它是第 3 步的**唯一**資料來源。先做完這步，前端才有東西可註冊 |
+| 3 | Blockly zelos 工作區 + 動態註冊 + 工具箱 | 1 週 | **第一次看到介面**。文字欄位先用最陽春的 field 佔位 |
+| 4 | IR ↔ Blockly 雙向轉換（§8.4）+ property test | 1 週 | 做完存讀檔才閉環。題庫那 63 份 `project.json` 是現成的轉換層測資，一份都不必另寫 |
+| 5 | `/api/runs` + WS 事件 + §6.2 批次與聚合 + 停止 API | 1 週 | 完成驗收 1 |
+| 6 | `FieldText`（§8.5）：`${}` pill、autocomplete、多行、運算式紅線 | 1～1.5 週 | 最高風險項，但它要在真的積木與真的縮放下才試得出來，1～4 是前置。**一次做成一個類別** |
+| 7 | 函式 mutator、形狀重塑與孤兒處理、靜態警告（§8.5） | 0.5～1 週 | 完成驗收 2、3、4 |
+
+第 6 步的排序有風險：最高風險項排在後面，違反「早點碰」的直覺。緩解方式是第 3 步就把 field 的**介面**留好（一個類別、options 開關），第 6 步只換實作——如果第 3 步偷懶用三個不同的 Blockly 內建 field，第 6 步就會變成重寫。
+
+第 2 步看起來只是打字，但它同時把 §8.5 的三層多行機制、§7.2 的 `min` / `max`、D20 的形狀來源全部從「散在程式碼裡的隱含知識」變成一份可驗證的宣告。補宣告的過程本身就會照出目前哪些積木的參數命名不一致——那是免費的體檢。
 
 > P0a + P0b 跑通，整個專案的技術風險就解除了八成。
 
@@ -1315,6 +1372,7 @@ blocky/
 | Q10 | **目標使用者到底是誰？** | §1.1 寫「非工程師」，但 §10 的 CLI 常駐、docker、匯出服務的是工程師。兩者把 roadmap 拉向相反方向：教育路線該投資教學 UX 與中文化、少而精的積木；開發者路線該投資整合數量與 CLI，且 §11 的 AI 生成積木包從「可有可無」升格為「唯一能對抗 n8n 500+ 整合的手段」 | **這是目前最該決定的一件事，但不阻擋 P0a**——語意核心對兩條路線完全相同。最遲要在 P1 開始前決定，因為它決定手寫哪三個包 |
 | Q11 | 持久化儲存要不要支援原子遞增？ | §5.4 的 `persist_set` 是 read-modify-write，兩個並發 Run 同時累加計數器會掉更新 | v1 不做。真的需要時加 `data.persist_change`，用 SQLite 的單一 UPDATE 語句實作。先在文件與 tooltip 講清楚限制 |
 | Q12 | secret 遮蔽用子字串比對夠嗎？ | §12.2 擋不住編碼過或被切割的 secret | 夠用於 v1，但 UI 必須誠實標示「執行歷史可能含敏感資料」。完整方案需要污點追蹤，成本遠超 v1 預算 |
+| Q13 | ~~內建積木的定義住在前端還是後端？~~ | — | **已決議：後端，與積木包同一條路**（D21）。每個內建命名空間一份 manifest，放在 handler 旁邊（`interpreter/builtins/control.yaml` 與 `control.py` 並列），由 `GET /api/extensions` 與積木包一起吐給前端。代價是補 84 份宣告（估 2～3 天）；漂移由 §8.1 的兩個測試守住 |
 | Q9 | `blocks[].ui` 會不會長成雜物間？ | §4.2 允許任意未知 key，長期可能塞進一堆前端狀態 | 目前只有 `multiline` 一個 key。規則是「刪掉整個 `ui` 不影響執行結果」——任何違反這條的提案一律退回。若 key 超過 5 個就該檢討是不是有語意屬性混進來了 |
 
 ---
@@ -1418,6 +1476,7 @@ tags: [procedure, control, unwind]
 | IR schema | `hypothesis` property test | §8.4 的 `deserialize(serialize(ws))` 等價；隨機 IR 必須要嘛通過驗證要嘛給出**指向具體 blockId** 的錯誤 |
 | 值轉換 | 參數化單元測試 | §4.3 的轉換表逐格覆蓋，含每一個錯誤情況 |
 | Host 邊界 | 合約測試 | §7.5 的正規化與驗證。**同一份測試同時跑 InProcessHost 與 SubprocessHost**，這是兩者行為一致的唯一保證 |
+| 內建積木宣告 | 一致性測試 | D21 的兩條：manifest 的 opcode 集合 == 註冊表且形狀相符；題庫用到的 input 名稱都宣告過（§8.1） |
 | 積木包 | 每包自帶 `tests/` | 用假的 HTTP 層，不打真 API |
 | 端到端 | Playwright | 只做 §15 的驗收情境，數量控制在 5 個以內——e2e 很貴且脆 |
 
@@ -1442,7 +1501,7 @@ tags: [procedure, control, unwind]
 | DELETE | `/api/runs/{id}` | 停止 |
 | GET | `/api/runs/{id}/events` | 執行歷史（重播用） |
 | WS | `/ws/run/{runId}` | 即時事件流 |
-| GET | `/api/extensions` | 所有 manifest |
+| GET | `/api/extensions` | 所有 manifest，**含內建**（D21，內建標記 `builtin: true`） |
 | POST | `/api/extensions/install` | 安裝（含審閱確認 token） |
 | POST | `/api/extensions/{id}/dropdown/{source}` | 動態下拉 |
 | PUT | `/api/extensions/{id}/config` | 設定與憑證 |

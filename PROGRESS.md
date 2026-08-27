@@ -26,9 +26,11 @@
 
 ## 2. 未解決問題與已知限制
 
-- **Q10 目標使用者未定**（教育 vs 開發者）。**決定 P1 手寫哪三個包**，開工前必須定。
+- **內建的 84 顆積木還沒有 manifest**。做法已定（D21：與積木包同一條路，宣告放在 handler 旁邊），但宣告本身要補，估 2～3 天。這是 P0b 第 2 步，也是前端能畫出積木的唯一資料來源。
+- **Q10 目標使用者未定**（教育 vs 開發者）。**不阻擋 P0b**；但 P1 的三個手寫包開工前必須定。
+- **P1 剩下的部分刻意延後**：SubprocessHost 與跨 process 的反向通道（§7.6）、`ctx.http`（§7.4）、secret 值遮蔽（§12.2）、migrations（§13.2）。介面已經定案、合約測試已經對 host 參數化，SubprocessHost 接上去只要在 `HOSTS` 加一行——介面不能晚做，實作可以。
 - **形狀驗證要接上前端。** 載入期驗證已經有了，但 §8.4 的 IR ↔ Blockly 轉換還沒寫；編輯器本身應該讓形狀錯誤根本拼不出來，載入期驗證是第二道防線（手寫 IR、AI 生成 IR、舊版專案）。
-- **§7 還沒做的**：SubprocessHost 與反向通道的跨 process 實作（§7.6）、`ctx.http`（§7.4）、secret 的值遮蔽（§12.2）、migrations（§13.2）、動態積木註冊到前端（§8.1）。
+- **P0b 的後端缺口**（§15 已列表）：`blocky/api/` 不存在、`blocky/storage/` 是空目錄、Run 沒有**外部**停止 API、§6.2 的 50ms 批次與 `block.hot` 聚合沒實作。最後一項是 §6.2 標「必須做」的原因——沒有它 `forever` 迴圈會打爆 WebSocket。
 - **題庫覆蓋不全**：84 顆內建積木中約半數沒有專屬題目——`data.list_insert/replace/index_of`、`operator` 的字串與 regex 系列、`object.set/delete/values`、`time.timestamp`。`list_insert` 用 `len+1` 正規化索引，**尚無測試**，可疑。
 - **§17.2 有幾列還寫不出題目**：`concurrency` 的 drop/queue/restart、`CancelledError` 穿透、`block.hot` 聚合、§6.3 的 SQLite 落地——都要等 P0b/P2 的機制存在。
 - **遞迴 headroom 是估的**：`PYTHON_FRAMES_PER_BLOCKY_FRAME = 24`（`interpreter/engine.py`）為經驗值，靠 `RecursionError` 保險絲兜底。
@@ -36,10 +38,39 @@
 
 ## 3. 下一次的第一個 TODO
 
-實作 `SubprocessHost`（§7.6、D13）：每個 extension 一個 process，stdio JSON-RPC 雙向通訊，`ExtensionHost` 與 `HostChannel` 兩個方向都要。
+**開始 P0b — 編輯器**（§15，估 4～6 週，七步施工順序寫在 §15）。順序回到設計文件原訂的 P0a → P0b → P1；P1 剩下的部分延後，理由見上。
 
-驗收：`tests/contract/test_host_boundary.py` 的 `HOSTS` 加上 `"subprocess"` 後，**24 題兩種實作全綠**，題目一題都不用改；`extensions/demo` 在自己的 venv 裡跑；`ctx.log` 與 trigger 的 yield 走反向通道回來後，題庫的黃金軌跡不變。
+> Q13 已決議為 **D21**：內建積木也是宣告式的，與積木包共用同一套 `BlockSpec` 與同一個端點。§14 原本把內建定義放前端的那一行已經拿掉。
 
-理由：反向通道正是「in-process 時看不見、跨 process 時全部要重寫」的部分，晚做等於重寫。而現在合約測試已經參數化、`boundary.py` 已經共用——SubprocessHost 有一份現成的規格可以照著長。uv venv 的依賴隔離可以晚一步，先讓 process 邊界存在。
+### 第 1 步：後端 API 殼 + 存讀檔（估 0.5 週）
 
-這一步同樣不需要先決定 Q10。
+排第一是因為 IR 已經定案，這一步幾乎沒有設計風險，而且做完前端第一天就有東西可吃。
+
+- [ ] `pyproject.toml` 加 `fastapi`、`uvicorn[standard]`
+- [ ] `backend/blocky/storage/` — SQLite：專案表。依 Q1 的暫定結論，schema 從現在就加 `owner_id`（單機固定 `local`），事後擴充成本趨近於零
+- [ ] `backend/blocky/api/` — FastAPI app：`GET /api/projects`、`GET/PUT /api/projects/{id}`（附錄 A）
+- [ ] `blocky serve` 入口（§15 打包策略：P0～P2 只做 `pip install blocky && blocky serve`，自動開瀏覽器）
+
+**驗收**：
+
+1. `blocky serve` 起得來。
+2. 把題庫任一份 `project.json`（例如 `tests/conformance/procedure/eval_order_left_to_right/project.json`）`PUT` 進去再 `GET` 回來，內容等價 —— round-trip 不掉欄位、不改 blockId。
+3. `PUT` 一份壞的 IR（reporter 接在堆疊上）回 **422**，訊息指名 `blockId` —— 也就是存檔時就跑 §4 的載入期驗證，包含 D20 的形狀檢查。這條是重點：驗證邏輯已經寫好了，這一步只是把它接到 HTTP 上，不要在 API 層重寫一份。
+
+> 存檔時的形狀驗證需要知道積木包的形狀（`resolve_shape`），所以 `PUT` 的處理流程是：讀專案宣告的 extensions → 載入 → `load(data, shapes=resolve_shape(registry))`。`blocky/conformance.py::run_case` 已經是這個順序，照抄即可。
+
+### 第 2 步：補內建積木的 manifest（D21，估 2～3 天）
+
+前端能畫出積木的唯一資料來源。純後端、可立即測試。
+
+- [ ] 每個命名空間一份 YAML，放在 handler 旁邊：`interpreter/builtins/control.yaml` 與 `control.py` 並列，格式與 `extensions/*/manifest.yaml` 完全相同（無 `requirements`、無 `main.py`）
+- [ ] 用現成的 `Manifest.model_validate` 載入——**不要**為內建另寫一套 schema，那正是 D21 要避免的第二條路
+- [ ] `GET /api/extensions` 一併吐出內建（標記 `builtin: true`）
+- [ ] `resolve_shape` 的內建那半改成讀宣告，而不是從「handler 註冊在 `COMMANDS` 還是 `VALUES`」反推
+
+**驗收**（§8.1 的兩個一致性測試）：
+
+1. 每個命名空間，manifest 宣告的 opcode 集合 == 註冊表（`COMMANDS` / `VALUES` / `HAT_OPCODES`）中該命名空間的集合，且形狀相符。抓少宣告、多宣告、形狀寫錯。
+2. §17 題庫那 63 份 `project.json` 裡用到的每一個 input 名稱，都必須在該積木的 `args` 宣告過。抓「manifest 的參數名與 handler 實際讀的 key 對不上」—— 那是這個做法**唯一**真正的漂移風險（積木包靠 `_check_coverage` 比對 `@block`，內建沒有 `@block` 可比）。
+
+> 第 2 個測試順帶把「約半數積木沒有專屬題目」那條債變成可量化的：**沒有題目的積木，它的參數名就沒有人守**。補宣告時會照出目前哪些積木的參數命名不一致，那是免費的體檢。
