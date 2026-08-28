@@ -1,0 +1,111 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "data.set",
+      "parent": "blk_1",
+      "next": "blk_3",
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": "4"
+        }
+      },
+      "fields": {
+        "name": "s"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": "blk_5",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_4"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "operator.expr",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "expr": "${s} + 1"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "data.set",
+      "parent": "blk_3",
+      "next": "blk_6",
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": "四"
+        }
+      },
+      "fields": {
+        "name": "bad"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "debug.log",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_7"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "operator.expr",
+      "parent": "blk_6",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "expr": "${bad} + 1"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

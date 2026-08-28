@@ -11,7 +11,20 @@
  * `blockId` 要標紅哪一顆，都是同一個 id，不需要一張對照表。
  */
 import * as Blockly from 'blockly/core';
-import { SHADOW_FIELD, SHADOW_NUMBER, SHADOW_TEXT, type RegisteredBlock } from '../blockly/define';
+import {
+  BOOLEAN_FALSE,
+  BOOLEAN_TRUE,
+  SHADOW_BOOLEAN,
+  SHADOW_FIELD,
+  SHADOW_NULL,
+  SHADOW_NUMBER,
+  SHADOW_TEXT,
+  kindOfValue,
+  shadowKindOf,
+  type RegisteredBlock,
+  type ShadowKind,
+} from '../blockly/define';
+import { FieldText } from '../blockly/fields/FieldText';
 import { callType, definitionType, isCallType, isDefinitionType } from '../blockly/procedures';
 import type { ConversionContext } from './context';
 import type {
@@ -43,6 +56,40 @@ export function loadProject(
       workspace,
     );
   }
+
+  applyUi(project, workspace);
+}
+
+/**
+ * `blocks[].ui.multiline` → 欄位的第 3 層強制多行（§4.2、§8.5）。
+ *
+ * **在全部 append 完之後才跑**，不是跟著 `buildBlockState` 一起：`ui` 不是
+ * Blockly 認識的東西，塞進 state 只會被忽略；而欄位要等積木真的建出來才存在。
+ *
+ * 認不得的 key 一律跳過（§4.2「validator 允許 `ui` 內出現任意未知 key」的
+ * 前向相容規則，在讀的這一端也要成立）——新版後端存的 `ui` 不該讓舊版編輯器
+ * 打不開專案。
+ */
+function applyUi(project: ProjectIR, workspace: Blockly.Workspace): void {
+  for (const [id, block] of Object.entries(project.blocks ?? {})) {
+    const names = block.ui?.multiline;
+    if (!Array.isArray(names)) continue;
+    const target = workspace.getBlockById(id);
+    if (!target) continue;
+    for (const name of names) {
+      textFieldOf(target, String(name))?.setForcedMultiline(true);
+    }
+  }
+}
+
+/** 一個名字可能指到積木自己的欄位，也可能指到那個孔的影子上的欄位。 */
+function textFieldOf(block: Blockly.Block, name: string): FieldText | null {
+  const own = block.getField(name);
+  if (own instanceof FieldText) return own;
+  const shadow = block.getInput(name)?.connection?.targetBlock();
+  if (!shadow?.isShadow()) return null;
+  const field = shadow.getField(SHADOW_FIELD);
+  return field instanceof FieldText ? field : null;
 }
 
 function buildBlockState(id: string, project: ProjectIR, ctx: ConversionContext): BlockState {
@@ -163,34 +210,65 @@ function buildInputs(
 /**
  * 字面值/插值都落在影子積木上那個共用欄位（`SHADOW_FIELD`，見 `define.ts`）。
  * 影子的**類型**（要不要 multiline、min/max）本該由 manifest 決定，但**只有
- * 在宣告的型別（數字影子 vs 文字影子）跟這個值實際的 JSON 型別一致時**才
- * 套用宣告——manifest 的 `type: string` 常常只是「這個孔用文字框編輯」的
- * 通用宣告（`data.set` 的 `value`、`operator.eq` 的 `a`/`b`），不代表存進去
- * 的值只能是字串；手寫 IR（或未來 AI 生成）完全可能塞一個數字進去。
+ * 在宣告的型別跟這個值實際的 JSON 型別一致時**才套用宣告——manifest 的
+ * `type: string` 常常只是「這個孔用文字框編輯」的通用宣告（`data.set` 的
+ * `value`、`operator.eq` 的 `a`/`b`），不代表存進去的值只能是字串；手寫 IR
+ * （或未來 AI 生成、或使用者用右鍵切過型別）完全可能塞一個數字進去。
  *
- * 兩者不一致時**一律信任值本身**：數字用數字影子、字串用文字影子。這是唯一
- * 能讓「載入再存回去」不失真的做法——反過來信任宣告的話，`data.set 為 99`
- * 存回去會變成 `"99"`（字串），而 `operator.eq` 用來測「"5" 不等於 5」的那
- * 兩顆字面值會被同一份宣告（`type: string`）套成同一種影子，量出真正的差異
- * 反而消失。代價只是：這格會顯示成通用文字框而不是 manifest 原本想給的
+ * 兩者不一致時**一律信任值本身**：數字用數字影子、布林用布林影子、`null` 用
+ * 空值影子、其餘用文字影子。這是唯一能讓「載入再存回去」不失真的做法——反過來
+ * 信任宣告的話，`data.set 為 99` 存回去會變成 `"99"`（字串），而 `operator.eq`
+ * 用來測「"5" 不等於 5」的那兩顆字面值會被同一份宣告套成同一種影子，量出真正的
+ * 差異反而消失。代價只是：這格會顯示成通用文字框而不是 manifest 原本想給的
  * spinner，但那正是這個值現在真正的樣子。
+ *
+ * 這一半從第 4 步就是這樣寫的，所以 §16 Q16 的右鍵切換接上來時，**讀的方向
+ * 一行都不必改**——切完存出去的 JSON 型別，下次載入就會挑到同一種影子。
  */
 function buildShadowState(
   registered: RegisteredBlock | undefined,
   name: string,
   value: unknown,
 ): BlockState {
-  const isNumber = typeof value === 'number';
+  const kind = kindOfValue(value);
   const spec = registered?.shadows[name];
-  const specIsNumber = spec ? typeof spec.fields[SHADOW_FIELD] === 'number' : undefined;
-
-  if (spec && specIsNumber === isNumber) {
-    return { type: spec.type, fields: { [SHADOW_FIELD]: value } };
+  if (spec && shadowKindOf(spec.type) === kind) {
+    return { type: spec.type, fields: shadowFields(kind, value) };
   }
-  return {
-    type: isNumber ? SHADOW_NUMBER : SHADOW_TEXT,
-    fields: { [SHADOW_FIELD]: isNumber ? value : String(value ?? '') },
-  };
+  return shadowStateFor(kind, value);
+}
+
+/**
+ * 共用的（沒有 min/max、沒有 multiline）字面值影子。
+ *
+ * §16 Q16 的右鍵切換共用這個函式（`blockly/literals.ts`）——切完之後那一格會
+ * 失去 manifest 宣告的 spinner 上下界，但**存檔重新載入就會回來**：上面那段
+ * 「宣告與值的型別一致時才套用宣告」正是在做這件事。與其在選單那邊複製一份
+ * 找 `registered` 的邏輯，不如讓它自己修好。
+ */
+export function shadowStateFor(kind: ShadowKind, value: unknown): BlockState {
+  return { type: DEFAULT_SHADOWS[kind], fields: shadowFields(kind, value) };
+}
+
+const DEFAULT_SHADOWS: Record<ShadowKind, string> = {
+  text: SHADOW_TEXT,
+  number: SHADOW_NUMBER,
+  boolean: SHADOW_BOOLEAN,
+  null: SHADOW_NULL,
+};
+
+/** 空值影子沒有可編輯的欄位（只有一個標籤），所以它的 `fields` 是空的。 */
+function shadowFields(kind: ShadowKind, value: unknown): Record<string, unknown> | undefined {
+  switch (kind) {
+    case 'null':
+      return undefined;
+    case 'number':
+      return { [SHADOW_FIELD]: value };
+    case 'boolean':
+      return { [SHADOW_FIELD]: value ? BOOLEAN_TRUE : BOOLEAN_FALSE };
+    default:
+      return { [SHADOW_FIELD]: String(value ?? '') };
+  }
 }
 
 function requireBlock(project: ProjectIR, id: string): IRBlock {

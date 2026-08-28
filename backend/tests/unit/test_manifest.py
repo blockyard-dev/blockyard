@@ -193,8 +193,13 @@ def test_builtin_cannot_declare_dependencies() -> None:
 
 
 def test_packs_cannot_declare_builtin_only_arg_types() -> None:
-    """`variable` 綁的是變數、`stack` 是 C 型積木——兩者都沒有值能過 §7.5 的邊界。"""
-    for arg_type in ("variable", "stack"):
+    """`variable` 綁的是變數、`stack` 是 C 型積木——兩者都沒有值能過 §7.5 的邊界。
+
+    `expression`（§4.7b）擋的理由不同但同樣硬：那個欄位是一套**語言**，開放給
+    積木包等於讓每個包各自定義一套算式語法，而使用者只會看到「都是運算式，
+    為什麼這裡能寫那裡不能」。
+    """
+    for arg_type in ("variable", "stack", "expression"):
         bad(
             mf(blocks=[{
                 "opcode": "go", "type": "command", "text": "go",
@@ -253,6 +258,19 @@ def test_option_shorthand_expands_to_value_only() -> None:
     )
     opts = m.blocks[0].args["x"].options
     assert [(o.value, o.label) for o in opts] == [("upper", None), ("lower", "小寫")]
+
+
+def test_expression_args_are_always_fields() -> None:
+    """運算式是這顆積木自己的內容，不是可以被別的積木蓋掉的孔（§4.7b）。"""
+    m = parse_manifest(
+        mf(id="operator", builtin=True, blocks=[{
+            "opcode": "expr", "type": "reporter", "text": "運算 %(expr)",
+            "args": {"expr": {"type": "expression", "default": "1 + 1"}},
+        }]),
+        where="test",
+    )
+    assert m.field_args("expr").keys() == {"expr"}
+    assert m.input_args("expr") == {}
 
 
 def test_variable_args_are_always_fields() -> None:

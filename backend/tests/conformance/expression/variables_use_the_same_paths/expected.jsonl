@@ -1,0 +1,22 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "var.set", "threadId": "t1", "name": "n", "value": 10}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4", "value": {"items": [2, 4]}}
+{"op": "var.set", "threadId": "t1", "name": "resp", "value": {"items": [2, 4]}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6", "value": 6}
+{"op": "log", "threadId": "t1", "level": "info", "text": "6", "blockId": "blk_5"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_8"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_8", "value": 2}
+{"op": "log", "threadId": "t1", "level": "info", "text": "2", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_7"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

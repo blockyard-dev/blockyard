@@ -37,10 +37,11 @@ ArgType = Literal[
     # 積木包的參數一律是輸入孔，沒有 C 型積木，也不綁變數。
     "variable",   # 變數名稱欄位（§4.5、§8.5 的自動完成）
     "stack",      # C 型積木的內部堆疊（§4.2 的 StackInput）
+    "expression", # 算術運算式（§4.7b）。只有 `operator.expr` 那一顆用它
 ]
 
 # 積木包不得使用的參數型別與修飾（見上）
-BUILTIN_ONLY_ARG_TYPES = frozenset({"variable", "stack"})
+BUILTIN_ONLY_ARG_TYPES = frozenset({"variable", "stack", "expression"})
 
 BlockShape = Literal["command", "reporter", "boolean", "hat"]
 Permission = Literal["net", "fs.read", "fs.write", "subprocess", "env"]
@@ -104,8 +105,13 @@ class ArgSpec(Strict):
 
     @property
     def is_field(self) -> bool:
-        """存在 IR 的 `fields`（§4.2）。變數名稱永遠是 field——它不能由積木求值。"""
-        return self.field or self.type == "variable"
+        """存在 IR 的 `fields`（§4.2）。
+
+        變數名稱與運算式永遠是 field，型別本身就蘊含了這件事：前者綁的是名字
+        不是值，後者是這顆積木自己的內容——一個能被別的積木蓋掉的運算式，等於
+        同一個值有兩個來源。
+        """
+        return self.field or self.type in ("variable", "expression")
 
     @property
     def is_stack(self) -> bool:
@@ -124,6 +130,8 @@ class ArgSpec(Strict):
             raise ValueError("只有 dropdown 參數能宣告 options")
         if self.type == "stack" and (self.field or self.has_default):
             raise ValueError("stack 參數是內部堆疊，不能是 field，也沒有預設值")
+        if self.type == "expression" and self.default is not None and not isinstance(self.default, str):
+            raise ValueError("expression 參數的 default 必須是運算式文字")
         if self.type not in ("string", "code") and (
             self.multiline or self.rows is not None or self.interpolate is not None
         ):

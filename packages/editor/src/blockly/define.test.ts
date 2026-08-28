@@ -196,6 +196,34 @@ describe('參數 → 欄位還是輸入孔（§4.2、D22）', () => {
   });
 });
 
+describe('運算式欄位（§4.7b）', () => {
+  const { definitions, blocks } = buildDefinitions(
+    manifestOf([
+      {
+        opcode: 'expr',
+        type: 'reporter',
+        returns: 'number',
+        text: '運算 %(expr)',
+        args: { expr: { type: 'expression', default: '(1 + 2) * 3' } },
+      },
+    ]),
+  );
+  const args = rows(definitions[0]!)[0]!.args;
+
+  it('是欄位而不是輸入孔——運算式是那顆積木自己的內容，不能被別的積木蓋掉', () => {
+    expect(args[0]).toMatchObject({
+      type: FIELD_TEXT_TYPE,
+      name: 'expr',
+      mode: 'expression',
+      text: '(1 + 2) * 3',
+    });
+  });
+
+  it('沒有影子積木：欄位不是孔，沒有東西可以插進去', () => {
+    expect(blocks[0]!.shadows).toEqual({});
+  });
+});
+
 describe('影子積木', () => {
   it('boolean 孔沒有影子：空的六角形才分得出「還沒填」', () => {
     const { blocks } = buildDefinitions(

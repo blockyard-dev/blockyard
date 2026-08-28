@@ -1,0 +1,12 @@
+title: 運算元走 §4.3 的轉換表："4" 是 4，true 是 1，文字則是執行期錯誤
+spec: §4.3 值模型 / §4.7b
+tags:
+- expression
+- D23
+expect:
+  status: error
+  logs:
+  - '5'
+  error:
+    code: type
+    message_contains: 無法把文字

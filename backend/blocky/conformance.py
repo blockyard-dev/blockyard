@@ -21,6 +21,7 @@ import yaml
 from blocky.errors import BlockyError, ValidationError
 from blocky.extensions import DEFAULT_EXTENSIONS_ROOT, open_registry
 from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
+from blocky.interpreter.declarations import expression_fields
 from blocky.interpreter.engine import Interpreter
 from blocky.interpreter.events import EventSink, normalize
 from blocky.interpreter.registry import resolve_shape
@@ -95,7 +96,12 @@ async def run_case(case: Case) -> Result:
     )
 
     try:
-        project = load(case.project, strict_refs=True, shapes=resolve_shape(registry))
+        project = load(
+            case.project,
+            strict_refs=True,
+            shapes=resolve_shape(registry),
+            expressions=expression_fields,
+        )
     except ValidationError as e:
         # §4.7 的 `${a+b}`、§4.6 的 return 位置、§4.2 的積木形狀——這些必須在
         # **載入期**就爆，不是執行期。題目用 expect.load_error 斷言。

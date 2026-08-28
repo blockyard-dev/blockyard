@@ -1,0 +1,13 @@
+title: 運算 ((1+2)*3) 與 (1+2*3) 不同：優先序與括號都照數學
+spec: §4.7b 文法
+tags:
+- expression
+- D23
+expect:
+  status: ok
+  logs:
+  - '7'
+  - '9'
+  - '5'
+  - '-6'
+  - '1'

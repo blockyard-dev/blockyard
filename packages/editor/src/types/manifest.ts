@@ -23,7 +23,18 @@ export type Opcode = string;
 export type Type1 = 'command' | 'reporter' | 'boolean' | 'hat';
 export type Text = string;
 export type Type2 =
-  'string' | 'number' | 'boolean' | 'dropdown' | 'secret' | 'object' | 'list' | 'json' | 'code' | 'variable' | 'stack';
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'dropdown'
+  | 'secret'
+  | 'object'
+  | 'list'
+  | 'json'
+  | 'code'
+  | 'variable'
+  | 'stack'
+  | 'expression';
 export type Default1 = unknown;
 export type Label1 = string | null;
 export type Help1 = string | null;

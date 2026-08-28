@@ -1,0 +1,132 @@
+# `${}` 插值、運算式、變數名稱的**共用**測資（§4.7、§4.7b、§8.5）。
+#
+# 為什麼有這個檔案：編輯器的 `FieldText` 要在使用者打字的當下就把錯誤畫出來
+# （紅線 + warning icon），所以 `packages/editor/src/ir/highlight.ts` 有一份
+# 不丟例外的解析器。**規格仍然是後端**——存檔由 `PUT /api/projects` 的 422
+# 擋——但兩邊給的句子必須一模一樣：欄位裡看到一句話、按存檔看到另一句話，
+# 使用者會以為那是兩個不同的問題。
+#
+# 這份 YAML 由兩邊各讀一次：
+#   - `backend/tests/unit/test_editor_mirror.py`
+#   - `packages/editor/src/ir/highlight.test.ts`
+# 抄漏一句、改了一個字，兩邊之一就會紅。複製一份到前端再各自維護的話，漂移
+# 的那天兩邊都會繼續綠著——這與題庫 fixture 由前端直接讀後端 yaml 是同一個
+# 理由（見 `roundtrip.test.ts` 開頭）。
+#
+# 欄位：
+#   value  必填。要解析的字串。
+#   error  省略 = 解析得過。有值 = 解析錯誤的**完整訊息**。
+#   roots  省略 = 不檢查。有值 = 這一格引用到的變數名（排序後比對）。
+#   whole  只有 template 用：§4.7 的整格取值。省略 = false。
+
+template:
+  - value: "abc"
+    roots: []
+  - value: "${a}"
+    roots: ["a"]
+    whole: true
+  - value: "Hi ${a}!"
+    roots: ["a"]
+  - value: "${a.b[1].c}"
+    roots: ["a"]
+    whole: true
+  - value: "${resp.items[last]}"
+    roots: ["resp"]
+    whole: true
+  - value: "${a}${b}"
+    roots: ["a", "b"]
+  # `$${` 是逸出，輸出字面的 `${`——整串都是文字，不是插值
+  - value: "$${a}"
+    roots: []
+  # 裸 `$` 不需要逸出
+  - value: "cost: $5"
+    roots: []
+  # 空白會被 trim，路徑語意不變
+  - value: "${ a . b }"
+    roots: ["a"]
+    whole: true
+  # 開頭多一個 `.` 產生的空片段會被丟掉
+  - value: "${.a}"
+    roots: ["a"]
+    whole: true
+
+  # --- D9 的防線：`${}` 內不能是運算式 ---
+  - value: "${a+b}"
+    error: "「${}」內不支援運算（出現了 +），請改用「運算」積木"
+  - value: "${a * 2}"
+    error: "「${}」內不支援運算（出現了 *），請改用「運算」積木"
+  # --- 語法 ---
+  - value: "${"
+    error: "「${」沒有對應的「}」"
+  - value: "${}"
+    error: "「${}」是空的"
+  - value: "${a[x]}"
+    error: '「[]」內只能是整數或 last，收到 "x"'
+  - value: "${a[1}"
+    error: "「[」沒有對應的「]」"
+  - value: "${a]}"
+    error: "多餘的「]」"
+  - value: "${[1]}"
+    error: "「${}」必須以變數名稱開頭"
+  - value: "${.}"
+    error: "「${}」內的變數名稱是空的"
+
+expression:
+  - value: "1 + 2"
+    roots: []
+  - value: "${a} * 2 + 1"
+    roots: ["a"]
+  - value: "(${金額}*2)/4+1"
+    roots: ["金額"]
+  - value: "-3"
+    roots: []
+  - value: "${a.b[1]} % 2"
+    roots: ["a"]
+
+  # --- 文法收得很死：沒出現在文法裡的字元都是解析錯誤（D23） ---
+  - value: "2 +"
+    error: "運算式在這裡就結束了，少了一個數字或變數"
+  - value: "max(1)"
+    error: "運算式裡不能呼叫函式；變數要寫成 ${名稱}"
+  # `1e3` 走的是同一條：指數寫法刻意不收
+  - value: "1e3"
+    error: "運算式裡不能呼叫函式；變數要寫成 ${名稱}"
+  - value: "1 > 2"
+    error: "運算式裡不能用「>」，只能有數字、${變數}、+ - * / % 與括號"
+  - value: '"x"'
+    error: "運算式裡不能用「\"」，只能有數字、${變數}、+ - * / % 與括號"
+  - value: "(1 + 2"
+    error: "「(」沒有對應的「)」"
+  - value: "1 + 2)"
+    error: "運算式在「)」之後多了東西"
+  - value: "1 2"
+    error: "運算式在「2」之後多了東西"
+  - value: "1 // 2"
+    error: "這裡應該是數字或變數，卻是「/」"
+  - value: ""
+    error: "運算式是空的"
+  - value: "  "
+    error: "運算式是空的"
+  - value: "$a"
+    error: "運算式裡的變數要寫成 ${名稱}"
+  # 運算元的路徑與 §4.7 共用同一個 parser，連錯誤訊息都是同一句
+  - value: "${a+b} * 2"
+    error: "「${}」內不支援運算（出現了 +），請改用「運算」積木"
+
+variable:
+  - value: "a"
+  - value: "計數"
+  # 中文、空格、底線、`+ - * /` 一律允許（§4.7）
+  - value: "a b"
+  - value: "a+b"
+  - value: "_x_"
+  - value: ""
+    error: "變數名稱不能是空的"
+  - value: " a"
+    error: '變數名稱前後不能有空白：" a"'
+  - value: "a.b"
+    error: '變數名稱不能包含 .："a.b"'
+  - value: "a[1]"
+    error: '變數名稱不能包含 [ ]："a[1]"'
+  - value: "$a"
+    error: '變數名稱不能包含 $："$a"'

@@ -487,6 +487,105 @@ case(
 )
 
 # ==========================================================================
+# §4.7b 運算積木（D23）
+# ==========================================================================
+
+
+def expr(source: str):
+    """`運算 (…)`。運算式是 field，不是輸入孔——它是這顆積木自己的內容。"""
+    return blk("operator.expr", fields={"expr": source})
+
+
+case(
+    "operator/boolean_literals",
+    "真 / 假 是字面值積木，插得進六角形孔——那個孔沒有影子（§8.1）",
+    "§4.4 邏輯",
+    one(
+        log(blk("operator.true")),
+        log(blk("operator.false")),
+        log(blk("operator.and", a=blk("operator.true"), b=blk("operator.false"))),
+        blk("control.if", condition=blk("operator.true"), then=Stack([log("走到了")])),
+        blk("control.if", condition=blk("operator.false"), then=Stack([log("不該走到")])),
+    ),
+    {"status": "ok", "logs": ["true", "false", "false", "走到了"]},
+    tags=["logic"],
+)
+
+case(
+    "expression/precedence_and_parens",
+    "運算 ((1+2)*3) 與 (1+2*3) 不同：優先序與括號都照數學",
+    "§4.7b 文法",
+    one(
+        log(expr("1 + 2 * 3")),
+        log(expr("(1 + 2) * 3")),
+        log(expr("10 - 3 - 2")),      # 左結合
+        log(expr("2 * -3")),          # 單目負號
+        log(expr("10 % 3")),
+    ),
+    {"status": "ok", "logs": ["7", "9", "5", "-6", "1"]},
+    tags=["expression", "D23"],
+)
+
+case(
+    "expression/variables_use_the_same_paths",
+    "運算式裡的 ${a.b[1]} 與字串插值是同一套路徑",
+    "§4.7b 運算元",
+    one(
+        blk("data.set", fields={"name": "n"}, value=10),
+        blk("data.set", fields={"name": "resp"},
+            value=blk("object.parse_json", text='{"items":[2,4]}')),
+        log(expr("${n} * 2 / 4 + 1")),
+        log(expr("${resp.items[2]} - ${resp.items[1]}")),
+    ),
+    {"status": "ok", "logs": ["6", "2"]},
+    tags=["expression", "D23"],
+)
+
+case(
+    "expression/operands_convert_like_everything_else",
+    "運算元走 §4.3 的轉換表：\"4\" 是 4，true 是 1，文字則是執行期錯誤",
+    "§4.3 值模型 / §4.7b",
+    one(
+        blk("data.set", fields={"name": "s"}, value="4"),
+        log(expr("${s} + 1")),
+        blk("data.set", fields={"name": "bad"}, value="四"),
+        log(expr("${bad} + 1")),
+    ),
+    {
+        "status": "error",
+        "logs": ["5"],
+        "error": {"code": "type", "message_contains": "無法把文字"},
+    },
+    tags=["expression", "D23"],
+)
+
+case(
+    "expression/syntax_error_is_a_load_error",
+    "運算式的語法錯誤在存檔期就擋下來，與 ${a + b} 同一條原則",
+    "§4.7b 解析時機 / D9",
+    one(log(expr("${a} > 2"))),
+    {"status": "load_error", "load_error": "不能用"},
+    tags=["expression", "D23", "D9"],
+)
+
+case(
+    "expression/divide_by_zero_matches_the_block",
+    "運算式的 / 與「÷」積木是同一份語意：除以 0 是錯誤，不是 Infinity",
+    "§4.7b 求值 / §4.3",
+    one(
+        log(blk("operator.divide", a=10, b=4)),
+        log(expr("10 / 4")),
+        log(expr("1 / 0")),
+    ),
+    {
+        "status": "error",
+        "logs": ["2.5", "2.5"],
+        "error": {"message_contains": "不能除以 0"},
+    },
+    tags=["expression", "D23"],
+)
+
+# ==========================================================================
 # §4.8 型別積木
 # ==========================================================================
 

@@ -1,0 +1,11 @@
+title: 真 / 假 是字面值積木，插得進六角形孔——那個孔沒有影子（§8.1）
+spec: §4.4 邏輯
+tags:
+- logic
+expect:
+  status: ok
+  logs:
+  - 'true'
+  - 'false'
+  - 'false'
+  - 走到了

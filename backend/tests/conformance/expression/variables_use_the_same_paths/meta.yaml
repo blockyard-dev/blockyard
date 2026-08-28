@@ -1,0 +1,10 @@
+title: 運算式裡的 ${a.b[1]} 與字串插值是同一套路徑
+spec: §4.7b 運算元
+tags:
+- expression
+- D23
+expect:
+  status: ok
+  logs:
+  - '6'
+  - '2'

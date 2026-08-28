@@ -9,6 +9,8 @@ import * as zhHant from 'blockly/msg/zh-hant';
 import { defineManifest, defineShadowBlocks, type RegisteredBlock } from './define';
 import { buildToolbox, groupByManifest, type ToolboxGroup } from './toolbox';
 import './fields/FieldText';
+// 匯入即註冊 §16 Q16 的字面值型別切換選單。
+import './literals';
 import type { Manifest } from '../types/manifest';
 
 let localeReady = false;

@@ -13,8 +13,9 @@ IR 裡的版本只用於驗證。
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from blocky.errors import BlockyError, TemplateError, ValidationError
 from blocky.ir.values import (
@@ -144,7 +145,7 @@ def parse(s: str, *, block_id: str | None = None, input_name: str | None = None)
             )
         inner = s[i + 2 : close]
         flush()
-        segments.append(_parse_path(inner, i, close + 1, block_id=block_id, input_name=input_name))
+        segments.append(parse_path(inner, i, close + 1, block_id=block_id, input_name=input_name))
         i = close + 1
 
     flush()
@@ -155,9 +156,14 @@ def parse(s: str, *, block_id: str | None = None, input_name: str | None = None)
     return Template(value=s, segments=tuple(segments), whole=whole, refs=refs)
 
 
-def _parse_path(
+def parse_path(
     inner: str, start: int, end: int, *, block_id: str | None, input_name: str | None
 ) -> Ref:
+    """`${…}` 的內容 → 一個 Ref。
+
+    **`expression.py` 共用這一個函式**，所以 `${a.b[1]}` 在運算式裡與在字串裡
+    是同一件事——路徑語意只有一份實作，D9 的運算式防線也只有一道。
+    """
     raw = inner.strip()
     if raw == "":
         raise ValidationError("「${}」是空的", block_id=block_id, path=input_name)
@@ -173,7 +179,7 @@ def _parse_path(
         bad = _EXPRESSION_CHARS & set(tok)
         if bad:
             raise ValidationError(
-                f"「${{}}」內不支援運算（出現了 {' '.join(sorted(bad))}），請改用積木",
+                f"「${{}}」內不支援運算（出現了 {' '.join(sorted(bad))}），請改用「運算」積木",
                 block_id=block_id,
                 path=input_name,
             )
@@ -261,18 +267,19 @@ def evaluate(
     if tpl.whole:
         ref = tpl.segments[0]
         assert isinstance(ref, Ref)
-        return _resolve_ref(ref, resolve, block_id=block_id)
+        return resolve_ref(ref, resolve, block_id=block_id)
 
     parts: list[str] = []
     for seg in tpl.segments:
         if isinstance(seg, str):
             parts.append(seg)
         else:
-            parts.append(to_string(_resolve_ref(seg, resolve, block_id=block_id)))
+            parts.append(to_string(resolve_ref(seg, resolve, block_id=block_id)))
     return "".join(parts)
 
 
-def _resolve_ref(ref: Ref, resolve: Resolver, *, block_id: str | None) -> Any:
+def resolve_ref(ref: Ref, resolve: Resolver, *, block_id: str | None) -> Any:
+    """走完一條路徑。`expression.py` 共用（見 `parse_path`）。"""
     cur = resolve(ref.root)  # 找不到時由 resolver 拋出，訊息含編輯距離建議
     walked = ref.root
 
@@ -331,6 +338,9 @@ __all__ = [
     "evaluate",
     "has_interpolation",
     "parse",
+    # expression.py 共用：路徑的解析與求值只有一份實作
+    "parse_path",
+    "resolve_ref",
     "suggest_name",
     "validate_name",
 ]

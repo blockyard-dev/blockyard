@@ -26,9 +26,9 @@ from blocky.ir.values import (
     TYPE_LABELS_ZH,
     TYPE_NUMBER,
     TYPE_STRING,
+    divide,
+    modulo,
     normalize_index,
-    to_boolean,
-    to_number,
     to_string,
     type_of,
 )
@@ -36,6 +36,16 @@ from blocky.ir.values import (
 # --------------------------------------------------------------------------
 # 算術
 # --------------------------------------------------------------------------
+
+
+@value("operator.expr")
+async def _expr(t: Thread, b: Block) -> Any:
+    """`運算 (${a} * 2 / 4 + 1)`（§4.7b）。
+
+    解析在載入期就做完了（`ir/schema.py::load`），這裡只是求值——所以語法錯誤
+    是 422 而不是執行到才炸的紅框。
+    """
+    return t.expression(b, "expr")
 
 
 async def _two_numbers(t: Thread, b: Block) -> tuple[Any, Any]:
@@ -66,20 +76,15 @@ async def _mul(t: Thread, b: Block) -> Any:
 @value("operator.divide")
 async def _div(t: Thread, b: Block) -> Any:
     a, c = await _two_numbers(t, b)
-    if c == 0:
-        raise BlockyError("不能除以 0")
-    r = a / c
-    # D15：語意層只有 double。`10 / 2` 應該是 5 而不是 5.0，
-    # 但那由 js_number_to_string 負責呈現，這裡保持數值即可。
-    return int(r) if isinstance(r, float) and r.is_integer() and abs(r) < 2**53 else r
+    # 語意與 §4.7b 運算式裡的 `/` **共用一份實作**（`ir/values.py`）：同一個
+    # 算式在積木與運算式裡給出不同答案，是使用者永遠查不出來的錯。
+    return divide(a, c)
 
 
 @value("operator.mod")
 async def _mod(t: Thread, b: Block) -> Any:
     a, c = await _two_numbers(t, b)
-    if c == 0:
-        raise BlockyError("不能對 0 取餘數")
-    return math.fmod(a, c) if isinstance(a, float) or isinstance(c, float) else a % c
+    return modulo(a, c)  # 與運算式的 `%` 共用一份實作，見 _div
 
 
 @value("operator.round")
@@ -183,6 +188,18 @@ async def _gte(t: Thread, b: Block) -> bool:
 # --------------------------------------------------------------------------
 # 邏輯。and / or 短路——右邊的 reporter 可以帶副作用，所以短路是語意。
 # --------------------------------------------------------------------------
+
+
+@value("operator.true")
+async def _true(t: Thread, b: Block) -> bool:
+    """`真`。六角形孔沒有影子（§8.1），所以常數布林需要自己的積木。"""
+    return True
+
+
+@value("operator.false")
+async def _false(t: Thread, b: Block) -> bool:
+    """`假`。與 `真` 成對——只有一顆的話另一半得寫成 `不成立 (真)`。"""
+    return False
 
 
 @value("operator.and")

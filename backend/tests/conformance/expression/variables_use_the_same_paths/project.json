@@ -1,0 +1,125 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "data.set",
+      "parent": "blk_1",
+      "next": "blk_3",
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": 10
+        }
+      },
+      "fields": {
+        "name": "n"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "data.set",
+      "parent": "blk_2",
+      "next": "blk_5",
+      "inputs": {
+        "value": {
+          "kind": "block",
+          "id": "blk_4"
+        }
+      },
+      "fields": {
+        "name": "resp"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "object.parse_json",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "{\"items\":[2,4]}"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "debug.log",
+      "parent": "blk_3",
+      "next": "blk_7",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_6"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "operator.expr",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "expr": "${n} * 2 / 4 + 1"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "debug.log",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_8"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "operator.expr",
+      "parent": "blk_7",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "expr": "${resp.items[2]} - ${resp.items[1]}"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

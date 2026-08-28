@@ -6,7 +6,7 @@
  * 工具箱、flyout。
  */
 import * as Blockly from 'blockly/core';
-import { registerContinuousToolbox } from '@blockly/continuous-toolbox';
+import { ContinuousFlyout, registerContinuousToolbox } from '@blockly/continuous-toolbox';
 
 export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
   name: 'blocky',
@@ -43,17 +43,43 @@ export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
  */
 registerContinuousToolbox();
 
+/**
+ * 積木面板的縮放**與畫布脫鉤**。
+ *
+ * Blockly 預設 `getFlyoutScale()` 回 `targetWorkspace.scale`，於是放大畫布會
+ * 連帶把 flyout 裡的積木放大——而 flyout 的寬度是「最寬的那顆積木」算出來的，
+ * 所以面板會跟著往右吃掉畫布。使用者放大畫布是為了看清楚**自己拉的那幾顆**，
+ * 那個動作不該讓工具箱變寬。
+ *
+ * 這個方法的 JSDoc 本來就寫著 "this can be overridden"，覆寫回一個常數即可。
+ * 常數用 `DEFAULT_SCALE`：面板永遠長成「畫布在預設縮放時」的樣子。
+ */
+const DEFAULT_SCALE = 0.75;
+
+class FixedScaleFlyout extends ContinuousFlyout {
+  override getFlyoutScale(): number {
+    return DEFAULT_SCALE;
+  }
+}
+
+Blockly.registry.register(
+  Blockly.registry.Type.FLYOUTS_VERTICAL_TOOLBOX,
+  'BlockyFlyout',
+  FixedScaleFlyout,
+  true,
+);
+
 export const workspaceOptions: Partial<Blockly.BlocklyOptions> = {
   renderer: 'zelos',
   theme: blockyTheme,
   plugins: {
     toolbox: 'ContinuousToolbox',
-    flyoutsVerticalToolbox: 'ContinuousFlyout',
+    flyoutsVerticalToolbox: 'BlockyFlyout',
     metricsManager: 'ContinuousMetrics',
   },
   media: 'media/',
   grid: { spacing: 40, length: 3, colour: '#e2e4ee', snap: false },
-  zoom: { controls: true, wheel: true, startScale: 0.75, minScale: 0.3, maxScale: 2 },
+  zoom: { controls: true, wheel: true, startScale: DEFAULT_SCALE, minScale: 0.3, maxScale: 2 },
   move: { scrollbars: true, drag: true, wheel: true },
   trashcan: true,
   sounds: false,

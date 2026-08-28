@@ -116,7 +116,7 @@ def _corpus_usage() -> dict[str, dict[str, set[str]]]:
 CORPUS_USAGE = _corpus_usage()
 
 # 補完宣告當天（P0b 第 2 步）題庫實際覆蓋到的內建積木數。只准往上。
-BASELINE_COVERED = 42
+BASELINE_COVERED = 43
 
 
 @pytest.mark.parametrize("opcode", sorted(CORPUS_USAGE), ids=lambda o: o)
@@ -182,6 +182,9 @@ _READERS = {
     "boolean": "input",
     "stack": "stack",
     "field": "field",
+    # §4.7b：運算式欄位。歸在 field 這一側是因為它就在 IR 的 `fields` 裡——
+    # 少了這一行，`operator.expr` 讀的 key 對不上宣告時沒有人會叫。
+    "expression": "field",
 }
 
 

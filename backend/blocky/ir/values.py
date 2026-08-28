@@ -14,7 +14,7 @@ import math
 from decimal import Decimal
 from typing import Any
 
-from blocky.errors import BadIndexError, KeyMissingError, TypeCoercionError
+from blocky.errors import BadIndexError, BlockyError, KeyMissingError, TypeCoercionError
 
 # 語意型別名稱。刻意與 JS 的 typeof 不同：list 與 object 分開、null 獨立（§4.8）。
 TYPE_NULL = "null"
@@ -157,6 +157,33 @@ def to_string(v: Any, *, block_id: str | None = None) -> str:
 
 def _json_default(o: Any) -> Any:
     raise TypeCoercionError(f"無法序列化的值：{type(o).__name__}")
+
+
+# --------------------------------------------------------------------------
+# 算術
+# --------------------------------------------------------------------------
+#
+# 除法與取餘數放在這裡而不是 handler 裡，是因為它們有**兩個**呼叫端：
+# `operator.divide` / `operator.mod` 那兩顆積木，以及 §4.7b 的運算積木裡的
+# `/` 與 `%`。同一個算式在兩個地方給出不同答案（`-7 % 2`、`10 / 0`）是使用者
+# 永遠查不出來的錯，所以語意只准有一份。
+
+
+def divide(a: int | float, b: int | float, *, block_id: str | None = None) -> int | float:
+    """`a / b`。除以 0 是錯誤，不是 Infinity（§4.3）。"""
+    if b == 0:
+        raise BlockyError("不能除以 0", block_id=block_id)
+    r = a / b
+    # D15：語意層只有 double。`10 / 2` 應該是 5 而不是 5.0，但那由
+    # js_number_to_string 負責呈現，這裡保持數值即可。
+    return int(r) if isinstance(r, float) and r.is_integer() and abs(r) < 2**53 else r
+
+
+def modulo(a: int | float, b: int | float, *, block_id: str | None = None) -> int | float:
+    """`a % b`。浮點走 fmod（取號跟著被除數，與 JS 一致）。"""
+    if b == 0:
+        raise BlockyError("不能對 0 取餘數", block_id=block_id)
+    return math.fmod(a, b) if isinstance(a, float) or isinstance(b, float) else a % b
 
 
 def to_number(v: Any, *, block_id: str | None = None) -> int | float:

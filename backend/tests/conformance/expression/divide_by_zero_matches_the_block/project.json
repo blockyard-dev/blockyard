@@ -1,0 +1,111 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "debug.log",
+      "parent": "blk_1",
+      "next": "blk_4",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_3"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "operator.divide",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": 10
+        },
+        "b": {
+          "kind": "literal",
+          "value": 4
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": "blk_6",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_5"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "operator.expr",
+      "parent": "blk_4",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "expr": "10 / 4"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "debug.log",
+      "parent": "blk_4",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_7"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "operator.expr",
+      "parent": "blk_6",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "expr": "1 / 0"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

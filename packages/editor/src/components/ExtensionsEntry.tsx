@@ -41,14 +41,17 @@ export function ExtensionsEntry({ groups }: { groups: ToolboxGroup[] }) {
           </p>
         </div>
       )}
+      {/* 只有一個 ＋，沒有文字：分類欄只有 38px 寬，帶文字的按鈕會同時蓋掉
+          最後一個分類與 flyout 左邊那一條積木。文字改由 title 交代。 */}
       <button
         type="button"
         className="ext-button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-label="積木包"
+        title="積木包"
       >
         <span className="ext-button-icon">＋</span>
-        <span>積木包</span>
       </button>
     </div>
   );

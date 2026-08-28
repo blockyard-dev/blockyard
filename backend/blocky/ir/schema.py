@@ -11,6 +11,7 @@ from typing import Annotated, Any, Callable, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from blocky.errors import ValidationError
+from blocky.ir import expression as expr
 from blocky.ir import template as tpl
 
 
@@ -197,18 +198,38 @@ class LoadedProject:
     `value`**，執行期只認重新解析的結果。IR 裡帶的 `refs` 只用於驗證。
     """
 
-    def __init__(self, project: Project, templates: dict[tuple[str, str], tpl.Template]):
+    def __init__(
+        self,
+        project: Project,
+        templates: dict[tuple[str, str], tpl.Template],
+        expressions: dict[tuple[str, str], expr.Expression] | None = None,
+    ):
         self.project = project
         self._templates = templates
+        self._expressions = expressions or {}
 
     def template(self, block_id: str, input_name: str) -> tpl.Template:
         return self._templates[(block_id, input_name)]
+
+    def expression(self, block_id: str, field_name: str) -> expr.Expression:
+        """§4.7b 的運算式欄位，解析結果與 template 同一條原則：用載入時算好的。"""
+        parsed = self._expressions.get((block_id, field_name))
+        if parsed is None:
+            # 載入時沒有人告訴 `load()` 這個欄位是運算式，於是它沒有被解析、
+            # 也沒有被驗證。這不是使用者的錯，是呼叫端漏了 `expressions=`。
+            raise ValidationError(
+                f"欄位 {field_name} 沒有被當成運算式載入", block_id=block_id, path=field_name
+            )
+        return parsed
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.project, name)
 
 
 ShapeResolver = Callable[[str], frozenset[str]]
+#: opcode → 宣告成 `type: expression` 的欄位名（§4.7b）。與 ShapeResolver
+#: 同一個理由由呼叫端傳進來：這個問題只有宣告層答得出來，而 ir 層不該認識它。
+ExpressionResolver = Callable[[str], frozenset[str]]
 
 
 def load(
@@ -216,6 +237,7 @@ def load(
     *,
     strict_refs: bool = True,
     shapes: ShapeResolver | None = None,
+    expressions: ExpressionResolver | None = None,
 ) -> LoadedProject:
     """從 dict 載入並驗證專案。
 
@@ -225,11 +247,28 @@ def load(
     `shapes` 給了才做形狀驗證（見 `_validate_shapes`）。它是選填的，因為形狀
     要問過擴充系統才知道，而 ir 層不該認識擴充系統；呼叫端載完積木包後把
     `interpreter.registry.resolve_shape(...)` 傳進來。
+
+    `expressions` 同理（§4.7b）：哪些欄位是運算式寫在宣告裡，呼叫端傳
+    `interpreter.declarations.expression_fields`。沒給就不解析，那些欄位在
+    執行期會以「沒有被當成運算式載入」失敗——比默默當成字串跑掉好。
     """
     project = Project.model_validate(data)
     templates: dict[tuple[str, str], tpl.Template] = {}
+    exprs: dict[tuple[str, str], expr.Expression] = {}
 
     for bid, block in project.blocks.items():
+        # §4.7b：運算式與 template 一樣**在存檔期解析**，語法錯誤帶著 blockId
+        # 回到那顆積木上，而不是等執行到才說。
+        for name in expressions(block.opcode) if expressions else ():
+            raw = block.fields.get(name)
+            if raw is None:
+                continue  # 沒填 = 用宣告的 default，由前端補；空專案不該炸
+            if not isinstance(raw, str):
+                raise ValidationError(
+                    f"欄位 {name} 必須是運算式文字", block_id=bid, path=name
+                )
+            exprs[(bid, name)] = expr.parse(raw, block_id=bid, field_name=name)
+
         for name, inp in block.inputs.items():
             if not isinstance(inp, TemplateInput):
                 continue
@@ -254,7 +293,7 @@ def load(
     _validate_structure(project)
     if shapes is not None:
         _validate_shapes(project, shapes)
-    return LoadedProject(project, templates)
+    return LoadedProject(project, templates, exprs)
 
 
 def _validate_structure(p: Project) -> None:

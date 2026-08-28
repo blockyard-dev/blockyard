@@ -6,27 +6,29 @@ Scratch 風格的積木編輯器，組出會做真事的自動化流程：HTTP�
 
 ---
 
-## 現況：P0a 完成，P0b 第 1～3 步完成
+## 現況：P0a 完成，P0b 第 1～6 步完成
 
-依 §15 的施工順序——**先鎖語意，再接介面**。語意（「這個語言是什麼」）已經
-鎖住；編輯器畫得出全部 98 顆積木，但**還存不了檔**（第 4 步）。
+依 §15 的施工順序——**先鎖語意，再接介面**。語意（「這個語言是什麼」）已經鎖住；
+編輯器畫得出全部積木、存得了檔、按執行會真的跑，積木上有執行中的高亮與值氣泡。
 
 | 模組 | 狀態 |
 |---|---|
 | `blocky/ir/values.py` | 值模型與轉換（§4.3、D15 的 IEEE754 語意） |
 | `blocky/ir/template.py` | `${}` 插值解析與求值（§4.7、D9） |
+| `blocky/ir/expression.py` | 運算積木的算術文法（§4.7b、D23） |
 | `blocky/ir/schema.py` | IR 的 pydantic 模型與載入期驗證（§4.1、§4.2、D20 的形狀） |
-| `blocky/interpreter/` | tree-walking 直譯器 + 87 顆內建積木（`builtins/*.py` 實作、`builtins/*.yaml` 宣告，D21） |
+| `blocky/interpreter/` | tree-walking 直譯器 + 90 顆內建積木（`builtins/*.py` 實作、`builtins/*.yaml` 宣告，D21） |
 | `blocky/extensions/` | Host 邊界（§7.5）、manifest schema、`InProcessHost` |
-| `blocky/api/` | FastAPI：`/api/projects`、`/api/extensions`（附錄 A） |
+| `blocky/runs/` | Run 生命週期、WebSocket 事件、§6.2 的批次與聚合、停止 |
+| `blocky/api/` | FastAPI：`/api/projects`、`/api/extensions`、`/api/runs`、`/ws/run/{id}`（附錄 A） |
 | `blocky/storage/` | SQLite 專案表 |
 | `blocky/cli.py` | `blocky serve` |
-| `tests/conformance/` | §17 一致性題庫，63 題 |
+| `tests/conformance/` | §17 一致性題庫，74 題 |
 | `packages/shared-schema/` | 由 pydantic 匯出的 IR 與 manifest JSON Schema |
-| `packages/editor/` | Blockly zelos 工作區、manifest → 積木的動態註冊（§8.1） |
+| `packages/editor/` | Blockly zelos 工作區、manifest → 積木的動態註冊（§8.1）、IR ↔ Blockly 雙向轉換（§8.4）、`FieldText`（§8.5）、執行時的視覺回饋（§8.3） |
 
-下一步是 §15 P0b 第 4 步：IR ↔ Blockly 雙向轉換（§8.4），做完存讀檔才閉環。
-擴充系統其餘部分（P1）、Trigger（P2）未開工。
+下一步是 §15 P0b 第 7 步：函式的 mutator、形狀重塑與孤兒處理、靜態警告（§8.5）。
+擴充系統其餘部分（P1）、Trigger（P2）未開工。詳細狀態見 [PROGRESS.md](PROGRESS.md)。
 
 ### 跑起來看看
 

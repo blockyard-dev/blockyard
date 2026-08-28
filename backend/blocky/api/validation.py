@@ -18,6 +18,7 @@ from pydantic import ValidationError as PydanticError
 from blocky.errors import BlockyError, ValidationError
 from blocky.extensions import open_registry
 from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
+from blocky.interpreter.declarations import expression_fields
 from blocky.interpreter.events import EventSink
 from blocky.interpreter.registry import resolve_shape
 from blocky.ir.schema import LoadedProject, load
@@ -64,7 +65,15 @@ async def open_project(
             raise ValidationError(f"載入積木包時失敗：{e}") from None
 
     try:
-        return load(data, strict_refs=True, shapes=resolve_shape(registry)), registry
+        return (
+            load(
+                data,
+                strict_refs=True,
+                shapes=resolve_shape(registry),
+                expressions=expression_fields,
+            ),
+            registry,
+        )
     except PydanticError as e:
         if registry is not None:
             await registry.unload_all()

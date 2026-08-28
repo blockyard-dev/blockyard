@@ -52,9 +52,50 @@ const STACK_MARK = '⋯';
 /** `text` 裡的參數參照。 */
 const ARG_REF = /%\((\w+)\)/g;
 
-/** 字面值的影子積木（shadow）型別。 */
+/**
+ * 字面值的影子積木（shadow）型別（§16 Q16）。
+ *
+ * 四種，一種一個 JSON 型別。`text` 與 `number` 從第 3 步就有；`boolean` 與
+ * `null` 是 Q16 的答案——`data.set`、`operator.eq` 這類宣告成通用 `type: string`
+ * 的孔，編輯器原本只給得出字串，打 `99` 拿到 `"99"`，而布林與 `null` 根本沒有
+ * 入口。**解法不是改宣告**（manifest 的 `type: string` 說的是「這個孔用文字框
+ * 編輯」，不是「這裡只能是字串」），而是讓影子的型別跟著**值**走，再給一個
+ * 右鍵切換（見 `fields/FieldText.ts` 的 `LITERAL_ITEMS`）。
+ */
 export const SHADOW_TEXT = 'blocky.shadow.text';
 export const SHADOW_NUMBER = 'blocky.shadow.number';
+export const SHADOW_BOOLEAN = 'blocky.shadow.boolean';
+export const SHADOW_NULL = 'blocky.shadow.null';
+
+/** 一顆字面值影子代表的 JSON 型別。 */
+export type ShadowKind = 'text' | 'number' | 'boolean' | 'null';
+
+/**
+ * 影子的 Blockly type → 它代表的型別。認不得就回 `null`（不是字面值影子）。
+ *
+ * 用 `startsWith` 是因為宣告了修飾欄位的參數會拿到專屬影子
+ * （`blocky.shadow.number#control.repeat.times`，見 `shadowFor`）——那仍然是
+ * 一顆數字影子。
+ */
+export function shadowKindOf(type: string): ShadowKind | null {
+  if (type.startsWith(SHADOW_TEXT)) return 'text';
+  if (type.startsWith(SHADOW_NUMBER)) return 'number';
+  if (type === SHADOW_BOOLEAN) return 'boolean';
+  if (type === SHADOW_NULL) return 'null';
+  return null;
+}
+
+/** 一個 IR 字面值 → 它該用哪一種影子。**值說了算**，不是宣告。 */
+export function kindOfValue(value: unknown): ShadowKind {
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  if (value === null) return 'null';
+  return 'text';
+}
+
+/** 布林影子那個下拉的兩個選項。Blockly 的欄位值一律是字串。 */
+export const BOOLEAN_TRUE = 'TRUE';
+export const BOOLEAN_FALSE = 'FALSE';
 /** 影子積木上那個欄位的名字。第 4 步的 IR 轉換靠它取字面值。 */
 export const SHADOW_FIELD = 'VALUE';
 /** 字面值格子的底色。Scratch 的字面值是白的，讓外面那顆積木的顏色去說話。 */
@@ -84,15 +125,17 @@ export interface ShadowSpec {
 }
 
 /**
- * `type: variable` 的值存在 IR 的 `fields` 而不是 `inputs`——直譯器讀它用的是
- * `t.field(b, "name")`（見 `interpreter/builtins/control.py`）。
+ * `type: variable` / `type: expression` 的值存在 IR 的 `fields` 而不是
+ * `inputs`——直譯器讀它們用的是 `t.field(b, "name")` 與 `t.expression(b, "expr")`
+ * （見 `interpreter/builtins/control.py`、`operator.py`）。
  *
- * manifest 沒有在這些參數上寫 `field: true`，因為型別本身已經蘊含了：綁的是
- * 名字不是值，塞不進別的積木（D22）。這裡把那條蘊含寫出來，免得它變成只有
+ * manifest 沒有在這些參數上寫 `field: true`，因為型別本身已經蘊含了：變數綁的
+ * 是名字不是值，運算式是那顆積木自己的內容——一個能被別的積木蓋掉的運算式，
+ * 等於同一個值有兩個來源（D22、§4.7b）。這裡把那條蘊含寫出來，免得它變成只有
  * 讀過直譯器原始碼的人才知道的事。
  */
 function isField(arg: ArgSpec): boolean {
-  return arg.field === true || arg.type === 'variable';
+  return arg.field === true || arg.type === 'variable' || arg.type === 'expression';
 }
 
 /**
@@ -163,6 +206,34 @@ export function defineShadowBlocks(): void {
       type: SHADOW_NUMBER,
       message0: '%1',
       args0: [{ type: 'field_number', name: SHADOW_FIELD, value: 0 }],
+      output: null,
+      colour: SHADOW_COLOUR,
+    },
+    {
+      // 下拉而不是 checkbox：白色影子裡的一個勾勾看不出「沒勾 = false」還是
+      // 「這格是別的東西」，而兩個字直接說出目前的值。順帶它自己就是切換
+      // 介面，不必為了改 true/false 去開右鍵選單。
+      type: SHADOW_BOOLEAN,
+      message0: '%1',
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: SHADOW_FIELD,
+          options: [
+            ['真', BOOLEAN_TRUE],
+            ['假', BOOLEAN_FALSE],
+          ],
+        },
+      ],
+      output: null,
+      colour: SHADOW_COLOUR,
+    },
+    {
+      // `null` 沒有東西可以編輯，所以它是一個標籤而不是欄位。要換回別的型別
+      // 走右鍵——這也是為什麼那個選單不能只掛在 `FieldText` 上。
+      type: SHADOW_NULL,
+      message0: '%1',
+      args0: [{ type: 'field_label', text: '空值' }],
       output: null,
       colour: SHADOW_COLOUR,
     },
@@ -412,13 +483,21 @@ function toBlocklyArg(name: string, arg: ArgSpec): Record<string, unknown> {
 /** manifest 的修飾欄位 → `FieldText` 的能力開關（§7.2、§8.5）。 */
 function fieldTextOptions(arg: ArgSpec): FieldTextOptions {
   return {
-    mode: arg.type === 'variable' ? 'variable' : 'text',
+    mode: TEXT_MODES[arg.type] ?? 'text',
     // §4.7 的預設：`string` 開、`code` 關；manifest 的 `interpolate` 覆寫它。
+    // 運算式一律開：裡面的 `${a.b[1]}` 走的就是 §4.7 那個 parser（§4.7b），
+    // 所以第 6 步的 pill 渲染對它同樣適用。
     interpolate: arg.interpolate ?? arg.type !== 'code',
     multiline: arg.multiline ?? false,
     ...(typeof arg.rows === 'number' ? { rows: arg.rows } : {}),
   };
 }
+
+/** 型別本身決定的 `FieldText` 模式。其餘型別都是一格普通文字。 */
+const TEXT_MODES: Partial<Record<ArgSpec['type'], FieldTextOptions['mode']>> = {
+  variable: 'variable',
+  expression: 'expression',
+};
 
 /**
  * 輸入孔的影子積木。

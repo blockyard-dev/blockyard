@@ -16,7 +16,8 @@
             "json",
             "code",
             "variable",
-            "stack"
+            "stack",
+            "expression"
           ],
           "title": "Type",
           "type": "string"

@@ -15,8 +15,9 @@ import asyncio
 import itertools
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from blocky.errors import (
     BlockyError,
@@ -28,9 +29,9 @@ from blocky.errors import (
     UnknownBlockError,
     ValidationError,
 )
+from blocky.interpreter.declarations import SHAPE_HAT, SHAPE_VALUE
 from blocky.interpreter.events import EventSink, clip_value
 from blocky.interpreter.registry import COMMANDS, HAT_OPCODES, VALUES, resolve_shape
-from blocky.interpreter.declarations import SHAPE_HAT, SHAPE_VALUE
 from blocky.interpreter.scope import (
     MAX_FRAME_DEPTH,
     InMemoryPersistStore,
@@ -39,6 +40,7 @@ from blocky.interpreter.scope import (
     Scope,
     ThreadScope,
 )
+from blocky.ir import expression as expr
 from blocky.ir import template as tpl
 from blocky.ir.schema import Block, LoadedProject, TemplateInput
 from blocky.ir.values import to_boolean, to_number, to_string
@@ -125,6 +127,14 @@ class Thread:
 
     def field(self, block: Block, name: str, default: Any = None) -> Any:
         return block.fields.get(name, default)
+
+    def expression(self, block: Block, name: str) -> int | float:
+        """`type: expression` 欄位的值（§4.7b）。
+
+        與 `_eval_template` 同一條原則：用**載入時解析**的那一份，不在這裡重讀
+        欄位字串——存檔期驗過的東西與執行的東西必須是同一個。
+        """
+        return self.interp._eval_expression(self, block, name)
 
     # ---- 給 builtins 用的捷徑 ----
 
@@ -414,6 +424,15 @@ class Interpreter:
         if kind == "template":
             return self._eval_template(thread, block, name)
         raise ValidationError(f"輸入 {name} 是堆疊，不能當值用", block_id=self._bid(block))
+
+    def _eval_expression(self, thread: Thread, block: Block, name: str) -> int | float:
+        bid = self._bid(block)
+        parsed = self.project.expression(bid, name)
+        return expr.evaluate(
+            parsed,
+            lambda n: thread.scope.get(n, block_id=bid),
+            block_id=bid,
+        )
 
     def _eval_template(self, thread: Thread, block: Block, name: str) -> Any:
         bid = self._bid(block)

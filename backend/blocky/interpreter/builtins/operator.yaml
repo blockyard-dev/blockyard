@@ -19,6 +19,18 @@ description: 算術、比較、邏輯、字串與正規表達式
 
 blocks:
   # ---- 算術 ----
+  #
+  # `expr` 與下面那些單一運算的積木**刻意並存**（§4.7b）。一顆一顆拉是看得見
+  # 每一步中間值的路，那條路一顆積木都沒有拿掉；`expr` 是給「(${金額}*2)/4+1」
+  # 這種三層巢狀才寫得出來的算式用的，那正是使用者回報的積木肥大。
+
+  - opcode: expr
+    type: reporter
+    returns: number
+    text: "運算 %(expr)"
+    args:
+      # 樣本值示範的是這顆積木唯一的賣點：括號與多個運算子。點一下就跑會回 9。
+      expr: { type: expression, default: "(1 + 2) * 3" }
 
   - opcode: add
     type: reporter
@@ -113,6 +125,20 @@ blocks:
     args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
 
   # ---- 邏輯。and / or 短路，右邊的 reporter 可以帶副作用，所以短路是語意。----
+  #
+  # `true` / `false` 是**字面值積木**，不是運算。它們存在的理由是六角形孔
+  # （`if`、`repeat_until`、`and`）**沒有影子**——§8.1 明講那是刻意的：塞一顆
+  # 預設的 false 進去會讓「還沒填」與「填了 false」看起來一模一樣。於是「我就是
+  # 要一個常數 false」在畫布上原本沒有出口，只能繞 `不成立 (空孔)`，而那顆積木
+  # 讀起來像在問問題。兩顆沒有參數的積木把那條路補上。
+
+  - opcode: "true"
+    type: boolean
+    text: "真"
+
+  - opcode: "false"
+    type: boolean
+    text: "假"
 
   - opcode: and
     type: boolean

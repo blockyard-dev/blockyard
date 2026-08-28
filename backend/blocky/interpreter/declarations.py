@@ -81,6 +81,23 @@ def shapes(opcode: str) -> frozenset[str]:
     return frozenset() if spec is None else shapes_of(spec.type, dynamic=spec.dynamic)
 
 
+def expression_fields(opcode: str) -> frozenset[str]:
+    """一顆積木有哪些欄位宣告成 `type: expression`（§4.7b）。
+
+    `ir.schema.load` 靠它決定要解析哪些欄位。答案只看**宣告**——與 `shapes`
+    同一個理由：從實作反推會讓一個忘了宣告的運算式欄位默默變成一格字串，
+    存檔期的語法檢查對它安靜地失效。
+
+    只查內建。積木包宣告不了 `expression`（`BUILTIN_ONLY_ARG_TYPES`），所以
+    這裡不必像 `resolve_shape` 那樣接受一個擴充註冊表——那個參數只會是
+    永遠回空集合的裝飾品。
+    """
+    spec = block(opcode)
+    if spec is None:
+        return frozenset()
+    return frozenset(n for n, a in spec.args.items() if a.type == "expression")
+
+
 def opcodes() -> set[str]:
     """所有內建積木的完整 opcode。"""
     return {f"{mf.id}.{b.opcode}" for mf in manifests().values() for b in mf.blocks}
@@ -109,6 +126,7 @@ __all__ = [
     "SHAPE_HAT",
     "SHAPE_VALUE",
     "block",
+    "expression_fields",
     "manifests",
     "opcodes",
     "reload",

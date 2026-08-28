@@ -19,7 +19,7 @@ html, body, #root { height: 100%; margin: 0; }
 
 .topbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.75rem;
   height: var(--topbar-h);
   padding: 0 1rem;
@@ -250,13 +250,29 @@ html, body, #root { height: 100%; margin: 0; }
   gap: 0.5rem;
 }
 
+/* 分類名的字級縮小，讓分類欄不用因為長一點的名字（如「示範」）就被撐寬。 */
+.blocklyToolboxCategoryLabel { font-size: 0.8rem; }
+
+/* 選取分類時的灰底（continuous-toolbox 用 inline style 塗滿整列，見
+   ContinuousCategory.ts 的 setSelected）本來就是塗滿整欄寬度，欄寬是被
+   ext-button 撐出來的，跟圖示/文字縮小無關。字體變小後兩側會露出明顯的
+   多餘灰色，改成貼齊內容的圓角膠囊，視覺上比較收斂。 */
+.blocklyToolboxCategory {
+  margin: 0 4px;
+  border-radius: 0.4rem;
+}
+
+/* 分類欄的寬度是 Blockly 依最寬的分類名算出來的（現在 38px），入口按鈕必須
+   塞得進去，所以是一顆正方形圖示而不是帶文字的按鈕——Scratch 的「添加擴展」
+   也是這樣。 */
 .ext-button {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
   font: inherit;
-  font-size: 0.75rem;
-  padding: 0.4rem 0.7rem;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   background: #fff;
@@ -264,6 +280,12 @@ html, body, #root { height: 100%; margin: 0; }
   cursor: pointer;
 }
 .ext-button-icon { font-size: 0.9rem; line-height: 1; }
+
+/* 分類清單捲到底時，底部留一格給入口按鈕。沒有它，最後一個分類會停在按鈕
+   底下——而那正是**最後裝進來的那個積木包**，使用者最可能要點的那一個。
+   加在捲動容器（`.blocklyToolbox` 自己 overflow-y: auto）上，不是加在內層的
+   flex group 上：後者的 padding 不算進捲動範圍。 */
+.blocklyToolbox { padding-bottom: 2.8rem; box-sizing: border-box; }
 
 .ext-panel {
   width: 15rem;
@@ -283,3 +305,66 @@ html, body, #root { height: 100%; margin: 0; }
 .ext-name { font-weight: 600; }
 .ext-meta { margin-left: auto; color: var(--muted); }
 .ext-note { margin: 0.5rem 0 0; color: var(--muted); line-height: 1.6; }
+
+/* ------------------------------------------------------------------ *
+ * 文字欄位的行內語法（§8.5）
+ *
+ * 顏色寫在 CSS 而不是 SVG 的 presentation attribute：Blockly 自己有一條
+ * `.blocklyEditableField>text { fill: … }`，presentation attribute 打不過
+ * CSS，只有同樣寫成 CSS 且更精確才蓋得掉（這裡是 2 個 class + 1 個元素，
+ * 比它的 1 個 class + 1 個元素高）。
+ * ------------------------------------------------------------------ */
+
+/* `${路徑}` 的膠囊。底圖是一顆 rect，文字疊在上面。 */
+.blocky-pill { fill: #e4e8ff; }
+.blocklyEditableField > text.blocky-ref { fill: #3b45a8; }
+
+/* §4.7 的「整格取值」：這一格回傳的是原值（可能是物件或清單），不是文字。
+   換一個色系而不是換深淺——深淺會被讀成「同一件事的程度差別」。 */
+.blocky-pill-whole { fill: #d7efe2; }
+.blocklyEditableField > text.blocky-ref-whole { fill: #1d6b4a; }
+
+/* `${a+b}`、運算式的語法錯誤。紅線畫在字底下，字本身也轉紅——只有底線的話
+   在小字級上幾乎看不見。存檔仍然由後端的 422 擋（§4.7），這只是提早說。 */
+.blocklyEditableField > text.blocky-bad { fill: #c23b3b; }
+.blocky-squiggle { stroke: #d43b3b; stroke-width: 1.5; }
+.blocky-field-bad { stroke: #d43b3b; stroke-width: 1.5; }
+
+/* 運算式欄位用等寬字：`(${a} + 1) * 2` 的括號要對得起來。 */
+.blocklyEditableField > text.blocky-mono,
+.blocky-mono-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ------------------------------------------------------------------ *
+ * 欄位編輯中的自動完成（§8.5）
+ *
+ * 掛在 Blockly 的 WidgetDiv 底下（見 fields/Autocomplete.ts），所以座標只要
+ * 相對於欄位本身；字級寫死，因為 WidgetDiv 的 font-size 是依畫布縮放算出來的。
+ * ------------------------------------------------------------------ */
+
+.blocky-autocomplete {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 100%;
+  max-height: 11rem;
+  overflow-y: auto;
+  margin-top: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: #fff;
+  box-shadow: 0 4px 14px rgb(20 20 40 / 18%);
+  font: 400 0.8125rem/1.6 system-ui, -apple-system, 'Noto Sans TC', sans-serif;
+  color: var(--fg);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.blocky-autocomplete-item {
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+.blocky-autocomplete-item-on { background: #e4e8ff; }

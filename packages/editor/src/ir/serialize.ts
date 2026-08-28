@@ -12,7 +12,8 @@
  * `definitionBlock` / `body`（那兩個會隨使用者編輯函式體而變，不能 passthrough）。
  */
 import * as Blockly from 'blockly/core';
-import { SHADOW_FIELD, type RegisteredBlock } from '../blockly/define';
+import { BOOLEAN_TRUE, SHADOW_FIELD, shadowKindOf, type RegisteredBlock } from '../blockly/define';
+import { FieldText } from '../blockly/fields/FieldText';
 import { isCallType, isDefinitionType, procIdFromType } from '../blockly/procedures';
 import type { ConversionContext } from './context';
 import { hasInterpolation, isWholeTemplate } from './template';
@@ -60,7 +61,7 @@ export function serializeWorkspace(
 
     const procId = procIdFromType(state.type);
     if (procId != null && isDefinitionType(state.type)) {
-      flattenBlock(state, null, blocks, ctx);
+      flattenBlock(state, null, blocks, ctx, workspace);
       const meta = passthrough[procId];
       procedures[procId] = {
         name: meta?.name ?? procId,
@@ -75,7 +76,7 @@ export function serializeWorkspace(
 
     // 不是函式定義的頂層積木一律當腳本：形狀對不對是後端存檔時的事
     // （D20），轉換層不重複那份規則（§8.4）。
-    flattenBlock(state, null, blocks, ctx);
+    flattenBlock(state, null, blocks, ctx, workspace);
     scripts.push({
       id: state.data ?? `sc_${Blockly.utils.idGenerator.genUid()}`,
       top: state.id!,
@@ -119,6 +120,7 @@ function flattenBlock(
   parent: string | null,
   out: Record<string, IRBlock>,
   ctx: ConversionContext,
+  workspace: Blockly.Workspace,
 ): void {
   const id = state.id;
   if (!id) throw new Error(`Blockly 積木（type=${state.type}）缺少 id`);
@@ -131,12 +133,12 @@ function flattenBlock(
   const fields = readFields(state, registered);
   if (procId != null && isDefinitionType(state.type)) fields.proc = procId;
 
-  const inputs = readInputs(state, registered, ctx, out, id);
+  const inputs = readInputs(state, registered, ctx, out, id, workspace);
 
   let next: string | null = null;
   if (state.next?.block) {
     next = state.next.block.id ?? null;
-    flattenBlock(state.next.block, id, out, ctx);
+    flattenBlock(state.next.block, id, out, ctx, workspace);
   }
 
   out[id] = {
@@ -146,8 +148,41 @@ function flattenBlock(
     inputs,
     fields,
     mutation: procId != null && isCallType(state.type) ? { proc: procId } : null,
-    ui: null,
+    ui: readUi(workspace, id),
   };
+}
+
+/**
+ * §8.5 多行的第 3 層（強制切換）→ `blocks[].ui.multiline`（§4.2）。
+ *
+ * 這是 IR 裡**唯一**的 `ui` key，列的是「要渲染成多行的 input／field 名稱」。
+ * 值只從**活的欄位**讀，不從 `blocks.save()` 的狀態讀——`forcedMultiline` 是
+ * 欄位的呈現狀態，Blockly 的欄位序列化只存值不存它。
+ *
+ * 只有「強制打開」存得下來：這個 key 是一份名單，講不出「強制關掉」。第 1 層
+ * （manifest 宣告）與第 2 層（值裡有換行）都是每次重算的純函數，本來就不必存。
+ */
+function readUi(workspace: Blockly.Workspace, id: string): Record<string, unknown> | null {
+  const block = workspace.getBlockById(id);
+  if (!block) return null;
+
+  const multiline: string[] = [];
+  for (const input of block.inputList) {
+    for (const field of input.fieldRow) {
+      if (field instanceof FieldText && field.getForcedMultiline() && field.name) {
+        multiline.push(field.name);
+      }
+    }
+    // 使用者真正打字的地方是**影子上的欄位**（見 define.ts 的 shadowFor），
+    // 所以孔的那一筆記的是孔名，不是影子的 blockId——影子換一顆，設定還在。
+    const target = input.connection?.targetBlock();
+    if (target?.isShadow()) {
+      const field = target.getField(SHADOW_FIELD);
+      if (field instanceof FieldText && field.getForcedMultiline()) multiline.push(input.name);
+    }
+  }
+
+  return multiline.length > 0 ? { multiline } : null;
 }
 
 /**
@@ -172,6 +207,7 @@ function readInputs(
   ctx: ConversionContext,
   out: Record<string, IRBlock>,
   parentId: string,
+  workspace: Blockly.Workspace,
 ): Record<string, IRInput> {
   const raw = state.inputs ?? {};
   const result: Record<string, IRInput> = {};
@@ -182,7 +218,7 @@ function readInputs(
       result[name] = isStack
         ? { kind: 'stack', id: conn.block.id! }
         : { kind: 'block', id: conn.block.id! };
-      flattenBlock(conn.block, parentId, out, ctx);
+      flattenBlock(conn.block, parentId, out, ctx, workspace);
     } else if (conn.shadow) {
       result[name] = readShadowValue(conn.shadow, registered, name);
     }
@@ -191,19 +227,30 @@ function readInputs(
 }
 
 /**
- * 影子上那個值該存成 `literal` 還是 `template`，取決於這格是不是數字影子
- * （數字永遠不插值，§4.7 的生效範圍表）以及 manifest 對這個參數的
- * `interpolate` 設定（`code` 型別預設關閉）。
+ * 影子上那個值該存成什麼（§16 Q16、§4.7）。
+ *
+ * **型別由影子的種類決定，不由孔的宣告決定**。manifest 的 `type: string` 常常
+ * 只是「這個孔用文字框編輯」的通用宣告（`data.set` 的 `value`、`operator.eq`
+ * 的 `a`/`b`），不代表存進去的只能是字串——所以使用者把一格切成數字之後，存出
+ * 去的就是 JSON number。這與 `deserialize.ts::buildShadowState` 是同一條規則的
+ * 兩個方向：**值說了算**。
+ *
+ * 只有文字影子會走到 `template`：數字、布林、空值都不插值（§4.7 的生效範圍表）。
  */
 function readShadowValue(
   shadow: BlockState,
   registered: RegisteredBlock | undefined,
   name: string,
 ): IRInput {
+  const kind = shadowKindOf(shadow.type);
   const raw = shadow.fields?.[SHADOW_FIELD];
 
-  if (typeof raw === 'number') {
-    return { kind: 'literal', value: raw };
+  if (kind === 'null') return { kind: 'literal', value: null };
+  if (kind === 'boolean') return { kind: 'literal', value: raw === BOOLEAN_TRUE || raw === true };
+  // `typeof raw === 'number'` 是給手寫／舊資料的保險：影子種類認不出來、但欄位
+  // 裡躺著一個數字時，仍然存成數字而不是 "0"。
+  if (kind === 'number' || typeof raw === 'number') {
+    return { kind: 'literal', value: typeof raw === 'number' ? raw : Number(raw ?? 0) };
   }
 
   const text = String(raw ?? '');

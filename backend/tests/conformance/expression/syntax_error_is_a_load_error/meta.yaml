@@ -1,0 +1,9 @@
+title: 運算式的語法錯誤在存檔期就擋下來，與 ${a + b} 同一條原則
+spec: §4.7b 解析時機 / D9
+tags:
+- expression
+- D23
+- D9
+expect:
+  status: load_error
+  load_error: 不能用

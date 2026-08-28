@@ -1,0 +1,12 @@
+title: 運算式的 / 與「÷」積木是同一份語意：除以 0 是錯誤，不是 Infinity
+spec: §4.7b 求值 / §4.3
+tags:
+- expression
+- D23
+expect:
+  status: error
+  logs:
+  - '2.5'
+  - '2.5'
+  error:
+    message_contains: 不能除以 0

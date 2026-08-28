@@ -142,6 +142,44 @@ def test_reporter_on_a_stack_is_rejected_with_the_block_id(client: TestClient) -
     assert client.get("/api/projects/p1").status_code == 404
 
 
+def test_bad_expression_is_rejected_with_the_block_id(client: TestClient) -> None:
+    """§4.7b：運算式的語法錯誤是**存檔期**的 422，而且標得回那顆積木。
+
+    前端靠 `detail.blockId` 把警告掛在積木上（`App.tsx` 的 save 那段）。沒有
+    這個欄位，使用者只會看到一行紅字，得自己在畫布上找是哪一顆。
+    """
+    bad = {
+        "formatVersion": 1,
+        "scripts": [{"id": "s1", "top": "hat"}],
+        "blocks": {
+            "hat": {"opcode": "event.when_flag_clicked", "next": "logit"},
+            "logit": {
+                "opcode": "debug.log",
+                "parent": "hat",
+                "inputs": {"text": {"kind": "block", "id": "calc"}},
+            },
+            "calc": {"opcode": "operator.expr", "parent": "logit", "fields": {"expr": "1 + max(2)"}},
+        },
+    }
+    r = client.put("/api/projects/p1", json=bad)
+    assert r.status_code == 422, r.text
+    detail = r.json()["detail"]
+    assert detail["blockId"] == "calc"
+    assert "函式" in detail["message"]
+
+
+def test_a_valid_expression_saves(client: TestClient) -> None:
+    """反面：合法的運算式存得進去，欄位原樣回來（運算式是 field，不是輸入孔）。"""
+    good = {
+        "formatVersion": 1,
+        "scripts": [{"id": "s1", "top": "calc"}],
+        "blocks": {"calc": {"opcode": "operator.expr", "fields": {"expr": "(1 + 2) * 3"}}},
+    }
+    assert client.put("/api/projects/p1", json=good).status_code in (200, 201)
+    back = client.get("/api/projects/p1").json()
+    assert back["blocks"]["calc"]["fields"] == {"expr": "(1 + 2) * 3"}
+
+
 def test_a_stack_without_a_hat_saves(client: TestClient) -> None:
     """§4.1：寫到一半的積木不該擋住存檔。
 
