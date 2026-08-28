@@ -1,0 +1,11 @@
+title: 點堆疊中間的積木 → 從**頂端**起跑，不是從點到的那一顆插進去
+spec: §5.1 點一下就跑
+tags:
+- manual_run
+start: blk_4
+expect:
+  status: ok
+  logs:
+  - A
+  - B
+  - B

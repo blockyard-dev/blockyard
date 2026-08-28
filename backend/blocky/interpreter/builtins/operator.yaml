@@ -4,6 +4,11 @@
 # 影子值**——輸入孔裡預先填好的那個數字。handler 自己還有一層 fallback（給
 # 手寫 IR 用），兩者刻意不一定相同，例如 `substring` 的 end 在 handler 裡是
 # 「整段長度」，那是宣告寫不出來的東西。
+#
+# 文字類參數一律給**樣本值**（「你好」「世界」），不是空字串。理由是 §5.1 的
+# 「點一下就跑」：從工具箱拉一顆出來點一下，空孔的積木只會回一個空字串，而
+# 帶樣本值的積木直接示範它在做什麼。Scratch 的 `join (apple)(banana)` 就是
+# 這件事——樣本值是積木的說明書，只是寫在它自己身上。
 manifestVersion: 1
 builtin: true
 id: operator
@@ -130,7 +135,7 @@ blocks:
     type: reporter
     returns: string
     text: "連接 %(a) 和 %(b)"
-    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+    args: { a: { type: string, default: "你好" }, b: { type: string, default: "世界" } }
 
   - opcode: join_list
     type: reporter
@@ -145,37 +150,37 @@ blocks:
     returns: string
     text: "%(text) 的第 %(index) 個字"
     args:
-      text: { type: string, default: "" }
+      text: { type: string, default: "你好世界" }
       index: { type: number, default: 1 }
 
   - opcode: length
     type: reporter
     returns: number
     text: "%(text) 的長度"
-    args: { text: { type: string, default: "" } }
+    args: { text: { type: string, default: "你好世界" } }
 
   - opcode: contains
     type: boolean
     text: "%(a) 包含 %(b)"
-    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+    args: { a: { type: string, default: "你好世界" }, b: { type: string, default: "世界" } }
 
   - opcode: substring
     type: reporter
     returns: string
     text: "%(text) 的第 %(start) 到 %(end) 個字"
     args:
-      text: { type: string, default: "" }
+      text: { type: string, default: "你好世界" }
       start: { type: number, default: 1 }
-      end: { type: number, default: 1 }
+      end: { type: number, default: 2 }
 
   - opcode: replace
     type: reporter
     returns: string
     text: "把 %(text) 裡的 %(find) 換成 %(replace)"
     args:
-      text: { type: string, default: "" }
-      find: { type: string, default: "" }
-      replace: { type: string, default: "" }
+      text: { type: string, default: "你好世界" }
+      find: { type: string, default: "世界" }
+      replace: { type: string, default: "朋友" }
 
   - opcode: split
     type: reporter
@@ -183,21 +188,23 @@ blocks:
     # separator 為空字串時逐字切開
     text: "用 %(separator) 分割 %(text)"
     args:
-      text: { type: string, default: "" }
+      text: { type: string, default: "甲,乙,丙" }
       separator: { type: string, default: "," }
 
   - opcode: trim
     type: reporter
     returns: string
     text: "去除 %(text) 的頭尾空白"
-    args: { text: { type: string, default: "" } }
+    # 樣本值刻意留著頭尾空白——這顆積木的效果只有在有空白時才看得見
+    args: { text: { type: string, default: "  你好  " } }
 
   - opcode: case
     type: reporter
     returns: string
     text: "把 %(text) 轉成 %(case)"
     args:
-      text: { type: string, default: "" }
+      # 大小寫的樣本值只能是英文——中文沒有大小寫，樣本就示範不出東西
+      text: { type: string, default: "hello" }
       case:
         type: dropdown
         field: true
@@ -210,8 +217,8 @@ blocks:
     type: boolean
     text: "%(text) 符合樣式 %(pattern)"
     args:
-      pattern: { type: string, default: "" }
-      text: { type: string, default: "" }
+      pattern: { type: string, default: '\d+' }
+      text: { type: string, default: "訂單 12345" }
 
   - opcode: regex_extract
     type: reporter
@@ -219,17 +226,17 @@ blocks:
     returns: any
     text: "從 %(text) 取出樣式 %(pattern)"
     args:
-      pattern: { type: string, default: "" }
-      text: { type: string, default: "" }
+      pattern: { type: string, default: '\d+' }
+      text: { type: string, default: "訂單 12345" }
 
   - opcode: regex_replace
     type: reporter
     returns: string
     text: "把 %(text) 裡符合 %(pattern) 的換成 %(replace)"
     args:
-      pattern: { type: string, default: "" }
-      text: { type: string, default: "" }
-      replace: { type: string, default: "" }
+      pattern: { type: string, default: '\d+' }
+      text: { type: string, default: "訂單 12345" }
+      replace: { type: string, default: "#" }
 
   - opcode: random
     type: reporter

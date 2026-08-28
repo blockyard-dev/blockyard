@@ -2,6 +2,10 @@
 #
 # D10 的核心在這裡看得見：**parse 不自動、stringify 自動**。`parse_json` 是
 # 一顆看得見的積木，因為它會失敗、而且結果型別由伺服器決定。
+#
+# `key` 的預設值是 `name`：一個空的欄位看起來像壞掉，而 `name` 是這類積木最
+# 常見的第一個 key。`object` 那個孔沒有預設值——它只吃物件，而字面值打不出
+# 物件（要用「解析 JSON」或變數），空著才是誠實的。
 manifestVersion: 1
 builtin: true
 id: object
@@ -18,7 +22,7 @@ blocks:
     text: "%(object) 的 %(key)（沒有就用 %(default)）"
     args:
       object: { type: object }
-      key: { type: string, default: "" }
+      key: { type: string, default: "name" }
       default: { type: string, default: null }
 
   - opcode: set
@@ -26,7 +30,7 @@ blocks:
     text: "設定 %(object) 的 %(key) 為 %(value)"
     args:
       object: { type: object }
-      key: { type: string, default: "" }
+      key: { type: string, default: "name" }
       value: { type: string, default: "" }
 
   - opcode: delete
@@ -34,14 +38,14 @@ blocks:
     text: "刪除 %(object) 的 %(key)"
     args:
       object: { type: object }
-      key: { type: string, default: "" }
+      key: { type: string, default: "name" }
 
   - opcode: has
     type: boolean
     text: "%(object) 有 %(key) 嗎"
     args:
       object: { type: object }
-      key: { type: string, default: "" }
+      key: { type: string, default: "name" }
 
   - opcode: keys
     type: reporter
@@ -63,7 +67,7 @@ blocks:
     # 回傳型別是 any 而不是 object：伺服器回什麼就是什麼，那正是它必須顯式的理由
     text: "解析 JSON %(text)"
     args:
-      text: { type: string, default: "", multiline: true, rows: 3 }
+      text: { type: string, default: '{"name": "你好"}', multiline: true, rows: 3 }
 
   - opcode: to_json
     type: reporter

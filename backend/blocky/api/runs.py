@@ -34,6 +34,10 @@ class RunRequest(BaseModel):
     projectId: str
     trigger: str = DEFAULT_TRIGGER
     payload: dict[str, Any] = Field(default_factory=dict)
+    #: 「點一下就跑」（§5.1、附錄 A）。給了就從這顆積木所在的堆疊頂端起跑，
+    #: `trigger` 不看。**不是另一個端點**：同一份事件、同一個停止 API、同一套
+    #: §6.2 流量控制——分成兩條路的話這三件事都要各做兩次。
+    blockId: str | None = None
 
 
 def _runs(request: Request | WebSocket) -> RunManager:
@@ -45,7 +49,10 @@ async def start_run(request: Request, body: RunRequest = Body(...)) -> dict[str,
     """跑一次**已存檔**的專案。回來時 Run 已經在跑了（見 `runs/manager.py`）。"""
     try:
         handle = await _runs(request).start(
-            body.projectId, trigger=body.trigger, payload=body.payload
+            body.projectId,
+            trigger=body.trigger,
+            payload=body.payload,
+            block_id=body.blockId,
         )
     except ProjectNotFound:
         raise HTTPException(
@@ -54,6 +61,7 @@ async def start_run(request: Request, body: RunRequest = Body(...)) -> dict[str,
         ) from None
     except ValidationError as e:
         # 存檔時驗過，但積木包可能在那之後被移掉或改壞。與 PUT 同一種 422。
+        # `blockId` 指向存檔裡不存在的積木（畫布改了沒存就點）也走這裡。
         raise invalid_ir(e) from None
     return handle.summary()
 

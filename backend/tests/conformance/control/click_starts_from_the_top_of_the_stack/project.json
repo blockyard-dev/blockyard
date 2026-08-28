@@ -1,0 +1,75 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "debug.log",
+      "parent": "blk_1",
+      "next": "blk_3",
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "A"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "control.repeat",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "times": {
+          "kind": "literal",
+          "value": 2
+        },
+        "body": {
+          "kind": "stack",
+          "id": "blk_4"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "debug.log",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "B"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

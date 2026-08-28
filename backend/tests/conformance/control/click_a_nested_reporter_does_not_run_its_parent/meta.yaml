@@ -1,0 +1,9 @@
+title: 點插在孔裡的 reporter → 只求值它，外面那顆 log 不執行
+spec: §5.1 起點是 reporter 時只求值那一顆
+tags:
+- manual_run
+start: blk_3
+expect:
+  status: ok
+  logs: []
+  value: 3

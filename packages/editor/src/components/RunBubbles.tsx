@@ -75,7 +75,11 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
           continue;
         }
         node.style.visibility = 'visible';
-        node.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
+        // §8.3：對齊積木的**中央**，不是左緣。reporter 常常插在一顆很寬的積木
+        // 的某個孔裡，靠左的氣泡會飄到跟它無關的欄位上方——看起來像在說隔壁
+        // 那顆積木的事，而值氣泡唯一的工作就是「說清楚是誰回了什麼」。
+        // 往左收半個氣泡寬由 CSS 的 translate 做（見 index.css 的 .bubble）。
+        node.style.transform = `translate(${rect.left + rect.width / 2}px, ${rect.top}px)`;
         // 最後 400ms 淡出
         const left = bubble.until - now;
         node.style.opacity = left < 400 ? String(Math.max(0, left) / 400) : '1';

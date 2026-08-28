@@ -13,7 +13,7 @@ blocks:
     # 多行是 §8.5 的第一層：積木作者最清楚訊息內文需要多行，應主動宣告
     text: "記錄 %(text)"
     args:
-      text: { type: string, default: "", multiline: true, rows: 2 }
+      text: { type: string, default: "你好", multiline: true, rows: 2 }
       level:
         type: dropdown
         field: true

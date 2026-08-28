@@ -77,7 +77,14 @@ describe('形狀（§4.2）', () => {
   });
 
   it('hat 只有下接點且戴帽子', () => {
-    expect(byType['test.hat']).toMatchObject({ nextStatement: null, style: { hat: 'cap' } });
+    // 帽子走 extension 而不是 `style: { hat: 'cap' }`——那個寫法只有第一顆
+    // 積木拿得到帽子（jsonInit 會把共用定義物件上的 style 清成 null，理由見
+    // `define.ts` 的 `registerHatExtension`）。
+    expect(byType['test.hat']).toMatchObject({
+      nextStatement: null,
+      extensions: ['blocky_start_hat'],
+    });
+    expect(byType['test.hat']).not.toHaveProperty('style');
     expect(byType['test.hat']).not.toHaveProperty('previousStatement');
   });
 });

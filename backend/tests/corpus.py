@@ -976,6 +976,64 @@ case(
     tags=["validation", "shape"],
 )
 
+# ==========================================================================
+# §4.1 落單堆疊 + §5.1 點一下就跑
+#
+# 沒有 hat 的頂層堆疊是**合法 IR**：寫到一半的積木不該擋住存檔，而且落單堆疊
+# 正是「點一下就跑」的對象。它不需要任何執行期特例——§5.1 的觸發條件是「top 的
+# opcode 等於這次的 trigger」，一顆 debug.log 不等於任何 trigger，自己就落選。
+# ==========================================================================
+
+case(
+    "control/lone_stack_loads_but_never_triggers",
+    "沒有 hat 的堆疊存得下來，而且綠旗不會跑到它",
+    "§4.1 scripts 的每一項不一定有 hat",
+    build(scripts=[hat(log("旗子")), [log("落單")]]),
+    {"status": "ok", "logs": ["旗子"]},
+    tags=["shape", "manual_run"],
+)
+
+case(
+    "control/click_runs_a_lone_stack",
+    "點落單堆疊上的積木 → 跑得起來（§5.1 的探索手段）",
+    "§5.1 點一下就跑",
+    build(scripts=[hat(log("旗子")), [log("落單")]]),
+    {"status": "ok", "logs": ["落單"]},
+    start="blk_3",
+    tags=["manual_run"],
+)
+
+case(
+    "control/click_starts_from_the_top_of_the_stack",
+    "點堆疊中間的積木 → 從**頂端**起跑，不是從點到的那一顆插進去",
+    "§5.1 點一下就跑",
+    # 從中間插進去會讓 repeat 的迴圈體脫離它的迴圈——畫面上看不出來的執行。
+    build(scripts=[hat(log("A"), blk("control.repeat", times=2, body=[log("B")]))]),
+    {"status": "ok", "logs": ["A", "B", "B"]},
+    start="blk_4",  # repeat 迴圈體裡的那顆 log
+    tags=["manual_run"],
+)
+
+case(
+    "control/click_a_lone_reporter_evaluates_it",
+    "畫布上一顆落單的 reporter 也存得下來，點它就求值",
+    "§4.1、§5.1 起點是 reporter 時只求值那一顆",
+    build(scripts=[hat(log("旗子")), [blk("operator.add", a=1, b=2)]]),
+    {"status": "ok", "logs": [], "value": 3},
+    start="blk_3",
+    tags=["shape", "manual_run"],
+)
+
+case(
+    "control/click_a_nested_reporter_does_not_run_its_parent",
+    "點插在孔裡的 reporter → 只求值它，外面那顆 log 不執行",
+    "§5.1 起點是 reporter 時只求值那一顆",
+    build(scripts=[hat(log(blk("operator.add", a=1, b=2)))]),
+    {"status": "ok", "logs": [], "value": 3},
+    start="blk_3",
+    tags=["manual_run"],
+)
+
 case(
     "errors/extension_block_shape_is_checked_too",
     "積木包的積木形狀一樣在載入期驗——形狀從 manifest 來",

@@ -6,6 +6,7 @@
  * 工具箱、flyout。
  */
 import * as Blockly from 'blockly/core';
+import { registerContinuousToolbox } from '@blockly/continuous-toolbox';
 
 export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
   name: 'blocky',
@@ -27,9 +28,29 @@ export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
   startHats: false,
 });
 
+/**
+ * §8.1 的工具箱版面：**一條連續的捲動軸**。
+ *
+ * 所有分類接在同一個 flyout 裡，點分類是**捲到那一段**而不是換一份清單。這讓
+ * 「我不知道那顆積木在哪一類」從一個要先答對才問得出口的問題，變成滑一遍就
+ * 解決的問題——那正是新使用者最常有的處境。
+ *
+ * 它順帶解掉「固定寬度」那一條：flyout 只有一份，寬度就是所有積木裡最寬的
+ * 那一顆，切換分類時不會再變——而畫布正是使用者在對齊積木的地方，它不該
+ * 因為左邊換了一份清單就整個左右跳動。
+ *
+ * 註冊是覆寫式的（plugin 用 `allowOverrides`），重複呼叫安全。
+ */
+registerContinuousToolbox();
+
 export const workspaceOptions: Partial<Blockly.BlocklyOptions> = {
   renderer: 'zelos',
   theme: blockyTheme,
+  plugins: {
+    toolbox: 'ContinuousToolbox',
+    flyoutsVerticalToolbox: 'ContinuousFlyout',
+    metricsManager: 'ContinuousMetrics',
+  },
   media: 'media/',
   grid: { spacing: 40, length: 3, colour: '#e2e4ee', snap: false },
   zoom: { controls: true, wheel: true, startScale: 0.75, minScale: 0.3, maxScale: 2 },

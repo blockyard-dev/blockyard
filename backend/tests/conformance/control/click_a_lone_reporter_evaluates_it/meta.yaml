@@ -1,0 +1,10 @@
+title: 畫布上一顆落單的 reporter 也存得下來，點它就求值
+spec: §4.1、§5.1 起點是 reporter 時只求值那一顆
+tags:
+- shape
+- manual_run
+start: blk_3
+expect:
+  status: ok
+  logs: []
+  value: 3

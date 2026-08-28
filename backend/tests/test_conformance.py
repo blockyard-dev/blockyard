@@ -50,6 +50,8 @@ def test_corpus_covers_spec_table() -> None:
         "extension", "host_boundary", "missing_extension",
         # §4.2 的形狀驗證：載入期擋掉，認不得的 opcode 除外
         "shape", "unknown_block",
+        # §4.1 落單堆疊 + §5.1 點一下就跑
+        "manual_run",
     }
     seen: set[str] = set()
     for d in _dirs():

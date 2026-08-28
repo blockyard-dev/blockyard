@@ -311,6 +311,14 @@ def _validate_shapes(p: Project, resolve: ShapeResolver) -> None:
 
     **認不得的 opcode 不算錯**：那是 §13.3 的佔位符（積木包還沒安裝，或專案
     來自更新版的 runtime），保留給執行期以 UnknownBlockError 呈現。
+
+    **`Script.top` 沒有形狀限制**（§4.1）。沒有 hat 的頂層堆疊是合法 IR，只是
+    永遠不會被 trigger 選中——§5.1 的觸發條件是「top 的 opcode 等於這次的
+    trigger」，一顆 `data.set` 不等於任何 trigger，所以它自然就不跑。曾經有一條
+    「腳本最上面必須是事件積木」的檢查，刪掉了：它擋的是使用者天天在做的兩件事
+    （寫到一半的積木要能存檔、落單堆疊要能點一下就跑），而它想擋的「hat 出現在
+    堆疊中間」由下面的 `_require_shape` 擋，訊息還更準確——那是 `next` 接的積木
+    必須是 command，與 top 是什麼形狀無關。
     """
     for bid, block in p.blocks.items():
         for name, inp in block.inputs.items():
@@ -320,14 +328,6 @@ def _validate_shapes(p: Project, resolve: ShapeResolver) -> None:
                 _require_shape(p, resolve, inp.id, "command", path=f"{bid}.{name}")
         if block.next is not None:
             _require_shape(p, resolve, block.next, "command", path=bid)
-
-    for script in p.scripts:
-        top = p.block(script.top)
-        shapes = resolve(top.opcode)
-        if shapes and "hat" not in shapes:
-            raise ValidationError(
-                f"腳本最上面必須是事件積木，{top.opcode} 不是", block_id=script.top
-            )
 
     for pid, proc in p.procedures.items():
         d = proc.definitionBlock

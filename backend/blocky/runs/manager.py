@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from blocky.api.validation import open_project
-from blocky.interpreter.engine import Interpreter
+from blocky.errors import ValidationError
+from blocky.interpreter.engine import DEFAULT_TRIGGER, Entry, Interpreter
 from blocky.interpreter.events import EventSink
 from blocky.interpreter.scope import InMemoryPersistStore
 from blocky.runs.broker import RunBroker
@@ -29,7 +30,9 @@ from blocky.storage import ProjectStore
 if TYPE_CHECKING:
     from blocky.extensions.registry import ExtensionRegistry
 
-DEFAULT_TRIGGER = "event.when_flag_clicked"
+# 「點一下就跑」（§5.1）沒有 trigger——它的起點是一顆積木。用一個名字佔住
+# `trigger` 欄位而不是留空，執行歷史那一欄才不會有一半是空白。
+MANUAL_TRIGGER = "manual"
 
 # 記憶體裡留幾個跑完的 Run。§6.3 的 SQLite 落地還沒做，所以這是整個執行歷史
 # ——上限存在是為了讓一個開著三天的編輯器不會慢慢吃光記憶體。
@@ -53,6 +56,9 @@ class RunHandle:
     registry: ExtensionRegistry | None = None
     task: asyncio.Task[None] | None = None
     ended_at: str | None = None
+    #: 「點一下就跑」（§5.1）點的那顆積木。None = 這是一次 trigger 執行。
+    block_id: str | None = None
+    entry: Entry | None = None
 
     @property
     def running(self) -> bool:
@@ -66,6 +72,10 @@ class RunHandle:
             "status": self.status,
             "startedAt": self.started_at,
         }
+        # 手動執行的 trigger 是 `manual`，光看它不知道跑的是哪一顆積木——
+        # 而執行歷史裡「點了什麼」正是使用者唯一分得出兩次點擊的線索。
+        if self.block_id is not None:
+            d["blockId"] = self.block_id
         if self.ended_at is not None:
             d["endedAt"] = self.ended_at
         return d
@@ -113,6 +123,7 @@ class RunManager:
         *,
         trigger: str = DEFAULT_TRIGGER,
         payload: dict[str, Any] | None = None,
+        block_id: str | None = None,
     ) -> RunHandle:
         """驗證 → 載入 → 起 task。回來的時候 Run **已經在跑了**。
 
@@ -120,6 +131,10 @@ class RunManager:
         以 `ValidationError` 拋出，由路由翻成 422 + `blockId`——與存檔同一條路
         （`api/errors.py`）。已存檔的專案照理都驗過了，但積木包可能在存檔之後
         被移除或改壞，所以這一關不能省。
+
+        `block_id` 給了就是「點一下就跑」（§5.1）：起點在**建立 task 之前**就
+        解析完，所以「畫布上有、存檔裡沒有」（存檔失敗了卻還是點了一下）會是
+        一個 422，而不是一個開始了又立刻死掉、還占著一格執行歷史的 Run。
         """
         stored = self._store.get(project_id)
         if stored is None:
@@ -143,16 +158,27 @@ class RunManager:
             persist=self._persist.setdefault(project_id, InMemoryPersistStore()),
             extensions=registry,
         )
+        entry: Entry | None = None
+        if block_id is not None:
+            try:
+                entry = interp.entry_for(block_id)
+            except ValidationError:
+                if registry is not None:
+                    await registry.unload_all()
+                raise
+
         handle = RunHandle(
             id=run_id,
             project_id=project_id,
-            trigger=trigger,
+            trigger=MANUAL_TRIGGER if block_id is not None else trigger,
             status="running",
             started_at=_now(),
             broker=broker,
             interp=interp,
             payload=payload or {},
             registry=registry,
+            block_id=block_id,
+            entry=entry,
         )
 
         broker.start()
@@ -183,7 +209,10 @@ class RunManager:
     async def _drive(self, handle: RunHandle) -> None:
         try:
             result = await handle.interp.run(
-                run_id=handle.id, trigger=handle.trigger, payload=handle.payload
+                run_id=handle.id,
+                trigger=handle.trigger,
+                payload=handle.payload,
+                entry=handle.entry,
             )
             handle.status = result.status
         except asyncio.CancelledError:
@@ -230,4 +259,4 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-__all__ = ["DEFAULT_TRIGGER", "ProjectNotFound", "RunHandle", "RunManager"]
+__all__ = ["DEFAULT_TRIGGER", "MANUAL_TRIGGER", "ProjectNotFound", "RunHandle", "RunManager"]

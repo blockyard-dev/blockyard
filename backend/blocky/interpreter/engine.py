@@ -15,6 +15,7 @@ import asyncio
 import itertools
 import sys
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
 from blocky.errors import (
@@ -28,7 +29,8 @@ from blocky.errors import (
     ValidationError,
 )
 from blocky.interpreter.events import EventSink, clip_value
-from blocky.interpreter.registry import COMMANDS, HAT_OPCODES, VALUES
+from blocky.interpreter.registry import COMMANDS, HAT_OPCODES, VALUES, resolve_shape
+from blocky.interpreter.declarations import SHAPE_HAT, SHAPE_VALUE
 from blocky.interpreter.scope import (
     MAX_FRAME_DEPTH,
     InMemoryPersistStore,
@@ -60,6 +62,30 @@ _REQUIRED_RECURSION_LIMIT = MAX_FRAME_DEPTH * PYTHON_FRAMES_PER_BLOCKY_FRAME + 1
 def _ensure_recursion_headroom() -> None:
     if sys.getrecursionlimit() < _REQUIRED_RECURSION_LIMIT:
         sys.setrecursionlimit(_REQUIRED_RECURSION_LIMIT)
+
+
+# 綠旗。`api/runs.py` 與 `runs/manager.py` 都以它為預設值——trigger 的名字是
+# 語意層的東西（§5.1 的觸發條件比對的就是它），不該在路由層再抄一份字串。
+DEFAULT_TRIGGER = "event.when_flag_clicked"
+
+
+@dataclass(frozen=True)
+class Entry:
+    """一條 thread 從哪裡開始。
+
+    綠旗執行由 trigger 選出腳本，起點永遠是 `hat.next`——hat 從不被執行（§8.1）。
+    「點一下就跑」（§5.1）的起點則是使用者點的那顆積木，而它**可能是 reporter**，
+    那時候要做的是求值不是執行。兩種起點的差別全部收在這個型別裡，`_run_thread`
+    之後的路（scope、事件、錯誤處理、取消）一條都不分岔——§5.1 說得很明白：
+    走的是同一套 Run 機制，不另開「試跑」路徑。
+    """
+
+    script_id: str
+    #: 從這顆積木往下執行整條堆疊。
+    stack: str | None = None
+    #: 只求值這一顆（起點是 reporter / boolean 時）。與 stack 互斥。
+    value: str | None = None
+
 
 class Thread:
     """一個 Script 的一次執行 = 一個 asyncio.Task（§5.1）。"""
@@ -148,6 +174,10 @@ class Interpreter:
         # 反查表：Block 物件 → blockId。錯誤訊息與事件都要靠它定位，
         # 每次線性掃描會讓深迴圈變成 O(n²)。
         self._block_ids = {id(b): bid for bid, b in project.blocks.items()}
+        # opcode → 形狀，內建與積木包同一個入口（D21）。「點一下就跑」要靠它
+        # 分辨「點的是 reporter（求值）還是 command（執行整條堆疊）」，而那必須
+        # 與載入期形狀驗證用的是**同一張表**，否則畫布上合法的東西會跑不動。
+        self._shapes = resolve_shape(extensions)
 
     # ---- 執行 ----
 
@@ -155,29 +185,28 @@ class Interpreter:
         self,
         *,
         run_id: str | None = None,
-        trigger: str = "event.when_flag_clicked",
+        trigger: str = DEFAULT_TRIGGER,
         payload: dict[str, Any] | None = None,
+        entry: Entry | None = None,
     ) -> RunResult:
         """跑一次。`run_id` 由呼叫端指定時（API 的 `/api/runs`）事件用它，
         這樣 WebSocket 的 `runId` 與 HTTP 回應是同一個字串——省掉一層對照表。
+
+        `entry` 給了就是「點一下就跑」（§5.1）：跑那一條，`trigger` 不看。
+        起點由 `entry_for()` 算，呼叫端在建立 Run **之前**就該算好——這樣
+        「找不到那顆積木」是一個 422，不是一個開始了又立刻死掉的 Run。
         """
         run_id = run_id or f"run_{next(self._ids)}"
         self.run_id = run_id
         self.sink.emit("run.start", runId=run_id, ts=time.time())
 
-        scripts = [
-            s
-            for s in self.project.scripts
-            if s.enabled and self.project.block(s.top).opcode == trigger
-        ]
+        entries = [entry] if entry is not None else self._triggered(trigger)
 
         # thread id 在**建立 task 之前**就決定，`_threads` 才能在 task 還沒被
         # 排到之前就回答「t_2 是哪一條」——§6.1 的 `stop_thread` 需要它。
-        for s in scripts:
+        for e in entries:
             tid = f"t_{next(self._ids)}"
-            self._threads[tid] = asyncio.create_task(
-                self._run_thread(tid, s.id, s.top, payload or {})
-            )
+            self._threads[tid] = asyncio.create_task(self._run_thread(tid, e, payload or {}))
         results = await asyncio.gather(*self._threads.values(), return_exceptions=True)
 
         status = "ok"
@@ -194,6 +223,63 @@ class Interpreter:
 
         self.sink.emit("run.end", runId=run_id, status=status, ts=time.time())
         return RunResult(run_id, status, self.sink.dicts())
+
+    def _triggered(self, trigger: str) -> list[Entry]:
+        """這次 trigger 選中哪些腳本（§5.1）。
+
+        條件只有一條：**top 的 opcode 等於這次的 trigger**。沒有 hat 的頂層堆疊
+        （§4.1）因此自動落選——一顆 `data.set` 不等於任何 trigger，不需要特例。
+        """
+        return [
+            Entry(script_id=s.id, stack=self.project.block(s.top).next)
+            for s in self.project.scripts
+            if s.enabled and self.project.block(s.top).opcode == trigger
+        ]
+
+    def entry_for(self, block_id: str) -> Entry:
+        """「點一下就跑」（§5.1）：把使用者點的那顆積木翻成一條 thread 的起點。
+
+        兩條規則都是 Scratch 的：
+
+        - 點到 **reporter / boolean** → 只求值那一顆。值由 `block.exit` 帶出去，
+          §8.3 的值氣泡不必為此多一種事件。
+        - 其餘（command、hat、認不得的佔位符）→ 從它所在的**堆疊頂端**起跑。
+          點迴圈裡的一顆積木跑的是整條腳本，不是從中間插進去——中間起跑會讓
+          `repeat` 的迴圈體脫離它的迴圈，那是畫面上看不出來的執行。
+
+        頂端是 hat 就從 `hat.next` 起跑（hat 不執行），沒有 hat 就從頂端自己
+        起跑——後者正是 §4.1 那條「落單堆疊是合法 IR」換來的東西。
+
+        `enabled: false` 不看：使用者指著這顆積木說「跑」，那是比腳本開關更
+        近的一次表態。
+
+        找不到 block_id 時丟 ValidationError（`Project.block`），由呼叫端翻成 422。
+        """
+        block = self.project.block(block_id)
+        if SHAPE_VALUE in self._shapes(block.opcode):
+            return Entry(script_id=self._script_of(block_id), value=block_id)
+
+        top_id = self._top_of(block_id)
+        top = self.project.block(top_id)
+        stack = top.next if SHAPE_HAT in self._shapes(top.opcode) else top_id
+        return Entry(script_id=self._script_of(top_id), stack=stack)
+
+    def _top_of(self, block_id: str) -> str:
+        """沿 `parent` 走到頂層那顆積木。"""
+        cur = block_id
+        seen: set[str] = set()
+        while cur not in seen:
+            seen.add(cur)
+            parent = self.project.block(cur).parent
+            if parent is None:
+                return cur
+            cur = parent
+        raise ValidationError(f"積木的 parent 串成環：{cur}", block_id=cur)
+
+    def _script_of(self, block_id: str) -> str:
+        """這顆積木屬於哪個 Script。只用在 `thread.start` 的 scriptId。"""
+        top = self._top_of(block_id)
+        return next((s.id for s in self.project.scripts if s.top == top), top)
 
     def request_stop(self, thread_id: str | None = None) -> bool:
         """**外部**停止（§5.5：使用者按下停止），不是 `control.stop` 積木。
@@ -223,19 +309,20 @@ class Interpreter:
                 stopped = True
         return stopped
 
-    async def _run_thread(
-        self, thread_id: str, script_id: str, top_id: str, payload: dict[str, Any]
-    ) -> str:
-        hat = self.project.block(top_id)
-
+    async def _run_thread(self, thread_id: str, entry: Entry, payload: dict[str, Any]) -> str:
         # hat 的 yields 綁成 thread-local（§5.4 第 2 層，唯讀）
         scope = Scope(self.run_scope, ThreadScope(payload), self.persist)
-        thread = Thread(self, thread_id, script_id, scope)
+        thread = Thread(self, thread_id, entry.script_id, scope)
 
-        self.sink.emit("thread.start", threadId=thread_id, scriptId=script_id)
+        self.sink.emit("thread.start", threadId=thread_id, scriptId=entry.script_id)
         status = "ok"
         try:
-            await self._exec_stack(thread, hat.next)
+            if entry.value is not None:
+                # 只求值那一顆（§5.1）。回傳值刻意丟掉——它已經隨 `block.exit`
+                # 出去了，而那是前端唯一在讀的地方。
+                await self._eval_block(thread, entry.value, self.project.block(entry.value))
+            else:
+                await self._exec_stack(thread, entry.stack)
         except StopSignal as sig:
             if sig.scope == "all":
                 self._stop_all = True
@@ -391,4 +478,4 @@ class Interpreter:
             await asyncio.sleep(0)
 
 
-__all__ = ["Interpreter", "RunResult", "Thread"]
+__all__ = ["DEFAULT_TRIGGER", "Entry", "Interpreter", "RunResult", "Thread"]

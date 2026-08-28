@@ -1,18 +1,23 @@
-"""§8.1 的兩個一致性測試：內建宣告 ↔ 實作（D21）。
+"""§8.1 的一致性測試：內建宣告 ↔ 實作（D21）。
 
 積木包靠 `_check_coverage` 在載入期比對 manifest 與 `@block`，內建沒有
-`@block` 可比。這兩個測試就是它的替代品：
+`@block` 可比。這幾個測試就是它的替代品：
 
   1. 宣告的 opcode 集合 == 註冊表的集合，且形狀相符 → 抓少宣告、多宣告、形狀寫錯
   2. §17 題庫用到的每個 input / field 名稱都宣告過        → 抓參數名對不上
+  3. **handler 原始碼**裡讀的每個 key 都宣告過，且 field / 輸入孔的分類一致
 
-第 2 個順帶把「約半數積木沒有專屬題目」那條債變成可量化的東西：**沒有題目的
-積木，它的參數名就沒有人守**。所以這裡另外印出覆蓋率，讓那筆債看得見。
+第 2 個只守得到有題目的積木（約半數），所以它順帶把那筆債變成可量化的數字。
+第 3 個補上另一半：它不需要題目，直接讀 `builtins/*.py` 的 AST，87 顆全部守得到
+——`t.value(b, "cond")` 對上 `args: {condition: …}` 這種漂移，題庫沒寫到的積木
+也躲不掉。兩者互補而不重複：AST 看得到 handler 讀什麼，題庫看得到它真的跑得動。
 """
 
 from __future__ import annotations
 
+import ast
 import json
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
@@ -160,3 +165,169 @@ def test_corpus_coverage_is_reported() -> None:
         f"題庫覆蓋的內建積木從 {BASELINE_COVERED} 掉到 {len(covered)}："
         f"{sorted(set(CORPUS_USAGE) & all_ops)}"
     )
+
+
+# --------------------------------------------------------------------------
+# 測試 3：handler 讀的 key ↔ 宣告（不需要題目，87 顆全部守得到）
+# --------------------------------------------------------------------------
+
+BUILTINS_DIR = Path(declarations.BUILTINS_DIR)
+
+# `Thread` 的讀取方法 → 這個 key 在 IR 裡是什麼。這張表就是 §4.2 那條線
+# （fields 存不可為表達式的選項，inputs 是孔）在 Python 這一側的樣子。
+_READERS = {
+    "value": "input",
+    "number": "input",
+    "string": "input",
+    "boolean": "input",
+    "stack": "stack",
+    "field": "field",
+}
+
+
+def _literal(node: ast.expr | None) -> str | None:
+    return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+
+
+class _Module:
+    """一個 builtins 模組裡「誰讀了哪些 key」。
+
+    要跨函式追，因為 handler 常常把讀取包成小工具：`object.get` 讀的是
+    `_require_object(t, b)`，而那個 `"object"` 寫在工具的**參數預設值**上。
+    只看 handler 本身會漏掉一半的 object / time 積木。
+
+    追的時候要帶上呼叫端的實參：`time.diff` 呼叫的是 `_require_ts(t, b, "a")`，
+    參數預設值 `"time"` 在那裡**不算數**。不帶實參的話這個測試自己會產生假警報，
+    而假警報最後一定會被人關掉。
+    """
+
+    def __init__(self, tree: ast.Module):
+        self.fns: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+        self.opcodes: dict[str, list[str]] = defaultdict(list)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            self.fns[node.name] = node
+            for deco in node.decorator_list:
+                if (
+                    isinstance(deco, ast.Call)
+                    and isinstance(deco.func, ast.Name)
+                    and deco.func.id in ("command", "value")
+                    and (op := _literal(deco.args[0] if deco.args else None))
+                ):
+                    self.opcodes[node.name].append(op)
+
+    def keys_of(
+        self,
+        name: str,
+        bound: dict[str, str] | None = None,
+        seen: frozenset[str] = frozenset(),
+    ) -> set[tuple[str, str]]:
+        """`name` 這個函式（含它呼叫的同模組工具）讀了哪些 key。"""
+        fn = self.fns.get(name)
+        if fn is None or name in seen:
+            return set()
+
+        names = {**self._defaults(fn), **(bound or {})}
+        out: set[tuple[str, str]] = set()
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Call):
+                continue
+            f = node.func
+            if isinstance(f, ast.Attribute) and f.attr in _READERS and len(node.args) >= 2:
+                arg = node.args[1]
+                key = _literal(arg) or (names.get(arg.id) if isinstance(arg, ast.Name) else None)
+                if key is not None:
+                    out.add((_READERS[f.attr], key))
+            elif isinstance(f, ast.Name) and f.id in self.fns:
+                out |= self.keys_of(f.id, self._binding(f.id, node), seen | {name})
+        return out
+
+    @staticmethod
+    def _defaults(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, str]:
+        """參數的字串預設值：`async def _require_ts(t, b, name="time")`。"""
+        params = [a.arg for a in fn.args.args]
+        pairs = zip(params[len(params) - len(fn.args.defaults) :], fn.args.defaults)
+        return {p: v for p, d in pairs if (v := _literal(d)) is not None}
+
+    def _binding(self, callee: str, call: ast.Call) -> dict[str, str]:
+        """呼叫端寫死的字串實參 → 被呼叫函式的參數名。"""
+        params = [a.arg for a in self.fns[callee].args.args]
+        bound = {
+            params[i]: v
+            for i, arg in enumerate(call.args)
+            if i < len(params) and (v := _literal(arg)) is not None
+        }
+        bound.update(
+            {kw.arg: v for kw in call.keywords if kw.arg and (v := _literal(kw.value)) is not None}
+        )
+        return bound
+
+
+def _handler_usage() -> dict[str, set[tuple[str, str]]]:
+    usage: dict[str, set[tuple[str, str]]] = {}
+    for path in sorted(BUILTINS_DIR.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        module = _Module(ast.parse(path.read_text(encoding="utf-8")))
+        for fn, opcodes in module.opcodes.items():
+            for op in opcodes:
+                usage[op] = module.keys_of(fn)
+    return usage
+
+
+HANDLER_USAGE = _handler_usage()
+
+
+@pytest.mark.parametrize("opcode", sorted(HANDLER_USAGE), ids=lambda o: o)
+def test_handler_reads_only_declared_args(opcode: str) -> None:
+    """讀 `builtins/*.py` 的 AST，比對它讀的 key 與宣告。
+
+    抓兩種漂移，兩種都是**畫面上完全看不出來**的：
+
+      1. handler 讀 `"cond"` 而宣告寫 `condition` → 使用者填的值到不了 handler，
+         積木安靜地拿 default 跑完。
+      2. handler 用 `t.field` 讀、宣告卻是輸入孔（或反過來）→ 編輯器把值存進
+         `inputs`，handler 去 `fields` 撈，同樣是安靜地拿 default。
+
+    找不到字面值的 key（`if_else` 的 `branch` 是變數）跳過：這裡寧可漏也不要
+    誤報，一個會叫的假警報最後會被人加 `# noqa` 關掉。
+    """
+    spec = declarations.block(opcode)
+    assert spec is not None, f"{opcode} 有 handler 卻沒有宣告"
+    if spec.dynamic:
+        pytest.skip(f"{opcode} 的參數由專案資料決定（§4.6）")
+
+    for kind, key in sorted(HANDLER_USAGE[opcode]):
+        arg = spec.args.get(key)
+        assert arg is not None, (
+            f"{opcode} 的 handler 讀了沒有宣告的 {key!r}"
+            f"（宣告的是 {sorted(spec.args)}）——使用者填的值到不了 handler"
+        )
+        if kind == "field":
+            assert arg.is_field, f"{opcode}.{key} handler 當 field 讀，宣告卻是輸入孔"
+        elif kind == "input":
+            assert not arg.is_field, f"{opcode}.{key} handler 當輸入孔讀，宣告卻是 field"
+        elif kind == "stack":
+            assert arg.type == "stack", f"{opcode}.{key} handler 當堆疊讀，宣告是 {arg.type}"
+
+
+def test_declared_args_that_no_handler_reads_are_reported() -> None:
+    """反方向只印不擋。
+
+    宣告了卻沒讀到的參數**不一定是 bug**：key 是變數算出來的時候（`if_else` 的
+    `then` / `else`）AST 看不到它。當成錯誤會逼人寫例外清單，而例外清單一長，
+    這個測試就不再有人相信。所以它是體檢報告——真正的漂移由上面那個測試擋。
+    """
+    report: dict[str, list[str]] = {}
+    for opcode, keys in sorted(HANDLER_USAGE.items()):
+        spec = declarations.block(opcode)
+        if spec is None or spec.dynamic:
+            continue
+        unread = sorted(set(spec.args) - {key for _, key in keys})
+        if unread:
+            report[opcode] = unread
+    print("\n宣告了、但 handler 沒有以字面值讀到的參數（key 由變數算出時屬正常）：")
+    for opcode, unread in report.items():
+        print(f"  {opcode}: {unread}")

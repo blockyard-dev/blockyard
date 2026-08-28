@@ -12,6 +12,7 @@ from __future__ import annotations
 from blocky.runs.broker import HOT_THRESHOLD, WINDOW_S, RunBroker, collapse
 from blocky.runs.manager import (
     DEFAULT_TRIGGER,
+    MANUAL_TRIGGER,
     ProjectNotFound,
     RunHandle,
     RunManager,
@@ -20,6 +21,7 @@ from blocky.runs.manager import (
 __all__ = [
     "DEFAULT_TRIGGER",
     "HOT_THRESHOLD",
+    "MANUAL_TRIGGER",
     "WINDOW_S",
     "ProjectNotFound",
     "RunBroker",

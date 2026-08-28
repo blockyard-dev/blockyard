@@ -1,0 +1,9 @@
+title: 點落單堆疊上的積木 → 跑得起來（§5.1 的探索手段）
+spec: §5.1 點一下就跑
+tags:
+- manual_run
+start: blk_3
+expect:
+  status: ok
+  logs:
+  - 落單

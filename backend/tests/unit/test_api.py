@@ -142,6 +142,47 @@ def test_reporter_on_a_stack_is_rejected_with_the_block_id(client: TestClient) -
     assert client.get("/api/projects/p1").status_code == 404
 
 
+def test_a_stack_without_a_hat_saves(client: TestClient) -> None:
+    """§4.1：寫到一半的積木不該擋住存檔。
+
+    這曾經是 422（「腳本最上面必須是事件積木」），而它擋的是使用者天天在做的
+    事——先拉幾顆試試看。落單堆疊是合法 IR，只是永遠不會被 trigger 選中。
+    """
+    draft = {
+        "formatVersion": 1,
+        "scripts": [{"id": "s1", "top": "orphan"}, {"id": "s2", "top": "lonely"}],
+        "blocks": {
+            # 沒有 hat 的 command 堆疊
+            "orphan": {"opcode": "debug.log", "next": "more"},
+            "more": {"opcode": "debug.log", "parent": "orphan"},
+            # 第三種頂層堆疊：落單的 reporter（§4.1）。它是「點一下就跑」的對象
+            "lonely": {"opcode": "operator.add"},
+        },
+    }
+    assert client.put("/api/projects/p_draft", json=draft).status_code in (200, 201)
+    assert client.get("/api/projects/p_draft").json()["scripts"][0]["top"] == "orphan"
+
+
+def test_a_hat_in_the_middle_of_a_stack_is_still_rejected(client: TestClient) -> None:
+    """刪掉上面那條檢查**不影響**這一條：它們本來就是兩條獨立的規則。
+
+    hat 放在堆疊中間由「`next` 接的積木必須是 command」擋下（`_require_shape`），
+    訊息還更準確——它說的是 hat 不能接在別人下面，與 top 是什麼形狀無關。
+    """
+    bad = {
+        "formatVersion": 1,
+        "scripts": [{"id": "s1", "top": "hat"}],
+        "blocks": {
+            "hat": {"opcode": "event.when_flag_clicked", "next": "hat2"},
+            "hat2": {"opcode": "event.when_flag_clicked", "parent": "hat"},
+        },
+    }
+    r = client.put("/api/projects/p1", json=bad)
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["blockId"] == "hat2"
+    assert "只能放在腳本最上面" in r.json()["detail"]["message"]
+
+
 @pytest.mark.parametrize(
     "case_dir",
     [p.parent for p in BAD_CASES],

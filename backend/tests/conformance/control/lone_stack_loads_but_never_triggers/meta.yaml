@@ -1,0 +1,9 @@
+title: 沒有 hat 的堆疊存得下來，而且綠旗不會跑到它
+spec: §4.1 scripts 的每一項不一定有 hat
+tags:
+- shape
+- manual_run
+expect:
+  status: ok
+  logs:
+  - 旗子

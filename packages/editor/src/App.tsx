@@ -1,11 +1,15 @@
 /**
- * P0b 第 5 步接上執行：載入 manifest → 註冊 → 讀專案 → 畫出工作區，
- * 存檔走 `ir/serialize.ts` → `PUT /api/projects/{id}`，
- * 執行走 `POST /api/runs` → `ws://…/ws/run/{runId}` → §8.3 的視覺回饋。
+ * 載入 manifest → 註冊 → 讀專案 → 畫出工作區，存檔走 `ir/serialize.ts` →
+ * `PUT /api/projects/{id}`，執行走 `POST /api/runs` → `ws://…/ws/run/{runId}`
+ * → §8.3 的視覺回饋。
  *
  * **執行 = 先存檔再跑**。後端跑的是已存檔的那一份（`runs/manager.py` 開頭那段
  * 註解），所以按下執行必然先送一次 PUT——順帶讓 §4 的載入期驗證在執行之前就
  * 把壞掉的積木標紅，而不是等到 runtime 才說「未知變數」。
+ *
+ * 綠旗與 §5.1 的「點一下就跑」是**同一條路**（`beginRun`），差別只有多送一個
+ * `blockId`。不另開「試跑」路徑：那樣 §6.2 的流量控制與 §5.5 的停止都要各做
+ * 兩次。
  *
  * 單專案模式（`PROJECT_ID` 固定）：專案列表、切換專案是之後的事。
  */
@@ -18,8 +22,10 @@ import { registerProcedures } from './blockly/procedures';
 import { buildContext, type ConversionContext } from './ir/context';
 import { loadProject } from './ir/deserialize';
 import { serializeWorkspace } from './ir/serialize';
+import { markInertStacks, SAVE_WARNING_ID } from './blockly/inert';
 import { RunDecorator } from './run/decorate';
 import { useRunStore } from './run/store';
+import { ExtensionsEntry } from './components/ExtensionsEntry';
 import { RunBubbles } from './components/RunBubbles';
 import { RunPanel } from './components/RunPanel';
 import { WorkspaceView } from './components/WorkspaceView';
@@ -109,7 +115,7 @@ export function App() {
     // 上一次存檔標紅的警告，這次重新驗證前先清掉——不然改對的積木會一直
     // 顯示過期的錯誤。**帶 id 清**：不帶的話會連落單堆疊的警告（§4.1）一起
     // 拆掉，於是存一次檔畫布上的 ⚠ 就全部不見了。
-    for (const block of ws.getAllBlocks(false)) block.setWarningText(null);
+    for (const block of ws.getAllBlocks(false)) block.setWarningText(null, SAVE_WARNING_ID);
 
     const project = serializeWorkspace(ws, state.ctx, {
       formatVersion: state.project.formatVersion,
@@ -128,7 +134,7 @@ export function App() {
       // 只顯示一行錯誤文字快得多。
       if (error instanceof ApiError && error.detail?.blockId) {
         const block = ws.getBlockById(error.detail.blockId);
-        block?.setWarningText(error.detail.message);
+        block?.setWarningText(error.detail.message, SAVE_WARNING_ID);
         block?.select();
       }
       setSaveState({ status: 'error', message: describe(error) });
@@ -136,39 +142,84 @@ export function App() {
     }
   }, [state]);
 
-  const handleRun = useCallback(async () => {
-    const store = useRunStore.getState();
-    socketRef.current?.close();
-    socketRef.current = null;
-    decoratorRef.current?.clear();
-    store.begin();
+  /**
+   * 開一次 Run。`blockId` 給了就是 §5.1 的「點一下就跑」。
+   *
+   * 綠旗與點擊走同一條路——差別只有多送一個 `blockId`。前一個 Run 先停掉：
+   * 編輯器同時只顯示一個 Run（一個 socket、一份高亮），不停的話畫面上看不見
+   * 的那個 `forever` 迴圈會繼續在後端轉。
+   */
+  const beginRun = useCallback(
+    async (blockId?: string) => {
+      const store = useRunStore.getState();
+      const previous = store.runId;
+      if (previous && (store.status === 'running' || store.status === 'starting')) {
+        void stopRun(previous);
+      }
+      socketRef.current?.close();
+      socketRef.current = null;
+      decoratorRef.current?.clear();
+      store.begin();
 
-    if (!(await save())) {
-      store.fail('存檔沒過，沒有東西可以跑');
-      return;
-    }
+      if (!(await save())) {
+        store.fail('存檔沒過，沒有東西可以跑');
+        return;
+      }
 
-    try {
-      const run = await startRun(PROJECT_ID);
-      store.attach(run);
-      socketRef.current = new RunSocket(run.runId, {
-        onFrame: (frame) => useRunStore.getState().apply(frame),
-        onClose: (clean) => {
-          const s = useRunStore.getState();
-          // Run 還在跑卻斷線：使用者要知道畫面停在半路，而不是以為它跑完了。
-          if (s.status === 'running' || s.status === 'starting') {
-            s.finish(clean ? 'cancelled' : 'error', clean ? undefined : '事件連線中斷');
-          }
-        },
-      });
-    } catch (error: unknown) {
-      store.fail(describe(error));
-    }
-  }, [save]);
+      try {
+        const run = await startRun(PROJECT_ID, { blockId });
+        store.attach(run);
+        socketRef.current = new RunSocket(run.runId, {
+          onFrame: (frame) => useRunStore.getState().apply(frame),
+          onClose: (clean) => {
+            const s = useRunStore.getState();
+            // Run 還在跑卻斷線：使用者要知道畫面停在半路，而不是以為它跑完了。
+            if (s.status === 'running' || s.status === 'starting') {
+              s.finish(clean ? 'cancelled' : 'error', clean ? undefined : '事件連線中斷');
+            }
+          },
+        });
+      } catch (error: unknown) {
+        store.fail(describe(error));
+      }
+    },
+    [save],
+  );
 
   const handleStop = useCallback(() => {
     if (runId) void stopRun(runId);
   }, [runId]);
+
+  /**
+   * §5.1 的「點一下就跑」與 §4.1 的落單堆疊警告。兩件事同一個 listener，因為
+   * 它們都只在「使用者動了工作區」時才需要重算。
+   *
+   * 點到影子積木時往上找一顆真的積木：影子的值存在父積木的 `inputs` 裡
+   * （§4.2），它自己沒有 blockId 可以送給後端。點欄位不會走到這裡——Blockly
+   * 的 gesture 對欄位發的是 `doFieldClick`，不發 CLICK 事件。
+   */
+  useEffect(() => {
+    if (!workspace || state.status !== 'ready') return;
+    const { ctx } = state;
+    markInertStacks(workspace, ctx);
+
+    const listener = (event: Blockly.Events.Abstract) => {
+      if (event.type === Blockly.Events.CLICK) {
+        const click = event as Blockly.Events.Click;
+        // flyout 裡的積木有自己的 workspace：點工具箱是「拿一顆出來」，不是執行
+        if (click.targetType !== 'block' || click.workspaceId !== workspace.id) return;
+        let block = click.blockId ? workspace.getBlockById(click.blockId) : null;
+        while (block?.isShadow()) block = block.getParent();
+        if (block) void beginRun(block.id);
+        return;
+      }
+      // 積木被拉走、接上、刪掉都可能讓一條堆疊變成（或不再是）落單的
+      if (!event.isUiEvent) markInertStacks(workspace, ctx);
+    };
+
+    workspace.addChangeListener(listener);
+    return () => workspace.removeChangeListener(listener);
+  }, [workspace, state, beginRun]);
 
   return (
     <div className="app">
@@ -194,7 +245,7 @@ export function App() {
             <button
               type="button"
               className="button button-run"
-              onClick={() => void handleRun()}
+              onClick={() => void beginRun()}
               disabled={running}
             >
               ▶ 執行
@@ -229,6 +280,7 @@ export function App() {
       {state.status === 'ready' && (
         <div className="stage">
           <WorkspaceView toolbox={state.registration.toolbox} onReady={handleWorkspaceReady} />
+          <ExtensionsEntry groups={state.registration.groups} />
           <RunBubbles workspace={workspace} />
           <RunPanel />
         </div>

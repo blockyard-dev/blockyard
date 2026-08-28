@@ -16,6 +16,31 @@ import { FIELD_TEXT_TYPE, type FieldTextOptions } from './fields/FieldText';
 export type BlockType = string;
 
 /**
+ * 事件積木的帽子。
+ *
+ * **不能寫成 `definition.style = { hat: 'cap' }`**，雖然那是官方文件的寫法。
+ * Blockly 的 `jsonInit` 讀完會把定義物件上的 `style` 設成 `null`：
+ *
+ * ```js
+ * a.style && typeof a.style === 'object' && ((this.hat = a.style.hat), (a.style = null));
+ * ```
+ *
+ * 而那份定義物件是**所有同型別積木共用的同一個物件**。於是只有第一顆拿得到
+ * 帽子，第二顆之後 `a.style` 已經是 null——工具箱先生一顆，畫布上那顆就沒有
+ * 帽子了。症狀是「帽子偶爾會有」，而它取決於誰先被建立，非常難查。
+ *
+ * extension 沒有這個問題：它在**每一顆**積木的 init 時跑。
+ */
+const HAT_EXTENSION = 'blocky_start_hat';
+
+function registerHatExtension(): void {
+  if (Blockly.Extensions.isRegistered(HAT_EXTENSION)) return;
+  Blockly.Extensions.register(HAT_EXTENSION, function (this: Blockly.Block) {
+    this.hat = 'cap';
+  });
+}
+
+/**
  * C 型積木的堆疊在 `text` 裡的位置記號。
  *
  * `stack` 參數不出現在 `%(name)` 裡（Blockly 把堆疊畫在文字**下方**而不是
@@ -78,6 +103,7 @@ function isField(arg: ArgSpec): boolean {
  * 函式有沒有宣告回傳型別而變（D22）。那是第 7 步的 mutator 的事。
  */
 export function defineManifest(manifest: Manifest): RegisteredBlock[] {
+  registerHatExtension();
   const { definitions, blocks } = buildDefinitions(manifest);
   Blockly.common.defineBlocksWithJsonArray(definitions as never);
   return blocks;
@@ -252,10 +278,10 @@ function applyShape(definition: Record<string, unknown>, spec: BlockSpec): void 
       definition.output = 'Boolean';
       break;
     case 'hat':
-      // hat 只有下方接點，且畫成帽子。`style` 物件在 jsonInit 裡只是 `hat` 的
-      // 載體，讀完就被清成 null，不會與上面的 `colour` 打架。
+      // hat 只有下方接點，且畫成帽子（見 `registerHatExtension` 為什麼不用
+      // 官方文件那個 `style: { hat: 'cap' }`）。
       definition.nextStatement = null;
-      definition.style = { hat: 'cap' };
+      definition.extensions = [HAT_EXTENSION];
       break;
   }
 }

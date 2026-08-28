@@ -79,7 +79,7 @@ html, body, #root { height: 100%; margin: 0; }
 /* 工作區 + 面板 + 氣泡層。氣泡層是 fixed，因為它的座標直接來自
    getBoundingClientRect()（見 RunBubbles.tsx），換算成容器相對座標只是
    多一次減法與一次會漂移的假設。 */
-.stage { flex: 1; min-height: 0; display: flex; }
+.stage { flex: 1; min-height: 0; display: flex; position: relative; }
 .stage .workspace { flex: 1; min-width: 0; }
 
 .bubble-layer {
@@ -93,10 +93,11 @@ html, body, #root { height: 100%; margin: 0; }
   position: absolute;
   top: 0;
   left: 0;
-  /* 積木左上角是定位原點，氣泡往上錯開一點，蓋住的是空白不是積木本身 */
+  /* 積木上緣中央是定位原點（RunBubbles 算的），氣泡往上錯開一點，蓋住的是
+     空白不是積木本身；-50% 把它從「錨點在左緣」變成「錨點在中央」。 */
   margin-top: -0.4rem;
-  transform-origin: bottom left;
-  translate: 0 -100%;
+  transform-origin: bottom center;
+  translate: -50% -100%;
   max-width: 22rem;
   max-height: 14rem;
   overflow: auto;
@@ -204,3 +205,81 @@ html, body, #root { height: 100%; margin: 0; }
   overflow: hidden;
   clip-path: inset(50%);
 }
+
+/* ------------------------------------------------------------------ *
+ * 面板的開合（§8.3：變數面板要能關）
+ * ------------------------------------------------------------------ */
+
+.section-toggle {
+  font: inherit;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.section-caret { font-size: 0.6rem; }
+.section-count {
+  margin-left: auto;
+  padding: 0 0.35rem;
+  border-radius: 0.6rem;
+  background: #eceef5;
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------------ *
+ * 擴充功能入口（§8.1）。位置就是 Scratch 的「添加擴展」：工具箱左下角。
+ * 疊在工具箱上而不是插進它裡面——Blockly 的工具箱 DOM 是它自己畫的，
+ * 插進去等於跟著它的版本走。
+ * ------------------------------------------------------------------ */
+
+.ext-entry {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  /* 高過 Blockly 的工具箱（`.blocklyToolbox` 是 z-index 70）：入口疊在工具箱
+     欄位的左下角，就是 Scratch 放「添加擴展」的位置。 */
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.ext-button {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(20 20 40 / 12%);
+  cursor: pointer;
+}
+.ext-button-icon { font-size: 0.9rem; line-height: 1; }
+
+.ext-panel {
+  width: 15rem;
+  max-height: 20rem;
+  overflow: auto;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: #fff;
+  box-shadow: 0 4px 14px rgb(20 20 40 / 16%);
+  font-size: 0.75rem;
+}
+.ext-panel h2 { margin: 0 0 0.5rem; font-size: 0.75rem; color: var(--muted); }
+.ext-list { margin: 0 0 0.6rem; padding: 0; list-style: none; }
+.ext-list li { display: flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0; }
+.ext-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex: none; }
+.ext-name { font-weight: 600; }
+.ext-meta { margin-left: auto; color: var(--muted); }
+.ext-note { margin: 0.5rem 0 0; color: var(--muted); line-height: 1.6; }

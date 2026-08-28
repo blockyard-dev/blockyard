@@ -11,10 +11,13 @@ import { toApiError } from './client';
 export interface RunSummary {
   runId: string;
   projectId: string;
+  /** 綠旗是 `event.when_flag_clicked`；「點一下就跑」是 `manual`。 */
   trigger: string;
   status: 'running' | 'ok' | 'error' | 'cancelled';
   startedAt: string;
   endedAt?: string;
+  /** §5.1「點一下就跑」點的那顆積木。 */
+  blockId?: string;
 }
 
 /** §5.6 的錯誤形狀（`backend/blocky/errors.py` 的 `BlockyError.to_dict`）。 */
@@ -49,12 +52,22 @@ export interface RunFrame {
   dropped?: number;
 }
 
-export async function startRun(projectId: string, signal?: AbortSignal): Promise<RunSummary> {
+/**
+ * 開一次 Run。
+ *
+ * `blockId` 給了就是 §5.1 的「點一下就跑」：從那顆積木所在的堆疊頂端起跑，
+ * 起點是 reporter 時只求值那一顆。**同一個端點**——同一份事件、同一個停止
+ * API、同一套 §6.2 流量控制。
+ */
+export async function startRun(
+  projectId: string,
+  opts: { blockId?: string; signal?: AbortSignal } = {},
+): Promise<RunSummary> {
   const res = await fetch('/api/runs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId }),
-    signal,
+    body: JSON.stringify(opts.blockId ? { projectId, blockId: opts.blockId } : { projectId }),
+    signal: opts.signal,
   });
   if (!res.ok) throw await toApiError(res, `POST /api/runs → ${res.status}`);
   return (await res.json()) as RunSummary;

@@ -41,6 +41,8 @@ class Case:
     clock: float | None = None      # 固定時鐘（epoch ms），讓 time.now 可重現
     timezone: str = "UTC"
     persist: dict[str, Any] = field(default_factory=dict)
+    # §5.1「點一下就跑」：從這顆積木起跑，而不是由 trigger 選腳本。空 = 綠旗。
+    start: str | None = None
 
     def meta(self) -> dict[str, Any]:
         m: dict[str, Any] = {"title": self.title, "spec": self.spec}
@@ -52,6 +54,8 @@ class Case:
             m["timezone"] = self.timezone
         if self.persist:
             m["persist"] = self.persist
+        if self.start is not None:
+            m["start"] = self.start
         m["expect"] = self.expect
         return m
 
@@ -65,6 +69,10 @@ class Result:
     persist: dict[str, Any]
     error: dict[str, Any] | None
     load_error: str | None = None
+    # 最後一顆 reporter 回了什麼。「點一下就跑」的起點是 reporter 時，這就是
+    # 整題的答案——而它只出現在事件裡（§8.3 的值氣泡讀的也是這個），沒有
+    # 這一欄的話那種題目只剩黃金軌跡在守，等於沒有手寫規格。
+    value: Any = None
 
 
 async def run_case(case: Case) -> Result:
@@ -104,7 +112,8 @@ async def run_case(case: Case) -> Result:
         extensions=registry,
     )
     try:
-        run = await interp.run()
+        entry = interp.entry_for(case.start) if case.start is not None else None
+        run = await interp.run(entry=entry)
     finally:
         if registry is not None:
             await registry.unload_all()
@@ -112,6 +121,7 @@ async def run_case(case: Case) -> Result:
     events = normalize(run.events)
     logs = [e["text"] for e in events if e["op"] == "log"]
     error = next((e["error"] for e in events if e["op"] == "block.error"), None)
+    values = [e["value"] for e in events if e["op"] == "block.exit" and "value" in e]
 
     return Result(
         status=run.status,
@@ -120,6 +130,7 @@ async def run_case(case: Case) -> Result:
         variables=dict(interp.run_scope.vars),
         persist=store.snapshot(),
         error=error,
+        value=values[-1] if values else None,
     )
 
 
@@ -143,6 +154,9 @@ def check(case: Case, result: Result) -> list[str]:
 
     if "logs" in exp and result.logs != exp["logs"]:
         fail("log 輸出不符", exp["logs"], result.logs)
+
+    if "value" in exp and result.value != exp["value"]:
+        fail("最後一顆 reporter 的回傳值不符", exp["value"], result.value)
 
     for name, want in (exp.get("vars") or {}).items():
         got = result.variables.get(name, "<不存在>")
@@ -211,6 +225,7 @@ def read_case(d: Path) -> tuple[Case, list[dict[str, Any]]]:
         clock=meta.get("clock"),
         timezone=meta.get("timezone", "UTC"),
         persist=meta.get("persist", {}),
+        start=meta.get("start"),
     )
     return case, golden
 

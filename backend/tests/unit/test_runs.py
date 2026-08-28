@@ -351,6 +351,78 @@ def test_block_error_reaches_the_client(client: TestClient) -> None:
     assert events[-1]["status"] == "error"
 
 
+# --------------------------------------------------------------------------
+# 4. 點一下就跑（§5.1）
+#
+# 語意（從哪裡起跑、reporter 只求值一顆）由題庫守（conformance/control/click_*）。
+# 這裡守的是 HTTP 那一段：blockId 進得去、summary 說得出點了什麼、指到不存在的
+# 積木是 422 而不是一個開始了又立刻死掉的 Run。
+# --------------------------------------------------------------------------
+
+
+def draft_project(project_id: str = "p_click") -> dict[str, Any]:
+    """一份「寫到一半」的專案：一條有 hat 的腳本，加一條落單的堆疊（§4.1）。"""
+    return {
+        "formatVersion": 1,
+        "meta": {"id": project_id, "name": "草稿"},
+        "scripts": [{"id": "sc_1", "top": "hat"}, {"id": "sc_2", "top": "lone"}],
+        "blocks": {
+            "hat": {"opcode": "event.when_flag_clicked", "next": "flag_says"},
+            "flag_says": {
+                "opcode": "debug.log",
+                "parent": "hat",
+                "inputs": {"text": {"kind": "literal", "value": "旗子"}},
+            },
+            "lone": {
+                "opcode": "debug.log",
+                "inputs": {"text": {"kind": "literal", "value": "落單"}},
+            },
+        },
+    }
+
+
+def test_click_runs_only_that_stack(client: TestClient) -> None:
+    """§5.1：同一個端點、同一份事件，只是起點從 trigger 換成 blockId。"""
+    pid = save(client, draft_project())
+    run = client.post("/api/runs", json={"projectId": pid, "blockId": "lone"})
+    assert run.status_code == 201, run.text
+
+    summary = run.json()
+    assert summary["blockId"] == "lone"
+    assert summary["trigger"] == "manual"
+
+    with client.websocket_connect(f"/ws/run/{summary['runId']}") as ws:
+        events = drain(ws)
+
+    assert [e["text"] for e in events if e["op"] == "log"] == ["落單"]
+    assert events[-1]["status"] == "ok"
+
+
+def test_green_flag_still_skips_the_lone_stack(client: TestClient) -> None:
+    """同一份專案按綠旗：落單堆疊選不中——它不等於任何 trigger。"""
+    pid = save(client, draft_project(project_id="p_click_flag"))
+    run_id = client.post("/api/runs", json={"projectId": pid}).json()["runId"]
+
+    with client.websocket_connect(f"/ws/run/{run_id}") as ws:
+        events = drain(ws)
+
+    assert [e["text"] for e in events if e["op"] == "log"] == ["旗子"]
+
+
+def test_click_on_a_block_that_is_not_in_the_saved_project_is_422(client: TestClient) -> None:
+    """畫布改了沒存就點：起點在**建立 Run 之前**解析，所以這是 422。
+
+    回 201 再讓那個 Run 立刻死掉的話，執行歷史會多一格什麼都沒做的紀錄，而
+    使用者要到 WebSocket 接上之後才知道自己點的東西根本不存在。
+    """
+    pid = save(client, draft_project(project_id="p_click_missing"))
+    res = client.post("/api/runs", json={"projectId": pid, "blockId": "blk_nope"})
+
+    assert res.status_code == 422, res.text
+    assert res.json()["detail"]["blockId"] == "blk_nope"
+    assert client.get("/api/runs").json() == []
+
+
 def test_run_of_unsaved_project_is_404(client: TestClient) -> None:
     """跑的是**已存檔**的專案，所以「沒存過」是找不到，不是驗證失敗。"""
     res = client.post("/api/runs", json={"projectId": "prj_never_saved"})
