@@ -1,85 +1,98 @@
 # PROGRESS
 
-最後更新：2026-08-28 ｜ 9 commits
+最後更新：2026-08-28 ｜ 11 commits
 ｜ 後端 `cd backend && .venv/bin/python -m pytest` → 364 passed, 2 skipped（題庫 63 題）
-｜ 前端 `cd packages/editor && npm test` → 23 passed
+｜ 前端 `cd packages/editor && npm test` → 75 passed（23 define + 52 round-trip）
 
 ## 1. 本次完成
 
-**P0b 第 3 步：Blockly zelos 工作區 + 動態註冊 + 工具箱**（§15，`packages/editor/`）
+**P0b 第 4 步：IR ↔ Blockly 雙向轉換（§8.4）+ property test + 接上存讀檔**（`packages/editor/src/ir/`）
 
-**第一次看到介面。** 10 份 manifest（9 個內建命名空間 + demo 包）→ 96 顆積木畫進工具箱，
-形狀（command / reporter / boolean / hat / C 型）全部正確。內建與第三方走的是同一段
-程式碼，`define.ts` 裡沒有出現任何一個 opcode 的名字（D21）。
+**閉環了。** 拉積木、存檔、重新整理、積木原封不動地回來；存檔踩到後端驗證錯誤，
+那顆積木會標紅、topbar 顯示後端的訊息一字不差——這一步做完之前那句話（「載入期
+驗證是第二道防線」）才第一次真的被走過。
 
-- `blockly/define.ts` — manifest → Blockly block definition。`%(name)` → `%1`；`⋯` 是
-  C 型積木的堆疊分界（`if_else` 的「否則」要落在第一個堆疊後面）。**`reporter` 一律
-  `output: null` 不帶 `returns` 的 check**——§8.5 說型別提示用警告不用形狀，寫成 check
-  之後型別未知的變數就插不進宣告了型別的孔；`boolean` 給 `output: 'Boolean'` 只為了讓
-  孔畫成六角形，視覺文法留住、連接限制沒跟著來
-- `blockly/fields/FieldText.ts` — §8.5 的那**一個**類別，能力用 options 開關。第 3 步做掉
-  多行三層（宣告 / 自動 / 強制）與變數名稱的字元限制；`${}` pill、autocomplete、運算式
-  紅線留給第 6 步**換實作而不是換類別**。繼承官方的 `FieldMultilineInput` 而不是
-  `FieldTextInput`，因為從後者起家的話第 6 步接多行要整個換基底
-- `blockly/toolbox.ts` — 一份 manifest 一個分類，顏色來自 `manifest.color`。
-  `deprecated: true` 的**註冊但不上架**：舊專案載得進來，但拉不出新的一顆
-- `scripts/gen-types.mjs` — 從 `manifest.schema.json` 產生 TS 型別，`--check` 擋倒退
-  （與 `tools/export_schema.py` 同一個 CI 慣例）
-- `blocky serve` 現在把 `packages/editor/dist/` 掛在 `/` 上，dev 則是 Vite 代理 `/api`
+- `ir/deserialize.ts` — IR → Blockly。**沒有走 Blockly 的 workspace JSON 格式**，
+  直接用 `serialization.blocks.append()` 逐個 script／函式定義餵一顆巢狀 `State`
+  進去，blockId 原樣當 Blockly 的 `id` 傳下去——後端 422 回的 `blockId` 因此不需要
+  對照表，直接 `workspace.getBlockById()` 就能標紅。
+- `ir/serialize.ts` — 反過來，讀 `serialization.blocks.save()` 的巢狀狀態攤平回
+  IR 扁平的 `blocks` map。`parent` 的算法只有一條規則：「這顆積木是被哪一次遞迴
+  呼叫發現的」，不管是透過 `next`、輸入孔還是 C 型堆疊。
+- `ir/template.ts` — **不是** `template.py` 的移植，只搬了存檔前端必須自己決定的
+  兩件事：一格文字算 `literal` 還是 `template`、`whole` 怎麼算。`refs` 照設計文件
+  §4.7 的話「不要在前端算」，一律送空陣列，後端自己重新解析。
+- `blockly/procedures.ts` — `procedure.definition` / `procedure.call` 是 manifest
+  裡唯一 `dynamic: true` 的積木（參數來自 `project.procedures`，不是宣告）。做法是
+  **每個函式各自一組積木類型**（`procedure.call#p_sum`），直接餵給 `define.ts` 原本
+  就有的 `buildBlock`——形狀、影子、`%()` 展開全部免費繼承，proc id 嵌在 Blockly
+  `type` 字串裡，序列化不需要另外處理 Blockly 的 mutator/extraState。**這不是第 7
+  步要做的互動式 mutator**，只是讓第 4 步的轉換層對函式積木一視同仁；換函式名稱
+  或參數目前得整組重新註冊，第 7 步接手時多半會換掉這個機制。
+- `scripts/gen-types.mjs` 擴充成同時吃 `manifest.schema.json` 與新增的
+  `project.schema.json`，產生 `src/types/project.ts`——IR 現在跟 manifest 一樣，
+  型別有唯一真實來源。
+- `App.tsx` 接上 `GET/PUT /api/projects/prj_local`：讀不到就是新專案；存檔按鈕跑
+  `serializeWorkspace` → PUT；422 帶 `blockId` 時 `setWarningText` + `select()`
+  標紅，不帶就只顯示 topbar 的錯誤文字。單專案模式，專案列表留給之後。
 
-**新增前端測試 23 題**（`blockly/define.test.ts`）
+**Property test：63 份題庫全部跑過 `deserialize → serialize`**（`ir/roundtrip.test.ts`），
+52 份要求逐欄位相等，11 份因為下面兩個理由被排除且**寫明原因**：形狀本來就擺錯
+位置／opcode 不存在（Blockly 自己的連接系統擋在比後端更早一層，測不了）；或字面值
+是 `boolean`／`null`／字典下拉裡沒有的選項（編輯器的文字／數字影子畫不出這些
+JSON 型別，只有手寫 IR 才寫得出來）。比對前用同一條「省略欄位＝預設值」規則把
+兩邊的 dropdown／boolean 欄位拉平——這條規則跟 `deserialize.ts` 補 dropdown 預設值
+是同一個發現，只是產品碼負責「保留現有的值」，測試負責「不要求猜哪種寫法比較對」。
 
-後半直接讀**後端真正在用的那 9 份 `builtins/*.yaml`**，不複製 fixture——複製出來的
-那份不會跟著 handler 一起改，於是測試會在真的漂移的那天繼續綠著。守四條不變量：
-宣告過的參數都畫得出來且只畫一次、每個 `%N` 都對得到參數、每個非 boolean 的輸入孔
-都有影子、每顆積木都有 `message0`。
+**做的過程中發現兩個不算「坑」但值得記下來的設計判斷**
 
-**做的過程中撞到三個坑，都已修掉，也都有測試守著**
-
-| 坑 | 症狀 | 為什麼會發生 |
-|---|---|---|
-| 「沒被 `%()` 參照到的參數補在後面」算太早 | `如果 ⬡ 那麼` 變成 `如果 那麼 ⬡ ⬡` | `consumed` 是展開 `%()` 時才填的，在那之前算等於全部都算漏網之魚 |
-| `multiline` / `min` / `max` 到不了使用者打字的地方 | `debug.log` 宣告了 `multiline: true` 卻是單行 | 使用者打字的是**影子積木上的欄位**，而共用的影子帶不動 per-arg 設定。改成宣告了修飾欄位就給一顆專屬影子 |
-| `FieldText` 的 options 被自己的 class field 初始化蓋掉 | `type: variable` 的名稱限制安靜失效 | Blockly 的 `Field` constructor 裡就呼叫 `configure_()`，而 TS 的 class field 初始化在 `super()` **回來之後**才跑。改用 `declare` |
+| 判斷 | 為什麼 |
+|---|---|
+| 字面值影子（文字 vs 數字）**依值本身的 JSON 型別選，不依 manifest 宣告的 arg type** | `data.set` 的 `value` 宣告成 `type: string`，但那只是「這孔用文字框編輯」的通用宣告——`operator.eq` 的 `a`/`b` 也宣告成 `type: string`，題庫卻故意塞一個字串 `"5"` 和一個數字 `5` 進去測「型別不同就不相等」（§4.4.1）。信任宣告的話兩邊會被同一種影子吃掉，測試想量的差異反而消失；信任值本身，兩邊各自的影子類型忠實反映當下的值，`equality_does_not_coerce` 這題才測得出東西 |
+| `field_dropdown` 沒有明講初始值時，Blockly 只會選**選項列表的第一個**，不是 manifest 的 `default` | `debug.log` 的 `level` 第一個選項是「除錯」，manifest 宣告的預設卻是「資訊」。`define.ts` 早就為了工具箱算過這個對照（`fieldDefaults()`），這裡直接借同一份資料在 `deserialize.ts` 補上，`serialize.ts` 不需要對稱處理——因為「省略」和「明講預設值」在 IR 裡本來就是同一件事（`t.field(b, "level", "info")` 的 fallback） |
 
 ## 2. 未解決問題與已知限制
 
-- **Q10 目標使用者未定**（教育 vs 開發者）。不阻擋 P0b；P1 的三個手寫包開工前必須定。
+- **新的、值得記下來的產品缺口**：`data.set`、`operator.eq` 這類參數宣告成通用
+  `type: string`（可以放任何 IR 值）的孔，**編輯器目前只能透過文字框打字**，而
+  文字框只產得出字串——沒有辦法直接輸入一個真正的數字 `99`（不是字串 `"99"`）、
+  布林 `true`、或 `null`。這不是這一步的 bug：`operator.eq` 的題庫測資明確要求
+  字串 `"5"` 與數字 `5` 是不同的東西（§4.4.1），content-sniffing（"看起來像數字
+  就自動轉數字"）會直接破壞這個測試想守住的區別，所以刻意不做。想在畫布上打出一個
+  數字，目前只能接一顆 `operator` 或 `type.cast` reporter。要補上的話，屬於 §8.5
+  文字欄位的能力範圍（第 6 步），或需要另一種積木/欄位承載非字串字面值——**Q16
+  待補一條**。
 - **P1 剩下的部分刻意延後**：SubprocessHost 與跨 process 的反向通道（§7.6）、`ctx.http`（§7.4）、secret 值遮蔽（§12.2）、migrations（§13.2）。介面已定案、合約測試已對 host 參數化，SubprocessHost 接上去只要在 `HOSTS` 加一行。
-- **形狀驗證已接上前端的一半。** 編輯器的積木形狀正確了（拼不出形狀錯誤的腳本），但 §8.4 的 IR ↔ Blockly 轉換還沒寫，所以「載入期驗證是第二道防線」這句話還沒真的被測過——要等第 4 步把 63 份題庫 `project.json` 灌進工作區。
-- **manifest 沒有 `cap` 宣告。** `control.forever`、`control.stop`、`procedure.return` 在 Scratch 是 cap block（下面不能接積木），YAML 裡只有註解寫著這件事，宣告本身沒有欄位表達它——於是前端替它們接上了 `nextStatement`，後端也不擋。要嘛 manifest 加一個 `cap: true`（與 D20「形狀來自宣告，不從實作反推」一致），要嘛承認它只是死碼。**不要在前端寫死一份 opcode 清單**，那正是 D21 想消滅的第二條路。
-- **動態下拉（`source`）還是文字框。** `demo.color_of` 的水果下拉現在是個文字影子。要 `POST /api/extensions/{id}/dropdown/{source}`（§8.1 第 4 步）才問得到選項。形狀與 IR 表示（`inputs` 裡的字面值）與接上之後相同，屆時換掉的只有影子的型別。
-- **空的變數名稱欄位很難發現。** `設定 [ ] 為 ()` 的名稱格是個空白小方塊，看不出可以打字。§8.5 的 autocomplete（第 6 步）會解決，在那之前它只是「能用但不好用」。
+- **§8.4 完成了轉換，但沒有互動編輯**：函式的 mutator 對話框（新增/刪除參數、切換回傳型別）、變形失敗後的孤兒處理、靜態警告全部還是第 7 步的事。目前拉一顆函式呼叫積木、改函式參數，都還沒有 UI——`procedures.ts` 的每函式一組類型是撐到第 7 步的過渡機制，不是最終形態。
+- **變數索引 `variables` 目前一律存空物件**。§4.5 說這欄位是衍生索引，刪掉重算不影響執行語意；但變數監看面板要用到之前，先誠實地留空，好過算一份會跟著這裡的規則慢慢漂移、卻沒有人用的索引。
+- **`ui.multiline` 的第三層（強制切換）還沒接上序列化**。`FieldText` 已經有 `setForcedMultiline`（第 3 步），但 `deserialize.ts`/`serialize.ts` 都還沒讀寫 `blocks[].ui.multiline`——右鍵選單本身也還沒做（第 6 步）。
+- **動態下拉（`source`）還是文字框**。要 `POST /api/extensions/{id}/dropdown/{source}`（§8.1 第 4 步，還沒排進施工順序，可能跟第 6 步一起）。
+- **空的變數名稱欄位很難發現**。§8.5 的 autocomplete（第 6 步）會解決。
 - **P0b 剩下的後端缺口**：Run 沒有**外部**停止 API、§6.2 的 50ms 批次與 `block.hot` 聚合沒實作。兩者都在第 5 步，沒有後者 `forever` 迴圈會打爆 WebSocket。
-- **題庫覆蓋不全，而且現在是可量化的**：87 顆內建積木只有 **42 顆**（48%）在題庫裡出現過。`test_builtin_manifests.py::test_corpus_coverage_is_reported` 會把沒被覆蓋的清單印出來，並用 `BASELINE_COVERED = 42` 擋倒退。**沒有題目的積木，它的參數名就沒有人守**——補題目時記得把基準往上調。`data.list_insert` 用 `len+1` 正規化索引，仍**無測試**，可疑。
+- **題庫覆蓋不全，而且現在是可量化的**：87 顆內建積木只有 42 顆（48%）在題庫裡出現過（`BASELINE_COVERED`，第 3 步記的數字，這一步沒有新增題目所以沒變）。`data.list_insert` 用 `len+1` 正規化索引，仍**無測試**，可疑。
 - **§17.2 有幾列還寫不出題目**：`concurrency` 的 drop/queue/restart、`CancelledError` 穿透、`block.hot` 聚合、§6.3 的 SQLite 落地——都要等 P0b 第 5 步／P2 的機制存在。
 - **`blocky serve` 沒有正式打包測試**：`[project.scripts]` 加了，但只驗過 `python -m blocky.cli`，沒驗過 `pip install` 之後的 `blocky` 指令。
 - **遞迴 headroom 是估的**：`PYTHON_FRAMES_PER_BLOCKY_FRAME = 24`（`interpreter/engine.py`）為經驗值，靠 `RecursionError` 保險絲兜底。
-- 設計文件 §16 的 Q1、Q3–Q9、Q11、Q12 仍未決。
+- **Q10 目標使用者未定**（教育 vs 開發者）。不阻擋 P0b；P1 的三個手寫包開工前必須定。
+- 設計文件 §16 的 Q1、Q3–Q9、Q11、Q12 仍未決；**Q16（見上）新增**。
 
 ## 3. 下一次的第一個 TODO
 
-**P0b 第 4 步：IR ↔ Blockly 雙向轉換（§8.4）+ property test**（估 1 週）。**做完存讀檔才閉環。**
+**P0b 第 5 步：`/api/runs` + WS 事件 + §6.2 批次與聚合 + 停止 API**（估 1 週）。
+完成設計文件 §15 驗收 1（「重複 10 次 → 改變 count 增加 1 → log」跑起來、逐顆積木
+高亮、變數面板即時變動、按停止能立即中斷）。
 
-測資是現成的：§17 題庫那 63 份 `project.json` 一份都不必另寫。
+- [ ] `POST /api/runs`：拿目前這份（已存檔的）專案、跑 `interpreter/engine.py`，
+      回傳 `runId`
+- [ ] WebSocket 事件通道：`block.enter` / `block.exit` / `block.error` / `var.set`
+      依 §6.1 的協定推給前端；§6.2 的 50ms 批次與 `block.hot` 聚合**必須做**，
+      沒有它 `forever` 迴圈會在第一秒內打爆連線
+- [ ] Run 的外部停止 API（不是 `control.stop` 積木內部那個 `StopSignal`）
+- [ ] 前端訂閱事件，依 §8.3 的表把積木外框發光、reporter 冒值氣泡、`block.error`
+      紅框接上——這一步能直接站在 `ir/deserialize.ts` 已經有的 blockId ↔ Blockly
+      block 對應關係上，不需要再建一次對照表
+- [ ] 「停止」按鈕打 Run 的外部停止 API，驗證能立即中斷
 
-- [ ] `src/ir/deserialize.ts` — IR → Blockly。`inputs` 的四種 `kind`（`literal` / `template` /
-      `block` / `stack`）分別對應影子的欄位值、`FieldText` 的字串、接上的積木、statement 接點；
-      `fields` 直接設欄位
-- [ ] `src/ir/serialize.ts` — 反過來。**不要直接把 Blockly 的序列化格式當 IR 存檔**（§8.4）：
-      那會讓後端綁死在前端函式庫的版本上
-- [ ] property test：`deserialize(serialize(ws))` 等價，用 63 份題庫跑
-- [ ] 接上 `GET/PUT /api/projects/{id}`，422 的 `blockId` 要能把那顆積木標紅（`api/errors.py`
-      從第 1 步就在吐這個欄位了）
-
-轉換層已經有的著力點（第 3 步刻意留的）：
-
-| 東西 | 在哪 | 為什麼對第 4 步重要 |
-|---|---|---|
-| 積木型別 = opcode，一字不差 | `define.ts` 的 `buildBlock` | `blocks[].opcode` 直接就是 Blockly 的 type，不需要對照表 |
-| `SHADOW_FIELD = 'VALUE'` | `define.ts` | 所有字面值影子的欄位同名，取 `literal` 的值只有一條路 |
-| `isField()` | `define.ts` | 一個參數該去 `fields` 還是 `inputs`，前後端用的是同一條規則 |
-| `RegisteredBlock` | `setup.ts` 回傳 | 反查 manifest（每個孔宣告的型別、預設值）不必再打一次 API |
-
-> **`refs` 不要在前端算**（§4.7）：存檔時由後端重新產生，前端送什麼它都不信。前端只要
-> 把含 `${}` 的字串標成 `kind: template` 就好。
+第 4 步刻意留的著力點：`App.tsx` 已經拿著 `workspaceRef`（真正的 `WorkspaceSvg`）、
+`ConversionContext`，第 5 步只要在收到 WS 事件時用 `workspace.getBlockById(blockId)`
+找積木、疊圖示上去，不需要重新設計狀態怎麼流動。

@@ -143,14 +143,14 @@ export function defineShadowBlocks(): void {
   ] as never);
 }
 
-interface BuiltBlock {
+export interface BuiltBlock {
   definition: Record<string, unknown>;
   /** 這顆積木專屬的影子積木（參數宣告了修飾欄位時才有）。 */
   shadowDefinitions: Record<string, unknown>[];
   registered: RegisteredBlock;
 }
 
-function buildBlock(manifest: Manifest, spec: BlockSpec): BuiltBlock {
+export function buildBlock(manifest: Manifest, spec: BlockSpec): BuiltBlock {
   const type = `${manifest.id}.${spec.opcode}`;
   const args = spec.args ?? {};
   const shadows: Record<string, ShadowSpec> = {};

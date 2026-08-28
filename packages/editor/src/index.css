@@ -31,6 +31,21 @@ html, body, #root { height: 100%; margin: 0; }
 .brand { font-weight: 600; }
 .summary { color: var(--muted); font-size: 0.8125rem; }
 
+.save-button {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: #f7f8fc;
+  cursor: pointer;
+}
+.save-button:disabled { cursor: default; opacity: 0.6; }
+.save-status { font-size: 0.8125rem; }
+.save-status-ok { color: #2f9e57; }
+.save-status-error { color: #c23b3b; }
+
 /* Blockly 畫在固定尺寸的 SVG 上，容器必須有明確高度。 */
 .workspace { flex: 1; min-height: 0; }
 
