@@ -11,23 +11,41 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError as PydanticError
 
 from blocky.errors import BlockyError, ValidationError
 from blocky.extensions import open_registry
 from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
+from blocky.interpreter.events import EventSink
 from blocky.interpreter.registry import resolve_shape
 from blocky.ir.schema import LoadedProject, load
 
+if TYPE_CHECKING:
+    from blocky.extensions.registry import ExtensionRegistry
 
-async def validate_project(data: Any, *, extensions_root: Path) -> LoadedProject:
-    """驗證一份 IR。不通過就丟 `ValidationError`。
+
+async def open_project(
+    data: Any,
+    *,
+    extensions_root: Path,
+    sink: EventSink | None = None,
+) -> tuple[LoadedProject, ExtensionRegistry | None]:
+    """驗證並載入一份 IR，**積木包留在載入狀態**交給呼叫端。
+
+    存檔（`validate_project`）與執行（`runs/manager.py`）需要的是同一件事的
+    兩個切面：前者驗完就把積木包關掉，後者要讓它活到 Run 結束。分成兩個函式
+    但共用這一份，是為了不讓「載入順序」出現第二份實作——順序照抄
+    `conformance.py::run_case`：**先載積木包，再驗專案**，形狀驗證要問得到
+    積木包才知道 `demo.echo` 是 reporter 還是 command（D20）。
 
     §13.3：專案宣告了但磁碟上沒有的積木包**不是**驗證錯誤——那些 opcode 保留
     為佔位符，執行期才以 `unknown_block` 呈現。所以這裡不檢查 `only` 是不是
     全部都載到了。
+
+    失敗時保證積木包已經卸載：拋例外的路徑上呼叫端拿不到 registry，不在這裡
+    收拾就沒有人收拾得了。
     """
     if not isinstance(data, dict):
         raise ValidationError("專案必須是一個 JSON 物件")
@@ -36,22 +54,33 @@ async def validate_project(data: Any, *, extensions_root: Path) -> LoadedProject
         e["id"] for e in (data.get("extensions") or []) if isinstance(e, dict) and "id" in e
     ]
 
-    registry = None
-    try:
-        if declared:
-            try:
-                registry = await open_registry(extensions_root, only=declared)
-            except BlockyError as e:
-                # 積木包自己壞掉（manifest 寫錯、main.py 匯入失敗）。這不是
-                # 專案的錯，但專案在這個 runtime 上確實驗不完，得說清楚是誰壞的。
-                raise ValidationError(f"載入積木包時失敗：{e}") from None
+    registry: ExtensionRegistry | None = None
+    if declared:
         try:
-            return load(data, strict_refs=True, shapes=resolve_shape(registry))
-        except PydanticError as e:
-            raise ValidationError(_first_error(e)) from None
-    finally:
+            registry = await open_registry(extensions_root, sink=sink, only=declared)
+        except BlockyError as e:
+            # 積木包自己壞掉（manifest 寫錯、main.py 匯入失敗）。這不是
+            # 專案的錯，但專案在這個 runtime 上確實驗不完，得說清楚是誰壞的。
+            raise ValidationError(f"載入積木包時失敗：{e}") from None
+
+    try:
+        return load(data, strict_refs=True, shapes=resolve_shape(registry)), registry
+    except PydanticError as e:
         if registry is not None:
             await registry.unload_all()
+        raise ValidationError(_first_error(e)) from None
+    except BaseException:
+        if registry is not None:
+            await registry.unload_all()
+        raise
+
+
+async def validate_project(data: Any, *, extensions_root: Path) -> LoadedProject:
+    """驗證一份 IR。不通過就丟 `ValidationError`。積木包驗完就卸載。"""
+    project, registry = await open_project(data, extensions_root=extensions_root)
+    if registry is not None:
+        await registry.unload_all()
+    return project
 
 
 def _first_error(e: PydanticError) -> str:
@@ -66,4 +95,4 @@ def _first_error(e: PydanticError) -> str:
     return f"{loc}：{msg}" if loc else msg
 
 
-__all__ = ["validate_project"]
+__all__ = ["open_project", "validate_project"]

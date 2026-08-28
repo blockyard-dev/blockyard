@@ -142,6 +142,9 @@ class Interpreter:
         self._ids = itertools.count(1)
         self._block_budget = YIELD_EVERY_N_BLOCKS
         self._stop_all = False
+        self.run_id: str | None = None
+        # threadId → task。外部停止（§5.5）與 §6.1 的 stop_thread 都靠它。
+        self._threads: dict[str, asyncio.Task[str]] = {}
         # 反查表：Block 物件 → blockId。錯誤訊息與事件都要靠它定位，
         # 每次線性掃描會讓深迴圈變成 O(n²)。
         self._block_ids = {id(b): bid for bid, b in project.blocks.items()}
@@ -151,10 +154,15 @@ class Interpreter:
     async def run(
         self,
         *,
+        run_id: str | None = None,
         trigger: str = "event.when_flag_clicked",
         payload: dict[str, Any] | None = None,
     ) -> RunResult:
-        run_id = f"run_{next(self._ids)}"
+        """跑一次。`run_id` 由呼叫端指定時（API 的 `/api/runs`）事件用它，
+        這樣 WebSocket 的 `runId` 與 HTTP 回應是同一個字串——省掉一層對照表。
+        """
+        run_id = run_id or f"run_{next(self._ids)}"
+        self.run_id = run_id
         self.sink.emit("run.start", runId=run_id, ts=time.time())
 
         scripts = [
@@ -163,17 +171,23 @@ class Interpreter:
             if s.enabled and self.project.block(s.top).opcode == trigger
         ]
 
-        tasks = [
-            asyncio.create_task(self._run_thread(s.id, s.top, payload or {}))
-            for s in scripts
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # thread id 在**建立 task 之前**就決定，`_threads` 才能在 task 還沒被
+        # 排到之前就回答「t_2 是哪一條」——§6.1 的 `stop_thread` 需要它。
+        for s in scripts:
+            tid = f"t_{next(self._ids)}"
+            self._threads[tid] = asyncio.create_task(
+                self._run_thread(tid, s.id, s.top, payload or {})
+            )
+        results = await asyncio.gather(*self._threads.values(), return_exceptions=True)
 
         status = "ok"
         for r in results:
-            if isinstance(r, BaseException):
-                status = "error"
-            elif r == "error":
+            # 外部停止（§5.5）走的是 task.cancel()，gather 會把 CancelledError
+            # 當成結果收回來。它不是「錯誤」——把它算成 error 會讓使用者按下
+            # 停止之後看到一個紅色的 run.end。
+            if isinstance(r, asyncio.CancelledError):
+                status = "cancelled" if status == "ok" else status
+            elif isinstance(r, BaseException) or r == "error":
                 status = "error"
         if self._stop_all and status == "ok":
             status = "cancelled"
@@ -181,8 +195,37 @@ class Interpreter:
         self.sink.emit("run.end", runId=run_id, status=status, ts=time.time())
         return RunResult(run_id, status, self.sink.dicts())
 
-    async def _run_thread(self, script_id: str, top_id: str, payload: dict[str, Any]) -> str:
-        thread_id = f"t_{next(self._ids)}"
+    def request_stop(self, thread_id: str | None = None) -> bool:
+        """**外部**停止（§5.5：使用者按下停止），不是 `control.stop` 積木。
+
+        兩者的差別是誰決定的：`control.stop` 是腳本自己走到那顆積木，丟
+        `StopSignal` 讓 `_run_thread` 依 §5.1 收尾；這裡是外面的人插手，只能
+        cancel task。`_stop_all` 仍然要設，`run()` 才知道最後的 status 是
+        `cancelled` 而不是 `ok`——一個被砍掉的 Run 不該回報成功。
+
+        能立即中斷緊迴圈，靠的是 §5.2 每 512 顆積木一次的 `sleep(0)`：那是
+        真正的暫停點，CancelledError 會在那裡丟進 coroutine。
+
+        回傳有沒有東西被停到（`stop_thread` 拿不存在的 threadId 時是 False）。
+        """
+        if thread_id is not None:
+            task = self._threads.get(thread_id)
+            if task is None or task.done():
+                return False
+            task.cancel()
+            return True
+
+        self._stop_all = True
+        stopped = False
+        for task in self._threads.values():
+            if not task.done():
+                task.cancel()
+                stopped = True
+        return stopped
+
+    async def _run_thread(
+        self, thread_id: str, script_id: str, top_id: str, payload: dict[str, Any]
+    ) -> str:
         hat = self.project.block(top_id)
 
         # hat 的 yields 綁成 thread-local（§5.4 第 2 層，唯讀）

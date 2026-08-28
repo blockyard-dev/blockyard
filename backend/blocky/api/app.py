@@ -7,7 +7,10 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +19,9 @@ from fastapi.staticfiles import StaticFiles
 
 from blocky.api import extensions as extensions_routes
 from blocky.api import projects as projects_routes
+from blocky.api import runs as runs_routes
 from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
+from blocky.runs import RunManager
 from blocky.storage import ProjectStore, default_db_path
 
 # P0b 的前端跑在 Vite 的 dev server 上（另一個 port），所以本機開發一定跨源。
@@ -36,15 +41,29 @@ def create_app(
     store: ProjectStore | None = None,
     extensions_root: Path | str | None = None,
     static_root: Path | str | None = None,
+    broker_options: dict[str, Any] | None = None,
 ) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        yield
+        # 還在跑的 Run 是 asyncio.Task。不砍的話 uvicorn 會等它們，而
+        # `forever` 迴圈永遠不會結束——Ctrl-C 之後 server 就掛在那裡。
+        await app.state.runs.shutdown()
+
     app = FastAPI(
         title="Blocky Workflow",
         version="0.1.0",
         description="Scratch 風格的自動化工作流 runtime（§15 P0b）",
+        lifespan=lifespan,
     )
 
     app.state.store = store or ProjectStore(db_path or default_db_path())
     app.state.extensions_root = Path(extensions_root or DEFAULT_EXTENSIONS_ROOT)
+    app.state.runs = RunManager(
+        store=app.state.store,
+        extensions_root=app.state.extensions_root,
+        broker_options=broker_options or {},
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -55,6 +74,9 @@ def create_app(
 
     app.include_router(projects_routes.router)
     app.include_router(extensions_routes.router)
+    app.include_router(runs_routes.router)
+    app.include_router(runs_routes.ws_router)
+
 
     @app.get("/api/health", tags=["meta"])
     async def health() -> dict[str, str]:

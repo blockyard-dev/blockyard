@@ -10,7 +10,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: { '/api': 'http://127.0.0.1:8787' },
+    proxy: {
+      '/api': 'http://127.0.0.1:8787',
+      // §6.1 的事件流。`ws: true` 少一個，執行按鈕就會安靜地連不上——
+      // dev server 會把 upgrade 請求當成一般 HTTP 打回 404。
+      '/ws': { target: 'ws://127.0.0.1:8787', ws: true },
+    },
   },
   build: { outDir: 'dist', sourcemap: true },
 });

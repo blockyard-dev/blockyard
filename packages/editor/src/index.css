@@ -31,17 +31,6 @@ html, body, #root { height: 100%; margin: 0; }
 .brand { font-weight: 600; }
 .summary { color: var(--muted); font-size: 0.8125rem; }
 
-.save-button {
-  margin-left: auto;
-  font: inherit;
-  font-size: 0.8125rem;
-  padding: 0.3rem 0.9rem;
-  border: 1px solid var(--line);
-  border-radius: 0.35rem;
-  background: #f7f8fc;
-  cursor: pointer;
-}
-.save-button:disabled { cursor: default; opacity: 0.6; }
 .save-status { font-size: 0.8125rem; }
 .save-status-ok { color: #2f9e57; }
 .save-status-error { color: #c23b3b; }
@@ -62,3 +51,156 @@ html, body, #root { height: 100%; margin: 0; }
 .notice-error { border-color: #e0a0a0; background: #fff6f6; }
 .notice code { background: #f2f3f8; padding: 0.1em 0.35em; border-radius: 0.25rem; }
 .notice p { margin: 0.5rem 0 0; }
+
+/* ------------------------------------------------------------------ *
+ * 執行時的視覺回饋（§8.3）
+ * ------------------------------------------------------------------ */
+
+.actions { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+
+.button {
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: #f7f8fc;
+  cursor: pointer;
+}
+.button:disabled { cursor: default; opacity: 0.5; }
+.button-run { background: #2f9e57; border-color: #2f9e57; color: #fff; }
+.button-run:disabled { background: #9fc9ae; border-color: #9fc9ae; color: #fff; }
+
+.run-status { font-size: 0.8125rem; color: var(--muted); }
+.run-status-running, .run-status-starting { color: #b8860b; }
+.run-status-ok { color: #2f9e57; }
+.run-status-error { color: #c23b3b; }
+
+/* 工作區 + 面板 + 氣泡層。氣泡層是 fixed，因為它的座標直接來自
+   getBoundingClientRect()（見 RunBubbles.tsx），換算成容器相對座標只是
+   多一次減法與一次會漂移的假設。 */
+.stage { flex: 1; min-height: 0; display: flex; }
+.stage .workspace { flex: 1; min-width: 0; }
+
+.bubble-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* 積木左上角是定位原點，氣泡往上錯開一點，蓋住的是空白不是積木本身 */
+  margin-top: -0.4rem;
+  transform-origin: bottom left;
+  translate: 0 -100%;
+  max-width: 22rem;
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(20 20 40 / 18%);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.bubble-error { border-color: #d46a6a; background: #fff6f6; white-space: normal; }
+.bubble-error-message { color: #b03030; font-weight: 600; }
+.bubble-hint { color: var(--muted); }
+.bubble-count { color: #b8860b; font-weight: 600; }
+
+/* 積木外框。`>` 是必要的：巢狀積木畫在父積木的 <g> 裡面，沒有它一顆
+   reporter 發光會把整條堆疊一起點亮。
+
+   高亮同時用**白色描邊 + 外發光**，而不是 Scratch 那種單純的黃框。原因是
+   這裡的積木顏色來自每個積木包自己的 manifest（§8.1），黃框畫在橘色的
+   `control` 積木上幾乎看不見——顏色是別人決定的，高亮就不能假設底色。
+   白邊負責在深色積木上分界，發光負責在淺色積木上分界，兩者互補。 */
+.blocky-run-running > .blocklyPath,
+.blocky-run-hot > .blocklyPath {
+  stroke: #fff;
+  stroke-width: 3px;
+}
+.blocky-run-running, .blocky-run-hot {
+  filter: drop-shadow(0 0 3px #ffbf00) drop-shadow(0 0 6px #ffa000);
+}
+.blocky-run-hot { animation: blocky-pulse 0.9s ease-in-out infinite; }
+
+.blocky-run-error > .blocklyPath {
+  stroke: #fff;
+  stroke-width: 3px;
+}
+.blocky-run-error {
+  filter: drop-shadow(0 0 3px #e03b3b) drop-shadow(0 0 7px #d43b3b);
+}
+
+@keyframes blocky-pulse {
+  0%, 100% { filter: drop-shadow(0 0 3px #ffbf00) drop-shadow(0 0 6px #ffa000); }
+  50% { filter: drop-shadow(0 0 1px #ffbf00); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blocky-run-hot { animation: none; }
+}
+
+/* ------------------------------------------------------------------ *
+ * 變數與輸出面板
+ * ------------------------------------------------------------------ */
+
+.run-panel {
+  flex: none;
+  width: 17rem;
+  border-left: 1px solid var(--line);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.run-section { padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--line); overflow: auto; }
+.run-section-logs { flex: 1; min-height: 0; border-bottom: none; }
+.run-section h2 { margin: 0 0 0.5rem; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+.run-empty { margin: 0; font-size: 0.75rem; color: var(--muted); }
+.run-dropped { margin: 0.5rem 0 0; font-size: 0.7rem; color: #b8860b; }
+
+.var-list, .log-list { margin: 0; padding: 0; list-style: none; font-size: 0.75rem; }
+.var-list li { display: flex; gap: 0.4rem; padding: 0.15rem 0; align-items: baseline; }
+.var-name { font-weight: 600; }
+.log-list li { padding: 0.15rem 0; border-top: 1px solid #f0f1f6; white-space: pre-wrap; }
+.log-list li:first-child { border-top: none; }
+.log-error { color: #c23b3b; }
+.log-debug { color: var(--muted); }
+
+/* ------------------------------------------------------------------ *
+ * JSON tree（§8.3：object / list 不截斷成字串）
+ * ------------------------------------------------------------------ */
+
+.json-string { color: #2f7a4d; }
+.json-number { color: #2f5aa8; }
+.json-boolean, .json-null { color: #8a5cc0; }
+.json-key { color: #6b6f80; }
+.json-punct { color: var(--muted); }
+.json-count { color: var(--muted); }
+.json-branch { display: inline-block; vertical-align: top; }
+.json-entries { margin: 0; padding: 0 0 0 0.9rem; list-style: none; }
+.json-toggle {
+  font: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--muted);
+}
+.json-toggle:hover { color: var(--fg); }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

@@ -36,7 +36,9 @@ export class ApiError extends Error {
   }
 }
 
-async function toApiError(res: Response, fallback: string): Promise<ApiError> {
+/** 把後端的錯誤 body 翻成 `ApiError`。`/api/runs` 走同一條（`api/runs.ts`）——
+ * 422 的形狀由 `api/errors.py` 統一決定，前端也只該有一個地方認得它。 */
+export async function toApiError(res: Response, fallback: string): Promise<ApiError> {
   try {
     const body = (await res.json()) as { detail?: ApiErrorDetail | string };
     const detail = typeof body.detail === 'string' ? { message: body.detail } : body.detail;

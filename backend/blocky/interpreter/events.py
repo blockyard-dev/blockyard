@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 # §6.2：value 欄位序列化上限 4KB，超過則截斷並標記 truncated
 VALUE_LIMIT_BYTES = 4096
@@ -27,13 +27,35 @@ class Event:
 
 
 class EventSink:
-    """收集事件。真實後端會換成 WebSocket broadcaster，題庫用這個。"""
+    """收集事件。
 
-    def __init__(self) -> None:
+    兩種用法共用同一個類別，差別只在建構參數：
+
+      題庫    `EventSink()`——全部留著，跑完一次拿 `dicts()` 比對。
+      實際跑  `EventSink(on_emit=broker.publish, retain=False)`——即時轉給
+              §6.2 的批次器，**不累積**。留著的話一個掛三天的 `forever`
+              迴圈會把幾億筆事件放在記憶體裡，而那些事件早就送出去了。
+
+    `on_emit` 是同步呼叫的：引擎在 event loop 上跑，publish 只是塞進一個
+    list，不能 await——否則 emit 會變成 yield 點，改變 §5.2 的讓出時機。
+    """
+
+    def __init__(
+        self,
+        *,
+        on_emit: Callable[[Event], None] | None = None,
+        retain: bool = True,
+    ) -> None:
         self.events: list[Event] = []
+        self._on_emit = on_emit
+        self._retain = retain
 
     def emit(self, op: str, **data: Any) -> None:
-        self.events.append(Event(op=op, data=data))
+        ev = Event(op=op, data=data)
+        if self._retain:
+            self.events.append(ev)
+        if self._on_emit is not None:
+            self._on_emit(ev)
 
     def dicts(self) -> list[dict[str, Any]]:
         return [e.to_dict() for e in self.events]
