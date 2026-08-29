@@ -23,7 +23,7 @@ from pydantic import Field, field_validator, model_validator
 from pydantic import ValidationError as PydanticError
 
 from blocky.errors import ExtensionError
-from blocky.ir.schema import ReturnType, Strict
+from blocky.ir.schema import PLACEHOLDER, ReturnType, Strict
 
 # 內建命名空間（§4.4）不得被積木包佔用——否則 `data.set` 的意義會取決於
 # 使用者裝了什麼包。
@@ -44,12 +44,28 @@ ArgType = Literal[
 BUILTIN_ONLY_ARG_TYPES = frozenset({"variable", "stack", "expression"})
 
 BlockShape = Literal["command", "reporter", "boolean", "hat"]
+# 工具箱按鈕的動作字彙表（D25）。**這張表就是那個「封頂」**：加一個成員是一次
+# 明確的決定，而不是積木包送一段程式碼進來就多一種能力。
+ButtonAction = Literal[
+    "open_url",          # 前端：開一個外部連結（URL 要進 §12.1 的審閱畫面）
+    "open_config",       # 前端：跳到這個包的設定面板
+    "call",              # 後端：呼叫 main.py 的 @button（§7.3）
+    "create_procedure",  # 前端、**只有內建**：開「創建積木」對話框（§8.5、D26）
+]
+# 只有內建宣告得起的動作：它開的是編輯器自己的對話框，不屬於任何一個積木包。
+BUILTIN_ONLY_ACTIONS = frozenset({"create_procedure"})
+# `open_url` 只收這兩種 scheme。**`javascript:` 必須擋在宣告層**——前端拿到
+# 這個字串是要交給瀏覽器開的，一個包就能用它在編輯器裡執行任意程式碼，而那
+# 正是 D25 (c) 明文封死的東西。
+URL_SCHEMES = ("https://", "http://")
 Permission = Literal["net", "fs.read", "fs.write", "subprocess", "env"]
 Concurrency = Literal["drop", "queue", "restart", "parallel"]
 
 # 參數與 opcode 都走這個形狀：它同時要當 Python 識別字與 IR 的 key。
 _IDENT = re.compile(r"^[a-z][a-z0-9_]*$")
-_PLACEHOLDER = re.compile(r"%\((\w+)\)")
+# 佔位符語法由 `ir/schema.py` 定義：函式的簽章模板（D26）用的是**同一個**，
+# 兩邊各寫一條 regex 會讓「語法完全一樣」這句話慢慢變成半真的。
+_PLACEHOLDER = PLACEHOLDER
 
 # §4.7：`string` 預設開插值、`code` 預設關（shell 指令裡的 `${HOME}` 不該被替換）
 _INTERPOLATE_BY_DEFAULT = {"string": True, "code": False}
@@ -86,6 +102,21 @@ class ArgSpec(Strict):
     # 別的積木——`重複 (10) 次` 的 10 是輸入孔，`停止 [這個腳本]` 的下拉不是。
     # 積木包的參數一律是輸入孔，所以這個欄位只有內建會設。
     field: bool = False
+    # §4.5：這一格的名字**由這顆積木建立**（`設定 [x] 為`、`對 … 的每一項 [item]`、
+    # `出錯時把錯誤存進 [error]`），而不是讀一個別人建立的名字。編輯器的靜態檢查
+    # 靠它分辨兩者：只出現在讀取端、從未出現在任何 binds 欄位的名字就是打錯字
+    # （§8.5）。沒有這個宣告，前端只能寫死一份 opcode 名單——那正是 D21 要消滅的
+    # 東西。`data.change` 刻意**不是** binds：它會寫，但 §4.5 要求變數已存在。
+    binds: bool = False
+    # §4.6：這顆積木**回傳的就是這一格所指名字的值**——也就是「讀一個變數」的
+    # 那顆積木。`binds` 的另一面，而且同樣是前端問不出來的事：`data.get` 與
+    # `data.list_length` 的宣告一模一樣（reporter + 一個 variable 參數），差別
+    # 只在回傳的是值還是長度，那件事只有人分得出來。
+    #
+    # 函式分類要為每個參數各列一顆填好名字的 `取得 (參數名)`（§4.6，不新增
+    # opcode），而它得先知道哪一顆積木是那個「取得」。沒有這個宣告，前端只能
+    # 寫死 `data.get`——那正是 D21 要消滅的東西。
+    reads: bool = False
     multiline: bool = False            # string / code：渲染成 textarea（§7.2）
     rows: int | None = None
     interpolate: bool | None = None    # 覆寫 §4.7 的預設
@@ -138,8 +169,54 @@ class ArgSpec(Strict):
             raise ValueError("multiline / rows / interpolate 只適用於 string 與 code")
         if self.type != "number" and (self.min is not None or self.max is not None):
             raise ValueError("min / max 只適用於 number")
+        if self.binds and self.type != "variable":
+            raise ValueError("binds 只適用於 variable：它說的是「這個名字由這顆積木建立」")
+        if self.reads and self.type != "variable":
+            raise ValueError("reads 只適用於 variable：它說的是「這顆積木回傳這個名字的值」")
+        if self.reads and self.binds:
+            raise ValueError("binds 與 reads 互斥：一格不會同時是建立與讀出")
         if self.min is not None and self.max is not None and self.min > self.max:
             raise ValueError(f"min（{self.min}）大於 max（{self.max}）")
+        return self
+
+
+class ButtonSpec(Strict):
+    """工具箱裡的非積木條目（D25、§7.2）。
+
+    按鈕出現在該命名空間分類的最上面（Scratch 放「製作積木」的位置）。它**不是
+    積木**：沒有輸入孔、沒有回傳值、不會出現在畫布上、不進 IR、不會被 Run
+    執行——「開說明文件」「測一下 token 對不對」硬做成積木就是把它塞進一個不
+    屬於它的形狀。
+    """
+
+    id: str
+    label: str
+    action: ButtonAction
+    url: str | None = None      # open_url 專用
+    handler: str | None = None  # call 專用：main.py 裡 @button 的名字
+
+    @field_validator("id")
+    @classmethod
+    def _id_shape(cls, v: str) -> str:
+        if not _IDENT.match(v):
+            raise ValueError(f"按鈕 id 必須是小寫識別字：{v}")
+        return v
+
+    @model_validator(mode="after")
+    def _check(self) -> ButtonSpec:
+        if self.action == "open_url":
+            if not self.url:
+                raise ValueError("open_url 按鈕必須宣告 url")
+            if not self.url.startswith(URL_SCHEMES):
+                raise ValueError(f"open_url 的 url 只能是 http(s)：{self.url}")
+        elif self.url:
+            raise ValueError(f"只有 open_url 按鈕能宣告 url：{self.id}")
+
+        if self.action == "call":
+            if not self.handler:
+                raise ValueError("call 按鈕必須宣告 handler（main.py 的 @button 名稱）")
+        elif self.handler:
+            raise ValueError(f"只有 call 按鈕能宣告 handler：{self.id}")
         return self
 
 
@@ -176,10 +253,26 @@ class BlockSpec(Strict):
     # §13.1：opcode 永不移除，只標記 deprecated（工具箱隱藏，既有專案仍可執行）
     deprecated: bool = False
     # §4.6：積木由專案資料生成——`procedure.call` 的參數是函式的參數，
-    # `procedure.definition` 的也是。工具箱不列出它們（前端從 `project.procedures`
-    # 生成），而 reporter 形狀的 dynamic 積木同時也是 command 形狀：函式沒宣告
-    # 回傳型別時，呼叫積木沒有輸出孔。只有內建用得到。
+    # `procedure.definition` 與 `procedure.param` 的名字也是。工具箱不列出它們
+    # （前端從 `project.procedures` 生成）。只有內建用得到。
     dynamic: bool = False
+    # §4.6：**形狀由專案資料決定**——`procedure.call` 在函式沒宣告回傳型別時
+    # 沒有輸出孔，是 command。整份宣告裡只有這一顆。
+    #
+    # 這件事原本是 `dynamic` 的隱含後果（「reporter 形狀的 dynamic 積木同時也是
+    # command」），但 `procedure.param` 一出現那條規則就錯了：它也是 dynamic，
+    # 形狀卻是固定的 reporter。隱含規則放行一顆 `參數` 積木接在堆疊上，D20 的
+    # 載入期形狀驗證對它默默失效，錯誤要跑到執行期才以「不是指令型積木」出現。
+    alsoCommand: bool = False
+    # §4.6：cap block——插得進堆疊，但自己沒有 `next`（`procedure.return`、
+    # Scratch 的「停止」）。**刻意不做成第五種 `type`**：cap 在連接語意上仍然
+    # 是 command（它是 `next` 的合法目標、放得進 C 型積木），做成第五種形狀
+    # 會讓 D20 的 `_require_shape(want="command")` 開始拒絕一顆合法的「回傳」，
+    # 於是形狀的字彙表要多一條「cap 也算 command」的例外。
+    #
+    # 積木包**可以**宣告它（不在 `_check_builtin_boundary` 的名單裡）：它不碰
+    # §7.5 的邊界，一顆「結束」積木沒有壞處。
+    terminal: bool = False
     yields: list[YieldSpec] = Field(default_factory=list)
     concurrency: Concurrency | None = None
 
@@ -210,6 +303,10 @@ class BlockSpec(Strict):
             raise ValueError("boolean 型積木的 returns 只能是 boolean")
         if self.type != "hat" and (self.yields or self.concurrency is not None):
             raise ValueError("yields / concurrency 只適用於 hat")
+        if self.terminal and self.type != "command":
+            raise ValueError("terminal 只適用於 command：它說的是「這顆積木下面不能再接」")
+        if self.alsoCommand and self.type != "reporter":
+            raise ValueError("alsoCommand 只適用於 reporter：它說的是「這一顆也可能沒有輸出孔」")
         return self
 
     @property
@@ -243,6 +340,8 @@ class Manifest(Strict):
     requirements: list[str] = Field(default_factory=list)
     config: list[ConfigSpec] = Field(default_factory=list)
     blocks: list[BlockSpec] = Field(default_factory=list)
+    # D25：工具箱裡的非積木條目。第一個使用者是函式分類的「＋ 創建積木」。
+    buttons: list[ButtonSpec] = Field(default_factory=list)
     # D21：內建命名空間的宣告（`interpreter/builtins/*.yaml`）。載入積木包的
     # 那條路徑（`discover`）會拒絕它，所以第三方沒辦法自稱內建。
     builtin: bool = False
@@ -263,6 +362,12 @@ class Manifest(Strict):
             if b.opcode in seen:
                 raise ValueError(f"opcode 重複：{b.opcode}")
             seen.add(b.opcode)
+
+        ids: set[str] = set()
+        for b in self.buttons:
+            if b.id in ids:
+                raise ValueError(f"按鈕 id 重複：{b.id}")
+            ids.add(b.id)
 
         keys: set[str] = set()
         for c in self.config:
@@ -287,6 +392,9 @@ class Manifest(Strict):
 
         if self.id in BUILTIN_NAMESPACES:
             raise ValueError(f'"{self.id}" 是內建命名空間（§4.4），積木包不能用這個 id')
+        for btn in self.buttons:
+            if btn.action in BUILTIN_ONLY_ACTIONS:
+                raise ValueError(f"按鈕 {btn.id}：{btn.action} 是編輯器自己的動作，只有內建能宣告")
         for b in self.blocks:
             if b.dynamic:
                 raise ValueError(f"{b.opcode}：dynamic 積木由專案資料生成，只有內建有")

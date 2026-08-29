@@ -78,7 +78,7 @@ def test_declared_shapes_match_the_registry(ns: str) -> None:
         op = f"{ns}.{spec.opcode}"
         if op not in registered:
             continue  # 上一個測試負責報這件事
-        want = declarations.shapes_of(spec.type, dynamic=spec.dynamic)
+        want = declarations.shapes_of(spec.type, also_command=spec.alsoCommand)
         assert want == registered[op], (
             f"{op} 的形狀不符：宣告 {spec.type}"
             f"{'（dynamic）' if spec.dynamic else ''} → {sorted(want)}，"
@@ -334,3 +334,97 @@ def test_declared_args_that_no_handler_reads_are_reported() -> None:
     print("\n宣告了、但 handler 沒有以字面值讀到的參數（key 由變數算出時屬正常）：")
     for opcode, unread in report.items():
         print(f"  {opcode}: {unread}")
+
+
+# --------------------------------------------------------------------------
+# 測試 4：`binds`（§4.5 的靜態檢查靠它分辨讀與寫）
+# --------------------------------------------------------------------------
+
+# 「這一格建立一個新名字」的完整名單。**這份名單就是規格**：編輯器的靜態檢查
+# （§8.5）拿它算出「已定義的變數」，只出現在其他變數欄位的名字就被標成打錯字。
+#
+# 寫死在測試裡而不是從實作推導，是因為 AST 看不出差別——`data.change` 也呼叫
+# `t.scope.set(name, …)`，但它 §4.5 明定要求變數**已存在**（少打一顆「設定」
+# 換來的是打錯字被靜默當成新變數）。「會不會寫」與「會不會建立」是兩件事，
+# 只有人分得出來，所以這裡把答案寫下來，新增積木時會被下面那條反向檢查逼著回來。
+BINDING_ARGS = {
+    ("data.set", "name"),            # 寫入即建立（§4.5）
+    ("control.for_each", "name"),    # 迴圈變數
+    ("control.try_catch", "error_name"),  # thread-local 的錯誤（§5.4 第 2 層）
+}
+
+
+def test_binding_variable_args_are_exactly_the_declared_ones() -> None:
+    declared = {
+        (f"{ns}.{b.opcode}", name)
+        for ns, mf in declarations.manifests().items()
+        for b in mf.blocks
+        for name, a in b.args.items()
+        if a.binds
+    }
+    assert declared == BINDING_ARGS, (
+        "binds 的宣告與這份名單不一致。多宣告 → 打錯的變數名不再被標警告；"
+        "少宣告 → 正確的變數被標成「還沒有被設定過」，而兩者都只在編輯器裡看得見"
+    )
+
+
+# 「這顆積木回傳的就是這一格所指名字的值」的完整名單（§4.6）。同樣寫死：
+# `data.get` 與 `data.list_length` 的宣告一模一樣（reporter + 一個 variable
+# 參數），AST 也分不出來——差別在回傳的是值還是長度。少宣告的症狀是「函式分類
+# 列不出參數的 `取得` 積木」，多宣告的症狀是「列出一顆取長度的積木還說那是參數」。
+READING_ARGS = {("data.get", "name")}
+
+
+def test_variable_reading_args_are_exactly_the_declared_ones() -> None:
+    declared = {
+        (f"{ns}.{b.opcode}", name)
+        for ns, mf in declarations.manifests().items()
+        for b in mf.blocks
+        for name, a in b.args.items()
+        if a.reads
+    }
+    assert declared == READING_ARGS, (
+        "reads 的宣告與這份名單不一致。函式分類（§4.6）用它決定「取得 (參數名)」"
+        "要拿哪一顆積木，而那是編輯器裡才看得見的東西"
+    )
+
+
+def test_reads_is_only_declared_on_variable_reporters() -> None:
+    """反向：宣告了 reads 的一定是回傳值的積木，不然「回傳這個名字的值」是空話。"""
+    for ns, mf in declarations.manifests().items():
+        for b in mf.blocks:
+            for name, a in b.args.items():
+                if a.reads:
+                    assert a.type == "variable", f"{ns}.{b.opcode}.{name}"
+                    assert b.type in ("reporter", "boolean"), f"{ns}.{b.opcode} 沒有回傳值"
+
+
+def test_binds_is_only_declared_on_variable_args() -> None:
+    """型別驗證已經擋了，這裡守的是「宣告了 binds 的一定是變數欄位」這條反向。"""
+    for ns, mf in declarations.manifests().items():
+        for b in mf.blocks:
+            for name, a in b.args.items():
+                if a.binds:
+                    assert a.type == "variable", f"{ns}.{b.opcode}.{name}"
+                    assert a.is_field, f"{ns}.{b.opcode}.{name} 綁的是名字，必須存在 fields"
+
+
+# --------------------------------------------------------------------------
+# 測試 5：工具箱按鈕（D25）
+# --------------------------------------------------------------------------
+
+# 內建宣告的按鈕完整名單。與 `BINDING_ARGS` 同一個理由寫死：按鈕是**唯一**的
+# 建立函式入口（§8.5），少一顆的症狀是「畫布上生不出函式」，而那件事沒有任何
+# 一條既有測試會叫——工具箱是前端組的。
+BUILTIN_BUTTONS = {("procedure", "create", "create_procedure")}
+
+
+def test_builtin_buttons_are_exactly_the_declared_ones() -> None:
+    declared = {
+        (ns, b.id, b.action)
+        for ns, mf in declarations.manifests().items()
+        for b in mf.buttons
+    }
+    assert declared == BUILTIN_BUTTONS, (
+        "內建按鈕的宣告與這份名單不一致。少一顆「創建積木」＝畫布上生不出函式"
+    )

@@ -1,0 +1,9 @@
+title: 從定義帽子拖出來的參數積木讀得到這次呼叫傳進來的值
+spec: §4.6 帽子上的參數（procedure.param）
+tags:
+- procedure
+- scope
+expect:
+  status: ok
+  logs:
+  - 參數

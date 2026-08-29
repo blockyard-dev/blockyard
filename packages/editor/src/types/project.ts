@@ -87,6 +87,16 @@ export interface VariableIndex {
 export interface Procedures {
   [k: string]: Procedure;
 }
+/**
+ * 一個自訂函式（§4.6）。
+ *
+ * `name` 是一份**簽章模板**而不是一個名字（D26）：`"跳 %(a1) 次 到 %(a2)"`
+ * 畫出來是 `跳 (10) 次 到 [左]`。佔位符引用的是參數的 **id**，不是名稱——
+ * 名稱是使用者隨時會改的東西，而模板不該跟著壞掉。
+ *
+ * 一個 `%(` 都沒有的簽章是**合法的相容模式**（排版退回
+ * `呼叫 <名稱> 參數名: (孔)`），不是舊資料：AI 生成的 IR（D5）多半長那樣。
+ */
 export interface Procedure {
   name: Name1;
   params?: Params;

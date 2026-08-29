@@ -1,0 +1,13 @@
+title: ≉ 就是 ≈ 的否定；沒有 op 欄位的舊專案仍然是嚴格比對（D24、§13.1）
+spec: §4.4.1 比較語意
+tags:
+- operator
+- comparison
+- D24
+expect:
+  status: ok
+  logs:
+  - 'false'
+  - 'true'
+  - 'false'
+  - 'true'

@@ -32,6 +32,9 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
   const blocks = useRunStore((s) => s.blocks);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const nodes = useRef(new Map<string, HTMLDivElement>());
+  // 滑鼠正停在哪一顆氣泡上（§8.3）。放 ref 不放 state：讀它的只有下面那個
+  // rAF 迴圈，進 state 只會為了一次 hover 重跑整個元件。
+  const hovered = useRef<string | null>(null);
 
   // 哪些積木「現在有話要說」。用 seq 判斷是不是新的一次——同一顆積木在迴圈裡
   // 回同一個值時，計時器也該重新開始，不然第二次的氣泡會提早消失。
@@ -65,6 +68,12 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
       for (const bubble of bubbles) {
         const node = nodes.current.get(bubble.blockId);
         if (!node) continue;
+        // §8.3：滑鼠在上面就把倒數推到現在之後，移開才重新開始。每一幀都推，
+        // 所以「停住」不需要記住是什麼時候進來的；離開時剩下的正好是完整的
+        // 2 秒，跟第一次冒出來時一樣。
+        if (hovered.current === bubble.blockId && bubble.until !== Infinity) {
+          bubble.until = now + VALUE_TTL_MS;
+        }
         if (now > bubble.until) {
           expired = true;
           continue;
@@ -104,6 +113,10 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
           }}
           className={`bubble bubble-${bubble.state.phase}`}
           style={{ visibility: 'hidden' }}
+          onMouseEnter={() => { hovered.current = bubble.blockId; }}
+          onMouseLeave={() => {
+            if (hovered.current === bubble.blockId) hovered.current = null;
+          }}
         >
           <BubbleBody state={bubble.state} />
         </div>

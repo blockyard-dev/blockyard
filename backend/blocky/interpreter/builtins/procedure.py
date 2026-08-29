@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from blocky.errors import ProcedureReturn, ValidationError
+from blocky.errors import ParamOutOfScopeError, ProcedureReturn, ValidationError
 from blocky.interpreter.engine import Thread
 from blocky.interpreter.registry import command, value
 from blocky.ir.schema import Block
@@ -59,6 +59,39 @@ async def _call_value(t: Thread, b: Block) -> Any:
     它必然帶副作用（函式體可以發 HTTP、寫變數），所以求值順序是語意。
     """
     return await _invoke(t, b)
+
+
+@value("procedure.param")
+async def _param(t: Thread, b: Block) -> Any:
+    """定義帽子上拖出來的那顆參數（§4.6）。
+
+    **只讀 frame，不落到變數**。`data.get` 走的是 §5.4 的完整解析順序（參數 →
+    thread-local → 全域），所以一顆讀 `次數` 的 `取得` 在函式外面仍然可能讀到
+    一個剛好同名的全域變數。參數積木不該有那個行為：它說的是「這次呼叫傳進來
+    的值」，被拖到函式外面就是拖錯了，而**當場說出來**比默默讀到別人的變數好
+    ——後者會變成一個「值對了一半」的 bug。
+
+    參數以 **id** 記在 `mutation` 裡而不是把名字寫進 `fields`：改一次參數名不
+    該讓函式體裡那幾顆積木失聯（`procedures[].params` 是名字的唯一來源）。
+    """
+    m = b.mutation or {}
+    pid, proc = _proc(t, b)
+    bid = t.interp._bid(b)
+
+    param = next((p for p in proc.params if p.id == m.get("param")), None)
+    if param is None:
+        raise ValidationError(
+            f"函式 {pid} 沒有這個參數 {m.get('param')}", block_id=bid
+        )
+
+    frame = t.scope.current_frame
+    if frame is None or frame.proc_id != pid:
+        raise ParamOutOfScopeError(
+            f"參數「{param.name}」只能放在定義它的函式裡",
+            block_id=bid,
+            hint="這顆積木是從那個函式的定義積木上拖出來的，把它搬回函式體裡。",
+        )
+    return frame.params.get(param.name)
 
 
 @command("procedure.return")

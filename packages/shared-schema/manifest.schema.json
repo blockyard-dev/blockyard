@@ -82,6 +82,16 @@
           "title": "Field",
           "type": "boolean"
         },
+        "binds": {
+          "default": false,
+          "title": "Binds",
+          "type": "boolean"
+        },
+        "reads": {
+          "default": false,
+          "title": "Reads",
+          "type": "boolean"
+        },
         "multiline": {
           "default": false,
           "title": "Multiline",
@@ -206,6 +216,16 @@
           "title": "Dynamic",
           "type": "boolean"
         },
+        "alsoCommand": {
+          "default": false,
+          "title": "Alsocommand",
+          "type": "boolean"
+        },
+        "terminal": {
+          "default": false,
+          "title": "Terminal",
+          "type": "boolean"
+        },
         "yields": {
           "items": {
             "$ref": "#/$defs/YieldSpec"
@@ -238,6 +258,61 @@
         "text"
       ],
       "title": "BlockSpec",
+      "type": "object"
+    },
+    "ButtonSpec": {
+      "additionalProperties": false,
+      "description": "工具箱裡的非積木條目（D25、§7.2）。\n\n按鈕出現在該命名空間分類的最上面（Scratch 放「製作積木」的位置）。它**不是\n積木**：沒有輸入孔、沒有回傳值、不會出現在畫布上、不進 IR、不會被 Run\n執行——「開說明文件」「測一下 token 對不對」硬做成積木就是把它塞進一個不\n屬於它的形狀。",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "action": {
+          "enum": [
+            "open_url",
+            "open_config",
+            "call",
+            "create_procedure"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "handler": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Handler"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "action"
+      ],
+      "title": "ButtonSpec",
       "type": "object"
     },
     "ConfigSpec": {
@@ -432,6 +507,13 @@
         "$ref": "#/$defs/BlockSpec"
       },
       "title": "Blocks",
+      "type": "array"
+    },
+    "buttons": {
+      "items": {
+        "$ref": "#/$defs/ButtonSpec"
+      },
+      "title": "Buttons",
       "type": "array"
     },
     "builtin": {

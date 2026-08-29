@@ -1,0 +1,14 @@
+title: ≈ 的三條邊界：null 不約等於任何東西、容器不遞迴、0 不吸收極小值（D24）
+spec: §4.4.1 比較語意
+tags:
+- operator
+- comparison
+- D24
+expect:
+  status: ok
+  logs:
+  - 'false'
+  - 'false'
+  - 'true'
+  - 'false'
+  - 'false'

@@ -24,7 +24,7 @@ from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註
 from blocky.interpreter.declarations import expression_fields
 from blocky.interpreter.engine import Interpreter
 from blocky.interpreter.events import EventSink, normalize
-from blocky.interpreter.registry import resolve_shape
+from blocky.interpreter.registry import resolve_shape, resolve_terminal
 from blocky.interpreter.scope import InMemoryPersistStore
 from blocky.ir.schema import load
 
@@ -101,6 +101,7 @@ async def run_case(case: Case) -> Result:
             strict_refs=True,
             shapes=resolve_shape(registry),
             expressions=expression_fields,
+            terminals=resolve_terminal(registry),
         )
     except ValidationError as e:
         # §4.7 的 `${a+b}`、§4.6 的 return 位置、§4.2 的積木形狀——這些必須在

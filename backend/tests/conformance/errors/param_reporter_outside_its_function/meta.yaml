@@ -1,0 +1,10 @@
+title: 參數積木被拖到函式外面 → 當場報錯，不落到同名的全域變數
+spec: §4.6 帽子上的參數（procedure.param）
+tags:
+- procedure
+- scope
+expect:
+  status: error
+  error:
+    code: param_out_of_scope
+    message_contains: 參數「x」只能放在定義它的函式裡

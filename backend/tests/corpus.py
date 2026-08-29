@@ -748,6 +748,61 @@ case(
     tags=["operator", "comparison"],
 )
 
+def approx(a, b):
+    return blk("operator.eq", fields={"op": "approx"}, a=a, b=b)
+
+
+case(
+    "values/approx_equality_coerces",
+    "≈ 去頭尾空白、不分大小寫、跨型別先轉換（D24）",
+    "§4.4.1 比較語意",
+    one(
+        log(approx(" 5 ", 5)),          # 規則 3：兩邊都轉得成數字
+        log(approx("ABC", "abc ")),     # 規則 2：同型別文字，trim + casefold
+        log(approx(True, "TRUE")),      # 規則 4：轉成文字才對得上
+        log(approx(True, 1)),           # 規則 3：布林走 1 / 0
+        log(approx(blk("operator.add", a=0.1, b=0.2), 0.3)),  # 規則 2：相對誤差
+        log(approx("abc", 5)),          # 規則 4：文字對不上
+    ),
+    {"status": "ok", "logs": ["true", "true", "true", "true", "true", "false"]},
+    tags=["operator", "comparison", "D24"],
+)
+
+case(
+    "values/approx_equality_keeps_absence_distinct",
+    "≈ 的三條邊界：null 不約等於任何東西、容器不遞迴、0 不吸收極小值（D24）",
+    "§4.4.1 比較語意",
+    one(
+        # null 走規則 1，連空字串與 0 都不約等於——寬鬆比對可以少問一個型別，
+        # 不能少問一次「有沒有值」。空字串同理：它不是 0。
+        log(approx(blk("object.parse_json", text="null"), 0)),
+        log(approx("", 0)),
+        log(approx("", "  ")),
+        # 容器走規則 1，不把 ≈ 遞迴進元素
+        log(approx(blk("object.parse_json", text='["a "]'),
+                   blk("object.parse_json", text='["a"]'))),
+        # 相對誤差沒有絕對下限，所以 0 只約等於 0
+        log(approx(0, 1e-300)),
+    ),
+    {"status": "ok", "logs": ["false", "false", "true", "false", "false"]},
+    tags=["operator", "comparison", "D24"],
+)
+
+case(
+    "values/approx_inequality_is_the_negation",
+    "≉ 就是 ≈ 的否定；沒有 op 欄位的舊專案仍然是嚴格比對（D24、§13.1）",
+    "§4.4.1 比較語意",
+    one(
+        log(blk("operator.neq", fields={"op": "approx"}, a=" 5 ", b=5)),
+        log(blk("operator.neq", fields={"op": "approx"}, a="abc", b=5)),
+        # 沒有 fields.op：fallback 是 exact，`=` 的語意一個字都沒有改
+        log(blk("operator.eq", a="5", b=5)),
+        log(blk("operator.neq", a="5", b=5)),
+    ),
+    {"status": "ok", "logs": ["false", "true", "false", "true"]},
+    tags=["operator", "comparison", "D24"],
+)
+
 case(
     "errors/ordering_across_types_is_error",
     "大小比較不接受型別混用，訊息提示先轉型",
@@ -858,6 +913,71 @@ case(
 # ==========================================================================
 # §4.6 載入期驗證
 # ==========================================================================
+
+case(
+    "procedure/signature_template_is_display_only",
+    "簽章模板（%(參數id)）只改畫面，執行語意與純名稱的簽章一模一樣",
+    "§4.6 簽章是一份模板（D26）",
+    build(
+        scripts=[hat(log(blk("procedure.call", mutation={"proc": "p_jump"}, a1=3, a2="左")))],
+        procedures={
+            "p_jump": {
+                # 畫出來是 `跳 (3) 次 到 [左]`；函式體讀的仍然是參數**名稱**
+                # （§5.4 第 1 層），與模板無關。
+                "name": "跳 %(a1) 次 到 %(a2)",
+                "params": [
+                    {"id": "a1", "name": "次數", "type": "number"},
+                    {"id": "a2", "name": "方向", "type": "string"},
+                ],
+                "returns": "string",
+                "body": [
+                    blk("procedure.return", value=Tpl("往 ${方向} 跳 ${次數} 次")),
+                ],
+            }
+        },
+    ),
+    {"status": "ok", "logs": ["往 左 跳 3 次"]},
+    tags=["procedure", "D26"],
+)
+
+case(
+    "errors/signature_unknown_placeholder",
+    "簽章引用了不存在的參數 → 存檔期驗證錯誤",
+    "§4.6 簽章是一份模板（D26）",
+    build(
+        scripts=[hat(log("x"))],
+        procedures={
+            "p_x": {
+                "name": "跳 %(nope) 次",
+                "params": [{"id": "a1", "name": "次數", "type": "number"}],
+                "body": [blk("procedure.return", value=1)],
+            }
+        },
+    ),
+    {"status": "load_error", "load_error": "引用了不存在的參數"},
+    tags=["procedure", "validation", "D26"],
+)
+
+case(
+    "errors/signature_must_place_every_param",
+    "簽章一旦自己排版就要放進每個參數；漏掉的那個在畫面上永遠填不到",
+    "§4.6 簽章是一份模板（D26）",
+    build(
+        scripts=[hat(log("x"))],
+        procedures={
+            "p_y": {
+                "name": "跳 %(a1) 次",
+                "params": [
+                    {"id": "a1", "name": "次數", "type": "number"},
+                    {"id": "a2", "name": "方向", "type": "string"},
+                ],
+                "body": [blk("procedure.return", value=1)],
+            }
+        },
+    ),
+    {"status": "load_error", "load_error": "沒有用到參數 方向"},
+    tags=["procedure", "validation", "D26"],
+)
 
 case(
     "errors/return_outside_procedure",

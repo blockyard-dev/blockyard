@@ -235,6 +235,27 @@ def test_packs_cannot_declare_dynamic_blocks() -> None:
     )
 
 
+def test_terminal_only_applies_to_command() -> None:
+    """cap block 是 command 的修飾，不是第五種形狀（§4.6）。
+
+    reporter 沒有 `next` 可以擋，hat 標成 terminal 等於宣告一顆永遠跑不到
+    body 的帽子——兩者都是宣告寫錯了，該在載入積木包時就說。
+    """
+    bad(
+        mf(blocks=[{"opcode": "go", "type": "reporter", "text": "go", "terminal": True}]),
+        "terminal 只適用於 command",
+    )
+
+
+def test_packs_may_declare_terminal_blocks() -> None:
+    """`terminal` **不在**內建專屬名單裡：它不碰 §7.5 的邊界（§4.6）。"""
+    manifest = parse_manifest(
+        mf(blocks=[{"opcode": "halt", "type": "command", "text": "結束", "terminal": True}]),
+        where="test",
+    )
+    assert manifest.block("halt").terminal is True
+
+
 def test_dropdown_needs_source_or_options() -> None:
     base = {"opcode": "go", "type": "command", "text": "go %(x)"}
     bad(mf(blocks=[{**base, "args": {"x": {"type": "dropdown"}}}]), "source（動態）或 options")
@@ -284,3 +305,58 @@ def test_variable_args_are_always_fields() -> None:
     )
     assert m.field_args("go").keys() == {"name"}
     assert m.input_args("go").keys() == {"value"}
+
+
+# ---- 工具箱按鈕（D25、§7.2）----
+
+
+def test_open_url_button_must_declare_a_url() -> None:
+    bad(mf(buttons=[{"id": "docs", "label": "說明", "action": "open_url"}]), "必須宣告 url")
+
+
+def test_open_url_rejects_non_http_schemes() -> None:
+    """`javascript:` 要擋在**宣告層**。
+
+    前端拿到這個字串是要交給瀏覽器開的，所以一個包就能靠它在編輯器裡跑任意
+    程式碼——而那正是 D25 (c)「積木包不得自帶前端程式碼」明文封死的東西。
+    擋在這裡而不是前端：宣告層擋得住的東西，不該指望每個消費端都記得擋。
+    """
+    bad(
+        mf(buttons=[{
+            "id": "x", "label": "點我", "action": "open_url",
+            "url": "javascript:alert(1)",
+        }]),
+        "只能是 http",
+    )
+
+
+def test_call_button_must_declare_a_handler() -> None:
+    bad(mf(buttons=[{"id": "t", "label": "測試", "action": "call"}]), "必須宣告 handler")
+
+
+def test_button_fields_belong_to_one_action_only() -> None:
+    bad(
+        mf(buttons=[{"id": "t", "label": "測試", "action": "open_config", "url": "https://x"}]),
+        "只有 open_url",
+    )
+    bad(
+        mf(buttons=[{"id": "t", "label": "測試", "action": "open_config", "handler": "go"}]),
+        "只有 call",
+    )
+
+
+def test_duplicate_button_id() -> None:
+    b = {"id": "docs", "label": "說明", "action": "open_config"}
+    bad(mf(buttons=[b, dict(b)]), "按鈕 id 重複")
+
+
+def test_packs_cannot_open_the_editors_own_dialogs() -> None:
+    """`create_procedure` 開的是編輯器自己的對話框（§8.5），不屬於任何積木包。
+
+    這條與 `variable` / `stack` / `dynamic` 是同一條線（D22）：同一個模型，
+    一條載入期的權限線——而不是為內建另立一套 schema。
+    """
+    bad(
+        mf(buttons=[{"id": "create", "label": "創建積木", "action": "create_procedure"}]),
+        "只有內建能宣告",
+    )

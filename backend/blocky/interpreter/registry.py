@@ -70,6 +70,23 @@ def builtin_shapes(opcode: str) -> frozenset[str]:
     return declarations.shapes(opcode)
 
 
+def resolve_terminal(extensions: Any = None) -> Callable[[str], bool]:
+    """組出「opcode → 是不是 cap block」的查詢函式（§4.6）。
+
+    與 `resolve_shape` 同一個形狀，理由也同一個：`terminal` 積木包也宣告得起
+    （它不碰 §7.5 的邊界），所以這個問題不能只問內建。認不得的 opcode 回
+    False——§13.3 的佔位符不該因為「查不到宣告」就被說成接錯。
+    """
+
+    def resolve(opcode: str) -> bool:
+        if declarations.block(opcode) is not None:
+            return declarations.is_terminal(opcode)
+        found = extensions.lookup(opcode) if extensions is not None else None
+        return found is not None and found[1].terminal
+
+    return resolve
+
+
 def resolve_shape(extensions: Any = None) -> Callable[[str], frozenset[str]]:
     """組出「opcode → 形狀」的查詢函式，內建與積木包共用一個入口。
 

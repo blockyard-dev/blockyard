@@ -7,9 +7,16 @@
   color: var(--fg);
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body, #root { height: 100%; margin: 0; }
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
 
 .app {
   display: flex;
@@ -28,15 +35,32 @@ html, body, #root { height: 100%; margin: 0; }
   flex: none;
 }
 
-.brand { font-weight: 600; }
-.summary { color: var(--muted); font-size: 0.8125rem; }
+.brand {
+  font-weight: 600;
+}
 
-.save-status { font-size: 0.8125rem; }
-.save-status-ok { color: #2f9e57; }
-.save-status-error { color: #c23b3b; }
+.summary {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.save-status {
+  font-size: 0.8125rem;
+}
+
+.save-status-ok {
+  color: #2f9e57;
+}
+
+.save-status-error {
+  color: #c23b3b;
+}
 
 /* Blockly 畫在固定尺寸的 SVG 上，容器必須有明確高度。 */
-.workspace { flex: 1; min-height: 0; }
+.workspace {
+  flex: 1;
+  min-height: 0;
+}
 
 .notice {
   margin: 2rem auto;
@@ -48,15 +72,31 @@ html, body, #root { height: 100%; margin: 0; }
   background: #fff;
 }
 
-.notice-error { border-color: #e0a0a0; background: #fff6f6; }
-.notice code { background: #f2f3f8; padding: 0.1em 0.35em; border-radius: 0.25rem; }
-.notice p { margin: 0.5rem 0 0; }
+.notice-error {
+  border-color: #e0a0a0;
+  background: #fff6f6;
+}
+
+.notice code {
+  background: #f2f3f8;
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+}
+
+.notice p {
+  margin: 0.5rem 0 0;
+}
 
 /* ------------------------------------------------------------------ *
  * 執行時的視覺回饋（§8.3）
  * ------------------------------------------------------------------ */
 
-.actions { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+.actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
 
 .button {
   font: inherit;
@@ -67,20 +107,56 @@ html, body, #root { height: 100%; margin: 0; }
   background: #f7f8fc;
   cursor: pointer;
 }
-.button:disabled { cursor: default; opacity: 0.5; }
-.button-run { background: #2f9e57; border-color: #2f9e57; color: #fff; }
-.button-run:disabled { background: #9fc9ae; border-color: #9fc9ae; color: #fff; }
 
-.run-status { font-size: 0.8125rem; color: var(--muted); }
-.run-status-running, .run-status-starting { color: #b8860b; }
-.run-status-ok { color: #2f9e57; }
-.run-status-error { color: #c23b3b; }
+.button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.button-run {
+  background: #2f9e57;
+  border-color: #2f9e57;
+  color: #fff;
+}
+
+.button-run:disabled {
+  background: #9fc9ae;
+  border-color: #9fc9ae;
+  color: #fff;
+}
+
+.run-status {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.run-status-running,
+.run-status-starting {
+  color: #b8860b;
+}
+
+.run-status-ok {
+  color: #2f9e57;
+}
+
+.run-status-error {
+  color: #c23b3b;
+}
 
 /* 工作區 + 面板 + 氣泡層。氣泡層是 fixed，因為它的座標直接來自
    getBoundingClientRect()（見 RunBubbles.tsx），換算成容器相對座標只是
    多一次減法與一次會漂移的假設。 */
-.stage { flex: 1; min-height: 0; display: flex; position: relative; }
-.stage .workspace { flex: 1; min-width: 0; }
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+.stage .workspace {
+  flex: 1;
+  min-width: 0;
+}
 
 .bubble-layer {
   position: fixed;
@@ -111,10 +187,26 @@ html, body, #root { height: 100%; margin: 0; }
   pointer-events: auto;
   white-space: nowrap;
 }
-.bubble-error { border-color: #d46a6a; background: #fff6f6; white-space: normal; }
-.bubble-error-message { color: #b03030; font-weight: 600; }
-.bubble-hint { color: var(--muted); }
-.bubble-count { color: #b8860b; font-weight: 600; }
+
+.bubble-error {
+  border-color: #d46a6a;
+  background: #fff6f6;
+  white-space: normal;
+}
+
+.bubble-error-message {
+  color: #b03030;
+  font-weight: 600;
+}
+
+.bubble-hint {
+  color: var(--muted);
+}
+
+.bubble-count {
+  color: #b8860b;
+  font-weight: 600;
+}
 
 /* 積木外框。`>` 是必要的：巢狀積木畫在父積木的 <g> 裡面，沒有它一顆
    reporter 發光會把整條堆疊一起點亮。
@@ -123,31 +215,46 @@ html, body, #root { height: 100%; margin: 0; }
    這裡的積木顏色來自每個積木包自己的 manifest（§8.1），黃框畫在橘色的
    `control` 積木上幾乎看不見——顏色是別人決定的，高亮就不能假設底色。
    白邊負責在深色積木上分界，發光負責在淺色積木上分界，兩者互補。 */
-.blocky-run-running > .blocklyPath,
-.blocky-run-hot > .blocklyPath {
+.blocky-run-running>.blocklyPath,
+.blocky-run-hot>.blocklyPath {
   stroke: #fff;
   stroke-width: 3px;
 }
-.blocky-run-running, .blocky-run-hot {
+
+.blocky-run-running,
+.blocky-run-hot {
   filter: drop-shadow(0 0 3px #ffbf00) drop-shadow(0 0 6px #ffa000);
 }
-.blocky-run-hot { animation: blocky-pulse 0.9s ease-in-out infinite; }
 
-.blocky-run-error > .blocklyPath {
+.blocky-run-hot {
+  animation: blocky-pulse 0.9s ease-in-out infinite;
+}
+
+.blocky-run-error>.blocklyPath {
   stroke: #fff;
   stroke-width: 3px;
 }
+
 .blocky-run-error {
   filter: drop-shadow(0 0 3px #e03b3b) drop-shadow(0 0 7px #d43b3b);
 }
 
 @keyframes blocky-pulse {
-  0%, 100% { filter: drop-shadow(0 0 3px #ffbf00) drop-shadow(0 0 6px #ffa000); }
-  50% { filter: drop-shadow(0 0 1px #ffbf00); }
+
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px #ffbf00) drop-shadow(0 0 6px #ffa000);
+  }
+
+  50% {
+    filter: drop-shadow(0 0 1px #ffbf00);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .blocky-run-hot { animation: none; }
+  .blocky-run-hot {
+    animation: none;
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -163,32 +270,115 @@ html, body, #root { height: 100%; margin: 0; }
   flex-direction: column;
   overflow: hidden;
 }
-.run-section { padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--line); overflow: auto; }
-.run-section-logs { flex: 1; min-height: 0; border-bottom: none; }
-.run-section h2 { margin: 0 0 0.5rem; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
-.run-empty { margin: 0; font-size: 0.75rem; color: var(--muted); }
-.run-dropped { margin: 0.5rem 0 0; font-size: 0.7rem; color: #b8860b; }
 
-.var-list, .log-list { margin: 0; padding: 0; list-style: none; font-size: 0.75rem; }
-.var-list li { display: flex; gap: 0.4rem; padding: 0.15rem 0; align-items: baseline; }
-.var-name { font-weight: 600; }
-.log-list li { padding: 0.15rem 0; border-top: 1px solid #f0f1f6; white-space: pre-wrap; }
-.log-list li:first-child { border-top: none; }
-.log-error { color: #c23b3b; }
-.log-debug { color: var(--muted); }
+.run-section {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  overflow: auto;
+}
+
+.run-section-logs {
+  flex: 1;
+  min-height: 0;
+  border-bottom: none;
+}
+
+.run-section h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.run-empty {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.run-dropped {
+  margin: 0.5rem 0 0;
+  font-size: 0.7rem;
+  color: #b8860b;
+}
+
+.var-list,
+.log-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+}
+
+.var-list li {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  align-items: baseline;
+}
+
+.var-name {
+  font-weight: 600;
+}
+
+.log-list li {
+  padding: 0.15rem 0;
+  border-top: 1px solid #f0f1f6;
+  white-space: pre-wrap;
+}
+
+.log-list li:first-child {
+  border-top: none;
+}
+
+.log-error {
+  color: #c23b3b;
+}
+
+.log-debug {
+  color: var(--muted);
+}
 
 /* ------------------------------------------------------------------ *
  * JSON tree（§8.3：object / list 不截斷成字串）
  * ------------------------------------------------------------------ */
 
-.json-string { color: #2f7a4d; }
-.json-number { color: #2f5aa8; }
-.json-boolean, .json-null { color: #8a5cc0; }
-.json-key { color: #6b6f80; }
-.json-punct { color: var(--muted); }
-.json-count { color: var(--muted); }
-.json-branch { display: inline-block; vertical-align: top; }
-.json-entries { margin: 0; padding: 0 0 0 0.9rem; list-style: none; }
+.json-string {
+  color: #2f7a4d;
+}
+
+.json-number {
+  color: #2f5aa8;
+}
+
+.json-boolean,
+.json-null {
+  color: #8a5cc0;
+}
+
+.json-key {
+  color: #6b6f80;
+}
+
+.json-punct {
+  color: var(--muted);
+}
+
+.json-count {
+  color: var(--muted);
+}
+
+.json-branch {
+  display: inline-block;
+  vertical-align: top;
+}
+
+.json-entries {
+  margin: 0;
+  padding: 0 0 0 0.9rem;
+  list-style: none;
+}
+
 .json-toggle {
   font: inherit;
   border: none;
@@ -197,11 +387,15 @@ html, body, #root { height: 100%; margin: 0; }
   cursor: pointer;
   color: var(--muted);
 }
-.json-toggle:hover { color: var(--fg); }
+
+.json-toggle:hover {
+  color: var(--fg);
+}
 
 .sr-only {
   position: absolute;
-  width: 1px; height: 1px;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
 }
@@ -222,7 +416,11 @@ html, body, #root { height: 100%; margin: 0; }
   background: none;
   cursor: pointer;
 }
-.section-caret { font-size: 0.6rem; }
+
+.section-caret {
+  font-size: 0.6rem;
+}
+
 .section-count {
   margin-left: auto;
   padding: 0 0.35rem;
@@ -251,7 +449,9 @@ html, body, #root { height: 100%; margin: 0; }
 }
 
 /* 分類名的字級縮小，讓分類欄不用因為長一點的名字（如「示範」）就被撐寬。 */
-.blocklyToolboxCategoryLabel { font-size: 0.8rem; }
+.blocklyToolboxCategoryLabel {
+  font-size: 0.8rem;
+}
 
 /* 選取分類時的灰底（continuous-toolbox 用 inline style 塗滿整列，見
    ContinuousCategory.ts 的 setSelected）本來就是塗滿整欄寬度，欄寬是被
@@ -279,13 +479,20 @@ html, body, #root { height: 100%; margin: 0; }
   box-shadow: 0 1px 4px rgb(20 20 40 / 12%);
   cursor: pointer;
 }
-.ext-button-icon { font-size: 0.9rem; line-height: 1; }
+
+.ext-button-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
 
 /* 分類清單捲到底時，底部留一格給入口按鈕。沒有它，最後一個分類會停在按鈕
    底下——而那正是**最後裝進來的那個積木包**，使用者最可能要點的那一個。
    加在捲動容器（`.blocklyToolbox` 自己 overflow-y: auto）上，不是加在內層的
    flex group 上：後者的 padding 不算進捲動範圍。 */
-.blocklyToolbox { padding-bottom: 2.8rem; box-sizing: border-box; }
+.blocklyToolbox {
+  padding-bottom: 2.8rem;
+  box-sizing: border-box;
+}
 
 .ext-panel {
   width: 15rem;
@@ -298,13 +505,47 @@ html, body, #root { height: 100%; margin: 0; }
   box-shadow: 0 4px 14px rgb(20 20 40 / 16%);
   font-size: 0.75rem;
 }
-.ext-panel h2 { margin: 0 0 0.5rem; font-size: 0.75rem; color: var(--muted); }
-.ext-list { margin: 0 0 0.6rem; padding: 0; list-style: none; }
-.ext-list li { display: flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0; }
-.ext-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex: none; }
-.ext-name { font-weight: 600; }
-.ext-meta { margin-left: auto; color: var(--muted); }
-.ext-note { margin: 0.5rem 0 0; color: var(--muted); line-height: 1.6; }
+
+.ext-panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.ext-list {
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+}
+
+.ext-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+}
+
+.ext-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  flex: none;
+}
+
+.ext-name {
+  font-weight: 600;
+}
+
+.ext-meta {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.ext-note {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
 
 /* ------------------------------------------------------------------ *
  * 文字欄位的行內語法（§8.5）
@@ -316,22 +557,42 @@ html, body, #root { height: 100%; margin: 0; }
  * ------------------------------------------------------------------ */
 
 /* `${路徑}` 的膠囊。底圖是一顆 rect，文字疊在上面。 */
-.blocky-pill { fill: #e4e8ff; }
-.blocklyEditableField > text.blocky-ref { fill: #3b45a8; }
+.blocky-pill {
+  fill: #e4e8ff;
+}
+
+.blocklyEditableField>text.blocky-ref {
+  fill: #3b45a8;
+}
 
 /* §4.7 的「整格取值」：這一格回傳的是原值（可能是物件或清單），不是文字。
    換一個色系而不是換深淺——深淺會被讀成「同一件事的程度差別」。 */
-.blocky-pill-whole { fill: #d7efe2; }
-.blocklyEditableField > text.blocky-ref-whole { fill: #1d6b4a; }
+.blocky-pill-whole {
+  fill: #d7efe2;
+}
+
+.blocklyEditableField>text.blocky-ref-whole {
+  fill: #1d6b4a;
+}
 
 /* `${a+b}`、運算式的語法錯誤。紅線畫在字底下，字本身也轉紅——只有底線的話
    在小字級上幾乎看不見。存檔仍然由後端的 422 擋（§4.7），這只是提早說。 */
-.blocklyEditableField > text.blocky-bad { fill: #c23b3b; }
-.blocky-squiggle { stroke: #d43b3b; stroke-width: 1.5; }
-.blocky-field-bad { stroke: #d43b3b; stroke-width: 1.5; }
+.blocklyEditableField>text.blocky-bad {
+  fill: #c23b3b;
+}
+
+.blocky-squiggle {
+  stroke: #d43b3b;
+  stroke-width: 1.5;
+}
+
+.blocky-field-bad {
+  stroke: #d43b3b;
+  stroke-width: 1.5;
+}
 
 /* 運算式欄位用等寬字：`(${a} + 1) * 2` 的括號要對得起來。 */
-.blocklyEditableField > text.blocky-mono,
+.blocklyEditableField>text.blocky-mono,
 .blocky-mono-input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -367,4 +628,258 @@ html, body, #root { height: 100%; margin: 0; }
   border-radius: 0.25rem;
   cursor: pointer;
 }
-.blocky-autocomplete-item-on { background: #e4e8ff; }
+
+.blocky-autocomplete-item-on {
+  background: #e4e8ff;
+}
+
+/* ------------------------------------------------------------------ *
+ * 「創建積木」對話框（§8.5、D25、D26）
+ *
+ * 版面照 Scratch 的 Make a Block：上半是預覽積木（一個真的 Blockly 工作區，
+ * 見 ProcedureModal.tsx），下半是三顆新增按鈕與回傳值設定。
+ * ------------------------------------------------------------------ */
+
+/* 捲動放在**背景**這一層而不是對話框自己身上。Blockly 把右鍵選單畫在注入的
+   那個 div 裡（實測：`.blocklyContextMenu` 的祖先就是 `.modal-preview`），
+   所以只要中間任何一層 `overflow` 不是 visible，選單就會被裁掉——症狀是
+   「六個項目只看得到三個」。 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 2rem 0;
+  background: rgb(20 20 40 / 35%);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(38rem, calc(100vw - 3rem));
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 12px 40px rgb(20 20 40 / 28%);
+}
+
+.modal-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+  /* 與工具箱按鈕同一個藍：這個對話框是從那顆按鈕開出來的。 */
+  background: #4d97ff;
+  color: #fff;
+}
+
+.modal-head h2 {
+  margin: 0 auto;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.modal-close {
+  position: absolute;
+  right: 1rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 25%);
+  color: #fff;
+  cursor: pointer;
+}
+
+/* 預覽區。Blockly 畫在固定尺寸的 SVG 上，所以這個容器必須有明確高度。
+   `overflow: visible` 是為了右鍵選單（見上）——SVG 本身被畫布尺寸夾著，
+   不會因此溢出。 */
+.modal-preview {
+  height: 9rem;
+  overflow: visible;
+  border-bottom: 1px solid var(--line);
+  background: #eaeefb;
+}
+
+/* Blockly 自己的注入容器是 `overflow: hidden`，而右鍵選單就畫在它裡面——
+   9rem 高的預覽區於是把六個項目的選單裁成三個。SVG 本身有自己的裁切
+   （畫布超出 viewBox 的部分不會露出來），所以放開這一層是安全的。 */
+.modal-preview .injectionDiv {
+  overflow: visible;
+}
+
+.modal-adders {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  padding: 0.9rem 1rem 0.4rem;
+}
+
+.modal-adder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.8rem 0.4rem;
+  font: inherit;
+  font-size: 0.78rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.modal-adder:hover {
+  border-color: #4d97ff;
+}
+
+.modal-adder-label {
+  font-weight: 600;
+}
+
+.modal-adder-sub {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+/* 三顆按鈕上的圖示就是那三種東西在積木上的樣子：一般孔是膠囊、布林孔是
+   六角形、說明文字是一段字。畫成別的形狀等於要使用者自己對照。 */
+.modal-adder-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.6rem;
+  height: 1.6rem;
+  color: #fff;
+  font-size: 0.72rem;
+  background: #ff6680;
+}
+
+.modal-adder-round {
+  border-radius: 0.8rem;
+}
+
+.modal-adder-hex {
+  clip-path: polygon(12% 0, 88% 0, 100% 50%, 88% 100%, 12% 100%, 0 50%);
+}
+
+.modal-adder-text {
+  border-radius: 0.25rem;
+}
+
+.modal-returns,
+.modal-return-type {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 1rem;
+  font-size: 0.82rem;
+}
+
+.modal-return-type {
+  padding-left: 2.1rem;
+}
+
+.modal-return-type select {
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.modal-hint {
+  margin: 0.2rem 0 0;
+  padding: 0 1rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem 1rem;
+}
+
+/* 預覽積木上的說明文字：積木底色上的一段白字，不是一顆白色膠囊
+   （`FieldText` 的 `bare`，見 blockly/declaration.ts）。白色膠囊在這套視覺
+   文法裡一直都是「這一格的內容是資料」——說明文字不是，它會變成積木文字的
+   一部分。外框留著（點得到），只是換成一層很淡的白。
+
+   選擇器要帶著 `.zelos-renderer.blocky-theme` 前綴，因為 zelos 對可編輯欄位
+   的預設（白底、深字）就是掛在那個前綴下的——少了它，同分而 Blockly 的樣式
+   後注入，於是這兩條看起來完全沒有作用。 */
+.zelos-renderer.blocky-theme .blocky-bare-field.blocklyEditableField>rect.blocklyFieldRect {
+  fill: rgb(255 255 255 / 22%);
+}
+
+.zelos-renderer.blocky-theme .blocky-bare-field.blocklyEditableField>g>text,
+.zelos-renderer.blocky-theme .blocky-bare-field.blocklyEditableField>text {
+  fill: #fff;
+}
+
+/* ------------------------------------------------------------------ *
+ * 工具箱按鈕（D25）。Scratch 的「製作積木」：與 flyout 同寬、白底、圓角、
+ * 細灰框、有 hover。預設是一顆 56×21 的灰色小方塊，而第四輪回饋的第一句話
+ * 是「創建積木點不了」——按鈕長得不像可以點，使用者就不會再試第二次。
+ *
+ * 尺寸（margin、圓角）在 `theme.ts` 用 `FlyoutButton` 的 static 改，顏色在
+ * 這裡：寬度是 JS 量文字算出來寫進 rect 的，CSS 碰不到。
+ * ------------------------------------------------------------------ */
+
+.blocky-flyout-button>.blocklyFlyoutButtonShadow {
+  display: none;
+}
+
+.blocky-flyout-button>.blocklyFlyoutButtonBackground {
+  fill: #fff;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+/* 選擇器要夠重。積木上的字是白的，而那條規則是主題發的
+   `.zelos-renderer.blocky-theme .blocklyText { fill: #fff }`（三個 class）
+   ——蓋不過去的話按鈕就是白字白底，看起來完全是空的（實測就是這樣）。 */
+.blocklyFlyout .blocky-flyout-button>text.blocklyText {
+  fill: var(--fg);
+  font-weight: 600;
+}
+
+.blocky-flyout-button:hover>.blocklyFlyoutButtonBackground {
+  fill: #f2f3f8;
+}
+
+.blocky-flyout-button:active>.blocklyFlyoutButtonBackground {
+  fill: #e6e8f2;
+}
+
+/* ------------------------------------------------------------------ *
+ * 一句話的提示，蓋在畫布上方中央。點一下或六秒後消失——它說的是「這件事
+ * 沒做成，原因是⋯」，不是一個要使用者回答的問題，所以不做成 modal。
+ * ------------------------------------------------------------------ */
+
+.toast {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  max-width: min(32rem, 70%);
+  padding: 0.55rem 0.9rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  color: var(--fg);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgb(20 20 40 / 18%);
+  cursor: pointer;
+}

@@ -1,0 +1,251 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "debug.log",
+      "parent": "blk_1",
+      "next": "blk_4",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_3"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "operator.eq",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": " 5 "
+        },
+        "b": {
+          "kind": "literal",
+          "value": 5
+        }
+      },
+      "fields": {
+        "op": "approx"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": "blk_6",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_5"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "operator.eq",
+      "parent": "blk_4",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": "ABC"
+        },
+        "b": {
+          "kind": "literal",
+          "value": "abc "
+        }
+      },
+      "fields": {
+        "op": "approx"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "debug.log",
+      "parent": "blk_4",
+      "next": "blk_8",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_7"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "operator.eq",
+      "parent": "blk_6",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": true
+        },
+        "b": {
+          "kind": "literal",
+          "value": "TRUE"
+        }
+      },
+      "fields": {
+        "op": "approx"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "debug.log",
+      "parent": "blk_6",
+      "next": "blk_10",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_9"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_9": {
+      "opcode": "operator.eq",
+      "parent": "blk_8",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": true
+        },
+        "b": {
+          "kind": "literal",
+          "value": 1
+        }
+      },
+      "fields": {
+        "op": "approx"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_10": {
+      "opcode": "debug.log",
+      "parent": "blk_8",
+      "next": "blk_13",
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_11"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_11": {
+      "opcode": "operator.eq",
+      "parent": "blk_10",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "block",
+          "id": "blk_12"
+        },
+        "b": {
+          "kind": "literal",
+          "value": 0.3
+        }
+      },
+      "fields": {
+        "op": "approx"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_12": {
+      "opcode": "operator.add",
+      "parent": "blk_11",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": 0.1
+        },
+        "b": {
+          "kind": "literal",
+          "value": 0.2
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_13": {
+      "opcode": "debug.log",
+      "parent": "blk_10",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "block",
+          "id": "blk_14"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_14": {
+      "opcode": "operator.eq",
+      "parent": "blk_13",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "literal",
+          "value": "abc"
+        },
+        "b": {
+          "kind": "literal",
+          "value": 5
+        }
+      },
+      "fields": {
+        "op": "approx"
+      },
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

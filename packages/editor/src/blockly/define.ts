@@ -327,6 +327,10 @@ function fieldDefaults(args: Record<string, ArgSpec>): Record<string, string> {
 /**
  * 積木的四種形狀（§4.2）。
  *
+ * `terminal` 不是第五種形狀，是 command 的一個修飾（§4.6）：cap block 在連接
+ * 語意上仍然是 command——它插得進堆疊、是 `next` 的合法目標、放得進 C 型積木
+ * ——只是自己沒有 `next`。
+ *
  * `reporter` 一律 `output: null` 而不是照 `returns` 給 check——§8.5 說得很
  * 明白：型別提示用警告，不用形狀。`null` 在 Blockly 裡是「與任何孔相容」，
  * 所以 reporter 插得進 boolean 孔，與 §4.2 的載入期規則（`kind: block` 的
@@ -340,7 +344,9 @@ function applyShape(definition: Record<string, unknown>, spec: BlockSpec): void 
   switch (spec.type) {
     case 'command':
       definition.previousStatement = null;
-      definition.nextStatement = null;
+      // cap block（§4.6 的 `回傳`）：接得上、下面接不了。少了這一行，形狀在
+      // 說謊——使用者接得上一顆下一步，按存檔才被後端打回來。
+      if (!spec.terminal) definition.nextStatement = null;
       break;
     case 'reporter':
       definition.output = null;

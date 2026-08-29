@@ -14,7 +14,12 @@
 import * as Blockly from 'blockly/core';
 import { BOOLEAN_TRUE, SHADOW_FIELD, shadowKindOf, type RegisteredBlock } from '../blockly/define';
 import { FieldText } from '../blockly/fields/FieldText';
-import { isCallType, isDefinitionType, procIdFromType } from '../blockly/procedures';
+import {
+  isCallType,
+  isDefinitionType,
+  paramRefFromType,
+  procIdFromType,
+} from '../blockly/procedures';
 import type { ConversionContext } from './context';
 import { hasInterpolation, isWholeTemplate } from './template';
 import type {
@@ -61,6 +66,11 @@ export function serializeWorkspace(
 
     const procId = procIdFromType(state.type);
     if (procId != null && isDefinitionType(state.type)) {
+      // **定義帽子的孔是畫面，不是內容**（§4.6）。裡面那幾顆是參數晶片
+      // （`blockly/params.ts`），存進 IR 就等於把 `procedures[].params` 存兩份
+      // ——兩份遲早會漂移，而其中一份沒有人在讀。與 §4.5 把 `variables` 索引
+      // 留空是同一個判斷。
+      delete state.inputs;
       flattenBlock(state, null, blocks, ctx, workspace);
       const meta = passthrough[procId];
       procedures[procId] = {
@@ -88,8 +98,14 @@ export function serializeWorkspace(
     });
   }
 
-  // 函式還在 `procedures` 裡宣告，但畫布上已經找不到定義積木（被刪了）——
-  // 保留這筆記錄而不是默默丟掉，第 7 步的 mutator UI 還需要知道它存在過。
+  // 函式還在 `procedures` 裡宣告，但畫布上已經找不到定義積木——**保留這筆
+  // 記錄**而不是默默丟掉。
+  //
+  // 正常操作已經產不出這種狀態：定義帽子是 `deletable: false` 的，刪除只走
+  // 「刪除這個積木…」，而那條路會把宣告一起刪掉（§4.6、`App.tsx` 的
+  // `deleteRef`）。剩下的來源是舊專案。丟掉它等於在存檔時安靜地刪掉使用者的
+  // 東西，而工具箱照樣列得出它的呼叫積木——讓使用者自己決定要不要用對話框
+  // 重建一顆定義帽子，比替他決定好。
   for (const [id, meta] of Object.entries(passthrough)) {
     if (seenProcIds.has(id)) continue;
     procedures[id] = {
@@ -125,9 +141,18 @@ function flattenBlock(
   const id = state.id;
   if (!id) throw new Error(`Blockly 積木（type=${state.type}）缺少 id`);
 
+  // 函式的三種積木把 id 嵌在 Blockly 的 type 字串裡（`procedures.ts`），IR 的
+  // opcode 則是不帶 id 的那一個——反查表就是這三行。
+  const paramRef = paramRefFromType(state.type);
   const procId = procIdFromType(state.type);
   const opcode =
-    procId != null ? (isDefinitionType(state.type) ? 'procedure.definition' : 'procedure.call') : state.type;
+    paramRef != null
+      ? 'procedure.param'
+      : procId != null
+        ? isDefinitionType(state.type)
+          ? 'procedure.definition'
+          : 'procedure.call'
+        : state.type;
   const registered = ctx.blockOf(state.type);
 
   const fields = readFields(state, registered);
@@ -147,7 +172,14 @@ function flattenBlock(
     next,
     inputs,
     fields,
-    mutation: procId != null && isCallType(state.type) ? { proc: procId } : null,
+    // 參數以 **id** 記，不是名字：改一次參數名不該讓函式體裡那幾顆積木失聯
+    // （`procedures[].params` 是名字的唯一來源）。
+    mutation:
+      paramRef != null
+        ? { proc: paramRef.procId, param: paramRef.paramId }
+        : procId != null && isCallType(state.type)
+          ? { proc: procId }
+          : null,
     ui: readUi(workspace, id),
   };
 }

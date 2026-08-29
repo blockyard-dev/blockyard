@@ -1,0 +1,9 @@
+title: 簽章引用了不存在的參數 → 存檔期驗證錯誤
+spec: §4.6 簽章是一份模板（D26）
+tags:
+- procedure
+- validation
+- D26
+expect:
+  status: load_error
+  load_error: 引用了不存在的參數

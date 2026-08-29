@@ -1,0 +1,15 @@
+title: ≈ 去頭尾空白、不分大小寫、跨型別先轉換（D24）
+spec: §4.4.1 比較語意
+tags:
+- operator
+- comparison
+- D24
+expect:
+  status: ok
+  logs:
+  - 'true'
+  - 'true'
+  - 'true'
+  - 'true'
+  - 'true'
+  - 'false'

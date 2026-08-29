@@ -1,0 +1,8 @@
+title: 「回傳」下面接了積木 → 存檔期驗證錯誤（cap block）
+spec: §4.6 procedure.return 是 cap block（BlockSpec.terminal）
+tags:
+- procedure
+- validation
+expect:
+  status: load_error
+  load_error: 是終止積木，下面不能接積木

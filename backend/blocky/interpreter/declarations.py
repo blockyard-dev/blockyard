@@ -41,15 +41,19 @@ _BY_TYPE: dict[str, frozenset[str]] = {
 _cache: dict[str, Manifest] | None = None
 
 
-def shapes_of(block_type: str, *, dynamic: bool = False) -> frozenset[str]:
+def shapes_of(block_type: str, *, also_command: bool = False) -> frozenset[str]:
     """一顆積木**可以**是哪些形狀。空集合 = 不認得。
 
     回集合而不是單一值，是因為 §4.6 的 `procedure.call`：函式宣告了回傳型別
     它是 reporter，沒宣告就是 command。那取決於專案資料，不是宣告寫得死的
-    ——`dynamic` 就是宣告用來承認這件事的方式。
+    ——`alsoCommand` 就是宣告用來承認這件事的方式。
+
+    這裡曾經問的是 `dynamic`（「積木由專案資料生成」），而那在只有 `call` 與
+    `definition` 兩顆 dynamic 積木時剛好等價。`procedure.param` 一出現就不等價
+    了：它也是 dynamic，形狀卻是固定的 reporter。
     """
     shapes = _BY_TYPE.get(block_type, frozenset())
-    if dynamic and block_type == "reporter":
+    if also_command and block_type == "reporter":
         return shapes | {SHAPE_COMMAND}
     return shapes
 
@@ -78,7 +82,17 @@ def block(opcode: str) -> BlockSpec | None:
 
 def shapes(opcode: str) -> frozenset[str]:
     spec = block(opcode)
-    return frozenset() if spec is None else shapes_of(spec.type, dynamic=spec.dynamic)
+    return frozenset() if spec is None else shapes_of(spec.type, also_command=spec.alsoCommand)
+
+
+def is_terminal(opcode: str) -> bool:
+    """這顆積木是不是 cap block（§4.6）——下面不能再接積木。
+
+    與 `shapes` 同一個理由走宣告：那句規則原本寫死在 `_validate_structure` 裡
+    比對 `procedure.return`，於是「哪些積木是終止積木」只有讀過那一行的人知道。
+    """
+    spec = block(opcode)
+    return spec is not None and spec.terminal
 
 
 def expression_fields(opcode: str) -> frozenset[str]:
@@ -127,6 +141,7 @@ __all__ = [
     "SHAPE_VALUE",
     "block",
     "expression_fields",
+    "is_terminal",
     "manifests",
     "opcodes",
     "reload",

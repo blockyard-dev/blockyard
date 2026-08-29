@@ -43,6 +43,8 @@ export type Options = OptionSpec[] | null;
 export type Value = string;
 export type Label2 = string | null;
 export type Field = boolean;
+export type Binds = boolean;
+export type Reads = boolean;
 export type Multiline = boolean;
 export type Rows = number | null;
 export type Interpolate = boolean | null;
@@ -52,11 +54,19 @@ export type Returns = ('any' | 'number' | 'string' | 'boolean' | 'list' | 'objec
 export type Blocking = boolean;
 export type Deprecated = boolean;
 export type Dynamic = boolean;
+export type Alsocommand = boolean;
+export type Terminal = boolean;
 export type Name1 = string;
 export type Type3 = string;
 export type Yields = YieldSpec[];
 export type Concurrency = ('drop' | 'queue' | 'restart' | 'parallel') | null;
 export type Blocks = BlockSpec[];
+export type Id1 = string;
+export type Label3 = string;
+export type Action = 'open_url' | 'open_config' | 'call' | 'create_procedure';
+export type Url = string | null;
+export type Handler = string | null;
+export type Buttons = ButtonSpec[];
 export type Builtin = boolean;
 
 /**
@@ -74,6 +84,7 @@ export interface BlockyExtensionManifest {
   requirements?: Requirements;
   config?: Config;
   blocks?: Blocks;
+  buttons?: Buttons;
   builtin?: Builtin;
 }
 /**
@@ -98,6 +109,8 @@ export interface BlockSpec {
   blocking?: Blocking;
   deprecated?: Deprecated;
   dynamic?: Dynamic;
+  alsoCommand?: Alsocommand;
+  terminal?: Terminal;
   yields?: Yields;
   concurrency?: Concurrency;
 }
@@ -115,6 +128,8 @@ export interface ArgSpec {
   source?: Source;
   options?: Options;
   field?: Field;
+  binds?: Binds;
+  reads?: Reads;
   multiline?: Multiline;
   rows?: Rows;
   interpolate?: Interpolate;
@@ -138,6 +153,21 @@ export interface OptionSpec {
 export interface YieldSpec {
   name: Name1;
   type?: Type3;
+}
+/**
+ * 工具箱裡的非積木條目（D25、§7.2）。
+ *
+ * 按鈕出現在該命名空間分類的最上面（Scratch 放「製作積木」的位置）。它**不是
+ * 積木**：沒有輸入孔、沒有回傳值、不會出現在畫布上、不進 IR、不會被 Run
+ * 執行——「開說明文件」「測一下 token 對不對」硬做成積木就是把它塞進一個不
+ * 屬於它的形狀。
+ */
+export interface ButtonSpec {
+  id: Id1;
+  label: Label3;
+  action: Action;
+  url?: Url;
+  handler?: Handler;
 }
 
 /** 這份檔案的入口型別。schema 的 `title` 決定了上面那個名字。 */

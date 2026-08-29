@@ -1,0 +1,9 @@
+title: 簽章一旦自己排版就要放進每個參數；漏掉的那個在畫面上永遠填不到
+spec: §4.6 簽章是一份模板（D26）
+tags:
+- procedure
+- validation
+- D26
+expect:
+  status: load_error
+  load_error: 沒有用到參數 方向

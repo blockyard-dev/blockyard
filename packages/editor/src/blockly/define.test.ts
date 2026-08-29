@@ -57,6 +57,7 @@ describe('形狀（§4.2）', () => {
       { opcode: 'rep', type: 'reporter', text: '取值', returns: 'object' },
       { opcode: 'bool', type: 'boolean', text: '是不是' },
       { opcode: 'hat', type: 'hat', text: '當某事發生' },
+      { opcode: 'cap', type: 'command', text: '回傳', terminal: true },
     ]),
   );
   const byType = Object.fromEntries(definitions.map((d) => [d.type as string, d]));
@@ -74,6 +75,14 @@ describe('形狀（§4.2）', () => {
 
   it('boolean 的 output 是 Boolean，好讓孔畫成六角形', () => {
     expect(byType['test.bool']).toHaveProperty('output', 'Boolean');
+  });
+
+  it('terminal 是 cap block：接得上、下面接不了（§4.6）', () => {
+    // 沒有這一條，形狀就在說謊——使用者接得上一顆下一步，按存檔才被後端的
+    // 「是終止積木，下面不能接積木」打回來。
+    expect(byType['test.cap']).toHaveProperty('previousStatement', null);
+    expect(byType['test.cap']).not.toHaveProperty('nextStatement');
+    expect(byType['test.cap']).not.toHaveProperty('output');
   });
 
   it('hat 只有下接點且戴帽子', () => {

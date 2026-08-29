@@ -80,6 +80,11 @@ const NOT_REPRESENTABLE_IN_BLOCKLY = new Set([
   'errors/extension_block_shape_is_checked_too/project.json',
   'errors/hat_in_the_middle_of_a_stack/project.json',
   'errors/reporter_in_stack/project.json',
+  // cap block 下面接了積木（§4.6 的 `terminal`）。`procedure.return` 與
+  // `control.stop` 都已經沒有 `nextStatement`，Blockly 直接拒收——正是這兩題
+  // 想證明的那條防線。
+  'errors/terminal_block_cannot_have_next/project.json',
+  'errors/stop_is_a_terminal_block/project.json',
   'errors/unknown_opcode_stays_a_placeholder/project.json',
   'extensions/missing_pack_is_placeholder/project.json',
   'extensions/number_arg_converts/project.json',

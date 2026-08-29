@@ -54,7 +54,8 @@ blocks:
     type: command
     text: "對 %(list) 的每一項 %(name)"
     args:
-      name: { type: variable, default: "item", label: "項目變數" }
+      # binds：迴圈變數由這顆積木建立（§5.4 第 1 層之外的第 3 層寫入）。
+      name: { type: variable, default: "item", label: "項目變數", binds: true }
       list: { type: list }
       body: { type: stack }
 
@@ -72,6 +73,13 @@ blocks:
 
   - opcode: stop
     type: command
+    # cap block（§16 Q18 決議：改）。`停止` 之後的積木永遠跑不到，而形狀不說
+    # 這件事的話，使用者接得上去、按存檔才被打回來。
+    #
+    # 我們的 `scope` 只有「這個腳本」與「全部」兩個值，兩個在 Scratch 裡都是
+    # cap。Scratch 另外有一個不是 cap 的 `stop [other scripts]`——那顆的形狀隨
+    # 欄位值而變，要 mutator 才做得到。這個下拉再長出第三個值時要重看這一行。
+    terminal: true
     text: "停止 %(scope)"
     args:
       scope:
@@ -88,5 +96,6 @@ blocks:
     text: "嘗試 ⋯ 出錯時把錯誤存進 %(error_name)"
     args:
       try: { type: stack }
-      error_name: { type: variable, default: "error", label: "錯誤變數" }
+      # binds：錯誤變數由 catch 綁定（§5.4 第 2 層 thread-local）。
+      error_name: { type: variable, default: "error", label: "錯誤變數", binds: true }
       catch: { type: stack }

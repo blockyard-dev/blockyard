@@ -77,6 +77,26 @@ export interface FieldTextOptions {
    * `null` = 沒有強制，交給前兩層。
    */
   forcedMultiline?: boolean | null;
+  /**
+   * 這一格是**積木上的一段文字**，不是一個值。
+   *
+   * 目前唯一的使用者是「創建積木」對話框裡預覽積木上的說明文字（§8.5、D26）：
+   * 它可以編輯，但它會變成積木文字的一部分，而**不是**一個孔。旁邊那些白色
+   * 膠囊才是孔。兩者長得一樣的話，預覽就在「這顆積木會長成什麼樣」這件事上
+   * 說謊了——而使用者正是看著預覽在做決定。
+   *
+   * 只改外觀（畫成積木底色上的一段白字），不改任何行為。
+   */
+  bare?: boolean;
+  /**
+   * 這一格的名字**不代表工作區裡的一個變數**，所以右鍵不列「重新命名所有
+   * 引用」（§4.5）。
+   *
+   * 用在「創建積木」對話框的參數名稱格上：那個工作區裡只有一顆預覽積木，
+   * 掃得到的引用永遠是它自己——一個永遠只會改到眼前這一格的「所有引用」，
+   * 講的是一件沒有發生的事。
+   */
+  standalone?: boolean;
 }
 
 export interface FieldTextConfig extends FieldMultilineInputConfig, FieldTextOptions {}
@@ -138,7 +158,7 @@ const MIN_PILL_ASPECT = 1.6;
 /** autocomplete 最多列幾個。再多就不是「提示」而是「另一份清單」。 */
 const MAX_COMPLETIONS = 8;
 
-/** 積木上警告圖示的 id 前綴，見 `blockly/inert.ts` 對「帶 id 清除」的說明。 */
+/** 積木上警告圖示的 id 前綴——見下面 `syncWarning` 對「帶 id 清除」的說明。 */
 const FIELD_WARNING_PREFIX = 'blocky-field:';
 
 const NBSP = ' ';
@@ -160,6 +180,8 @@ export class FieldText extends FieldMultilineInput {
   declare private declaredMultiline: boolean;
   declare private declaredRows: number | null;
   declare private forcedMultiline: boolean | null;
+  declare private bare: boolean;
+  declare private standalone: boolean;
 
   // 同一個 `declare` 的理由（見上）：`Field` 的 constructor 會走到 `setValue`，
   // 而 class field 的初始化在 `super()` **之後**——寫成 `= null` 的話，建構時
@@ -191,6 +213,8 @@ export class FieldText extends FieldMultilineInput {
     this.declaredMultiline = config.multiline ?? false;
     this.declaredRows = config.rows ?? null;
     this.forcedMultiline = config.forcedMultiline ?? null;
+    this.bare = config.bare ?? false;
+    this.standalone = config.standalone ?? false;
     this.syncLines();
   }
 
@@ -200,6 +224,11 @@ export class FieldText extends FieldMultilineInput {
 
   isVariableName(): boolean {
     return this.mode === 'variable';
+  }
+
+  /** 這一格的名字有沒有「工作區裡的其他引用」可以一起改（見 `standalone`）。 */
+  hasReferences(): boolean {
+    return this.isVariableName() && !this.standalone;
   }
 
   isExpression(): boolean {
@@ -322,7 +351,14 @@ export class FieldText extends FieldMultilineInput {
     const shapes = this.getConstants()?.SHAPES;
     if (!shapes) return;
 
-    const want = this.renderedRows() > 1 ? shapes.SQUARE : shapes.ROUND;
+    // 單行**不是一律膠囊**：六角形的格子要維持六角形。這一格的規則是
+    // 「畫出來超過一行就不要膠囊」，而不是「所有字面值都是膠囊」——寫死
+    // `ROUND` 會把「創建積木」對話框裡的布林參數名（一顆 output 是 Boolean
+    // 的白色六角，見 `blockly/declaration.ts`）壓成膠囊，而那正好讓預覽在
+    // 「這個參數會變成哪一種孔」這件事上說謊。
+    const isBoolean = block.outputConnection.getCheck()?.includes('Boolean') === true;
+    const single = isBoolean ? shapes.HEXAGONAL : shapes.ROUND;
+    const want = this.renderedRows() > 1 ? shapes.SQUARE : single;
     if (want === undefined || block.getOutputShape() === want) return;
     block.setOutputShape(want);
     // 影子自己與**外面那顆積木**都要重畫：孔的形狀是父積木畫的。
@@ -361,7 +397,8 @@ export class FieldText extends FieldMultilineInput {
    *
    * **標在非影子的那顆積木上**：影子沒有自己的圖示位置，而使用者看的是外面
    * 那顆積木。id 帶上影子自己的 blockId 與欄位名，所以同一顆積木上兩格壞掉的
-   * 文字不會互相蓋掉——這與 `inert.ts` 對「帶 id 清除」的堅持是同一件事。
+   * 文字不會互相蓋掉——**清除時一定要帶 id**，不帶的話 `setWarningText(null)`
+   * 會把整顆警告圖示拆掉，連 `App.tsx` 的存檔警告也一起清掉。
    */
   private syncWarning(): void {
     const block = this.getSourceBlock();
@@ -392,6 +429,10 @@ export class FieldText extends FieldMultilineInput {
       const root = (this.getSourceBlock() as Blockly.BlockSvg | null)?.getSvgRoot();
       if (root) this.clickTarget_ = root;
     }
+    // 外框**留著**（樣式由 CSS 換掉，見 index.css）：拿掉它，一格空的說明文字
+    // 就只剩一個 NBSP，而 SVG 的命中測試打不到沒有幾何的東西——那正是這個檔案
+    // 前面為影子欄位補 `clickTarget_` 的同一個坑。
+    if (this.bare) Blockly.utils.dom.addClass(this.fieldGroup_!, 'blocky-bare-field');
     this.syncWarning();
   }
 
@@ -442,8 +483,20 @@ export class FieldText extends FieldMultilineInput {
     }
 
     // --- 尺寸 ---
-    const { width, height, xPad, topPad } = this.measure(contentWidth, lines.length);
-    this.size_ = new Blockly.utils.Size(width, height);
+    const { width: measured, height, xPad, topPad } = this.measure(contentWidth, lines.length);
+    this.size_ = new Blockly.utils.Size(measured, height);
+    // **版面要用讀回來的寬度，不能用剛剛算出來的那個。**
+    //
+    // `FieldInput` 的 `size_` 是一對 getter / setter，而 getter 會把寬度夾到
+    // 最小 14px（它自己的 `MINIMUM_WIDTH`，為了讓空欄位點得到），而且是**就地
+    // 改寫**那個 Size 物件。所以 `measure()` 回 4.1（一個 `i` 的寬度）時，
+    // 積木拿到的欄位盒子其實是 14——渲染器把 14 置中，我們卻把文字排在 4.1
+    // 的盒子裡，於是半形單字看起來靠左約 5px。中文字寬度本來就 > 14，夾不到，
+    // 所以這個症狀只有半形單字看得見（實測回饋）。
+    //
+    // 讀回來而不是自己也寫一個 14：那個常數是基底類別的，複製一份的那天它改了
+    // 這裡不會紅，只會又歪回去。
+    const width = this.size_.width;
     this.positionBorderRect_();
     if (this.borderRect_) {
       // 單行畫成膠囊、多行畫成圓角方塊。單行的膠囊是為了跟數字影子那顆橢圓
@@ -460,10 +513,11 @@ export class FieldText extends FieldMultilineInput {
     const lineHeight = constants.FIELD_TEXT_HEIGHT + constants.FIELD_BORDER_RECT_Y_PADDING;
     // 單行**置中**、多行靠左。
     //
-    // 置中不是美術偏好，是為了補一個洞：單行欄位有最小寬度（`MIN_PILL_ASPECT`，
-    // 不然一個字的膠囊會變成直立的橢圓），而靠左排版會把多出來的寬度**全部
-    // 留在右邊**——看起來就是「左邊 padding 太小」。置中之後那份餘裕平均分到
-    // 兩側，短名字在膠囊正中間。
+    // 置中不是美術偏好，是為了補一個洞：單行欄位有兩道最小寬度——自己畫膠囊
+    // 時的 `MIN_PILL_ASPECT`（不然一個字的膠囊會變成直立的橢圓），與影子裡
+    // `FieldInput` 夾的那 14px（見上面 `width` 那段）。靠左排版會把多出來的
+    // 寬度**全部留在右邊**——看起來就是「左邊 padding 太小」。置中之後那份
+    // 餘裕平均分到兩側，短名字在膠囊正中間。
     //
     // 多行維持靠左：一段文字置中是沒辦法讀的。
     const startX = lines.length === 1 ? Math.max(xPad, (width - contentWidth) / 2) : xPad;
@@ -1041,7 +1095,7 @@ export function registerFieldContextMenu(): void {
     preconditionFn: (scope, event) => {
       clickedField = resolveField(scope, event);
       const field = clickedField;
-      if (!field?.isVariableName()) return 'hidden';
+      if (!field?.hasReferences()) return 'hidden';
       return String(field.getValue() ?? '') === '' ? 'disabled' : 'enabled';
     },
     displayText: () => `重新命名「${String(clickedField?.getValue() ?? '')}」的所有引用`,

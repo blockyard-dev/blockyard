@@ -7,6 +7,7 @@
  */
 import * as Blockly from 'blockly/core';
 import { ContinuousFlyout, registerContinuousToolbox } from '@blockly/continuous-toolbox';
+import { procIdFromType } from './procedures';
 
 export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
   name: 'blocky',
@@ -44,6 +45,21 @@ export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
 registerContinuousToolbox();
 
 /**
+ * 工具箱按鈕撐大一點（D25）。
+ *
+ * 預設量出來是 56×21 的小方塊，而 Scratch 的「製作積木」是一顆與 flyout 同寬
+ * 的按鈕。這一條與「能不能點」無關，但它決定使用者按了沒反應之後會**不會再
+ * 試一次**——第四輪回饋的第一句話正是「創建積木點不了」。
+ *
+ * 這三個是 static，所以是全域的：之後積木包的按鈕也會吃到，那正是想要的
+ * （D25 的按鈕是同一個字彙表，不該長兩種樣子）。尺寸只能從這裡改——寬度是
+ * `FlyoutButton` 量文字算出來寫進 rect 的，CSS 改不動。
+ */
+Blockly.FlyoutButton.TEXT_MARGIN_X = 20;
+Blockly.FlyoutButton.TEXT_MARGIN_Y = 10;
+Blockly.FlyoutButton.BORDER_RADIUS = 8;
+
+/**
  * 積木面板的縮放**與畫布脫鉤**。
  *
  * Blockly 預設 `getFlyoutScale()` 回 `targetWorkspace.scale`，於是放大畫布會
@@ -57,8 +73,79 @@ registerContinuousToolbox();
 const DEFAULT_SCALE = 0.75;
 
 class FixedScaleFlyout extends ContinuousFlyout {
+  constructor(options: Blockly.Options) {
+    super(options);
+    // **函式積木不回收。**
+    //
+    // continuous-toolbox 的 flyout 會把上一批積木依 type 收起來重用
+    // （`RecyclableBlockFlyoutInflater`），而那假設「同一個 type 永遠長同一個
+    // 樣子」。函式積木不是：改一次簽章就是同一組 type 換一份定義
+    // （`procedures.ts`），於是回收回來的那顆帶著舊的孔——工具箱裡的 `跳 ( ) 次`
+    // 在參數已經被刪掉之後還留著那個孔，而畫布上的那顆已經對了。
+    this.setBlockIsRecyclable((block) => procIdFromType(block.type) === null);
+  }
+
   override getFlyoutScale(): number {
     return DEFAULT_SCALE;
+  }
+
+  /**
+   * **點分類就到，不做平滑捲動。**
+   *
+   * plugin 的 `scrollTo` 是一個 rAF 動畫（每幀補剩餘的 30%），而它壞了三件事：
+   *
+   * 1. **它把按鈕從游標底下移走。** 點分類**馬上**點那顆「創建積木」（最自然
+   *    的順序）就是在打一個移動中的目標——實測同一顆按鈕的 `rect.y` 在幾秒內
+   *    出現過 824 / 127 / 103 / 95 / 92，而 pointerdown 與 pointerup 落在不同
+   *    元素上時那一下不算 click，按下去完全沒有反應。
+   * 2. **動畫在跑的時候滾輪是死的**：plugin 寫的是
+   *    `wheel_(e) { this.scrollTarget || super.wheel_(e) }`，而 `scrollTarget`
+   *    只有在動畫收斂（差 < 1px）時才清掉。實測它卡在 `4507.125` 而 `scrollY`
+   *    停在 `-4497`，期間往上滾五格 flyout 一動也不動。
+   * 3. **分頁沒有焦點時 rAF 被節流到 ~1fps**，這段動畫會慢到爬（實測 2.5 秒
+   *    只走 11px）。
+   *
+   * 覆寫成一次到位。`scrollTarget` 因此永遠是 `undefined`，(2) 那條短路自然
+   * 就不會擋住滾輪。捲到位之後分類的選取由既有的捲動 listener 負責，與使用者
+   * 自己滾到那裡是同一條路。
+   */
+  /**
+   * 按鈕撐成**與 flyout 同寬**（Scratch 的「製作積木」就是那樣）。
+   *
+   * 這一段是 hack，寫清楚：寬度是 `FlyoutButton` 量文字算出來、直接寫進 rect
+   * 的 `width` 的，沒有任何宣告式的掛勾能改（`TEXT_MARGIN_X` 只加內距，
+   * `web-class` 只能改顏色）。所以 layout 完之後回頭把 rect 撐開，並把
+   * `<text>` 的 `x` 移到新的中線（它是 `text-anchor: middle`，座標寫的是
+   * `width / 2`）。動的是 Blockly 畫好的 DOM，換版本要重看一次。
+   *
+   * 只動按鈕，不動標籤（分類名）——`isLabel()` 的那些沒有背景 rect。
+   */
+  override show(flyoutDef: Blockly.utils.toolbox.FlyoutDefinition | string): void {
+    super.show(flyoutDef);
+
+    const scale = this.getFlyoutScale();
+    // `getWidth()` 是像素，rect 的座標是 flyout 工作區的單位。
+    const full = this.getWidth() / scale - this.MARGIN * 2;
+    if (!(full > 0)) return;
+
+    for (const item of this.getContents()) {
+      const element = item.getElement();
+      if (!(element instanceof Blockly.FlyoutButton) || element.isLabel()) continue;
+      const root = element.getSvgRoot();
+      for (const rect of root.querySelectorAll('rect')) {
+        rect.setAttribute('width', String(full));
+      }
+      root.querySelector('text')?.setAttribute('x', String(full / 2));
+      element.width = full;
+    }
+  }
+
+  override scrollTo(position: number): void {
+    const ws = this.getWorkspace();
+    const metrics = ws.getMetrics();
+    ws.scrollbar?.setY(
+      Math.min(position * ws.scale, metrics.scrollHeight - metrics.viewHeight),
+    );
   }
 }
 

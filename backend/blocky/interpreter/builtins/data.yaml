@@ -27,7 +27,9 @@ blocks:
     type: command
     text: "設定 %(name) 為 %(value)"
     args:
-      name: { type: variable, default: "" }
+      # binds：這一格建立名字。`change` 與 `get` 沒有這個宣告，於是編輯器的
+      # 靜態檢查（§4.5）知道「只被 change/get 提到過的名字」是打錯字。
+      name: { type: variable, default: "", binds: true }
       value: { type: string, default: "" }
 
   - opcode: change
@@ -47,7 +49,12 @@ blocks:
     # 積木文字不進 IR，所以改這一行不影響任何已存的專案。
     text: "取得 %(name)"
     args:
-      name: { type: variable, default: "" }
+      # reads：**這顆積木回傳的就是這個名字的值**。原本是給函式分類用的（為每
+      # 個參數各列一顆 `取得 (參數名)`，而不必寫死一個 opcode），但 §4.6 的參數
+      # 後來改成 `procedure.param` 那顆光禿禿的膠囊，那個消費者就沒了。宣告留
+      # 著——它說的仍然是一件真話，而 `data.get` 與 `data.list_length` 的宣告
+      # 一模一樣（reporter + 一個 variable 參數），沒有它就分不出誰是「取得」。
+      name: { type: variable, default: "", reads: true }
 
   - opcode: new_list
     type: reporter

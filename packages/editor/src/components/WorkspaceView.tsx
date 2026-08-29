@@ -16,8 +16,11 @@ interface Props {
 }
 
 export function WorkspaceView({ toolbox, onReady }: Props) {
+  const toolboxRef = useRef(toolbox);
   const hostRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<Blockly.WorkspaceSvg | null>(null);
+  // 第一次的 toolbox 是 inject 時就帶進去的，不必再更新一次。
+  const firstToolbox = useRef(true);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -25,7 +28,7 @@ export function WorkspaceView({ toolbox, onReady }: Props) {
 
     const workspace = Blockly.inject(host, {
       ...workspaceOptions,
-      toolbox: toolbox as unknown as Blockly.utils.toolbox.ToolboxDefinition,
+      toolbox: toolboxRef.current as unknown as Blockly.utils.toolbox.ToolboxDefinition,
     });
     workspaceRef.current = workspace;
     onReady?.(workspace);
@@ -39,9 +42,28 @@ export function WorkspaceView({ toolbox, onReady }: Props) {
       workspace.dispose();
       workspaceRef.current = null;
     };
-    // toolbox 換掉要重建工作區——這一步還沒有專案要保存，第 4 步接上存讀檔
-    // 之後才需要改成 updateToolbox。
+    // **只建一次。** toolbox 是會變的（建立一個函式就多一顆呼叫積木，§8.5），
+    // 而重建工作區等於把使用者畫布上的東西全部丟掉再讀一次。換 toolbox 走
+    // 下面那條 `updateToolbox`。
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * 工具箱換掉（新增或改了一個函式）。
+   *
+   * `updateToolbox` 只換分類的內容，不動工作區。continuous-toolbox 的 flyout
+   * 是**一條連續的捲動軸**（見 theme.ts），內容在 `init` 時就展開好了，所以
+   * 換完要叫它重讀一次——沒有這一句，新的呼叫積木要等使用者點一下別的分類
+   * 才會出現。
+   */
+  useEffect(() => {
+    const workspace = workspaceRef.current;
+    if (!workspace || firstToolbox.current) {
+      firstToolbox.current = false;
+      return;
+    }
+    workspace.updateToolbox(toolbox as unknown as Blockly.utils.toolbox.ToolboxDefinition);
+    (workspace.getToolbox() as { refreshSelection?: () => void } | null)?.refreshSelection?.();
   }, [toolbox]);
 
   return <div ref={hostRef} className="workspace" />;

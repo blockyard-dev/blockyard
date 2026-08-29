@@ -25,7 +25,13 @@ import {
   type ShadowKind,
 } from '../blockly/define';
 import { FieldText } from '../blockly/fields/FieldText';
-import { callType, definitionType, isCallType, isDefinitionType } from '../blockly/procedures';
+import {
+  callType,
+  definitionType,
+  isCallType,
+  isDefinitionType,
+  paramType,
+} from '../blockly/procedures';
 import type { ConversionContext } from './context';
 import type {
   Block as IRBlock,
@@ -127,6 +133,14 @@ function blocklyTypeOf(block: IRBlock): string {
       throw new Error('procedure.call 缺少 mutation.proc');
     }
     return callType(id);
+  }
+  if (block.opcode === 'procedure.param') {
+    const proc = block.mutation?.proc;
+    const param = block.mutation?.param;
+    if (typeof proc !== 'string' || typeof param !== 'string') {
+      throw new Error('procedure.param 缺少 mutation.proc / mutation.param');
+    }
+    return paramType(proc, param);
   }
   return block.opcode;
 }

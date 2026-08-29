@@ -62,6 +62,18 @@ class UndefinedVariableError(BlockyError):
     code = "undefined_variable"
 
 
+class ParamOutOfScopeError(BlockyError):
+    """§4.6 參數積木被拖到定義它的函式外面。
+
+    刻意是 BlockyError 而非 ValidationError：它**會**走到執行期。載入期看不出
+    來——一顆 `procedure.param` 可以合法地待在某個 `if` 的分支裡，而那條分支跑
+    不跑得到是執行期的事。既然會走到執行期，它就得像其他執行期錯誤一樣看得見
+    （能被 `try_catch` 接住、能發出 `block.error`）。
+    """
+
+    code = "param_out_of_scope"
+
+
 class TemplateError(BlockyError):
     """§4.7 `${}` 插值錯誤。"""
 

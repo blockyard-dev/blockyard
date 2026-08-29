@@ -20,7 +20,7 @@ from blocky.extensions import open_registry
 from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
 from blocky.interpreter.declarations import expression_fields
 from blocky.interpreter.events import EventSink
-from blocky.interpreter.registry import resolve_shape
+from blocky.interpreter.registry import resolve_shape, resolve_terminal
 from blocky.ir.schema import LoadedProject, load
 
 if TYPE_CHECKING:
@@ -71,6 +71,7 @@ async def open_project(
                 strict_refs=True,
                 shapes=resolve_shape(registry),
                 expressions=expression_fields,
+                terminals=resolve_terminal(registry),
             ),
             registry,
         )

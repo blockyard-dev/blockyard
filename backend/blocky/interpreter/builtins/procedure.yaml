@@ -12,6 +12,15 @@ version: 1.0.0
 color: "#FF6680"
 description: 可回傳值的自訂函式
 
+# D25：工具箱的非積木條目。函式分類最上面那顆按鈕是**建立函式的唯一入口**
+# ——不是拖一顆「定義函式」出來。拖出來的作法要在 drop 事件裡配 proc id 與
+# 註冊型別，中間還會存在一個「還沒有名字的函式」，而那東西存進 `procedures`
+# 就是半成品（§8.5、D26）。
+buttons:
+  - id: create
+    label: "建立一個積木"
+    action: create_procedure
+
 blocks:
   - opcode: definition
     type: hat
@@ -21,12 +30,30 @@ blocks:
   - opcode: call
     type: reporter
     dynamic: true
+    # 整份宣告裡唯一形狀不固定的積木：函式沒宣告回傳型別時它沒有輸出孔。
+    alsoCommand: true
     returns: any
     text: "呼叫函式"
 
+  # 定義帽子上那顆拖得出去的參數（§4.6）。Scratch 的
+  # `argument_reporter_string_number`：**一顆光禿禿的膠囊**，上面只有參數名，
+  # 沒有動詞——`取得 (次數)` 講的是「查一個變數」，而參數不是變數，它是這次
+  # 呼叫傳進來的值，唯讀、只活在這個 frame 裡。
+  #
+  # dynamic：名字來自 `procedures[].params`，不是這份宣告，工具箱也不列出這顆
+  # 空白的。前端為每個參數各生一組型別（`procedure.param#<proc>.<param>`），
+  # 與 `definition` / `call` 同一條路。
+  - opcode: param
+    type: reporter
+    dynamic: true
+    returns: any
+    text: "參數"
+
   - opcode: return
     type: command
-    # cap block：下面不能接積木，且只能放在函式定義裡面（載入期驗證，§4.6）
+    # cap block：下面不能接積木（`terminal`，前端不畫下凸點、後端載入期擋），
+    # 且只能放在函式定義裡面（載入期驗證，§4.6）
+    terminal: true
     text: "回傳 %(value)"
     args:
       value: { type: string, default: "" }

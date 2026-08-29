@@ -1,0 +1,9 @@
+title: 簽章模板（%(參數id)）只改畫面，執行語意與純名稱的簽章一模一樣
+spec: §4.6 簽章是一份模板（D26）
+tags:
+- procedure
+- D26
+expect:
+  status: ok
+  logs:
+  - 往 左 跳 3 次

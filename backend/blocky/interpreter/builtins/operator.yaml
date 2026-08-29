@@ -93,16 +93,42 @@ blocks:
       value: { type: number, default: 0 }
 
   # ---- 比較（§4.4.1）。eq / neq 不做型別轉換；大小比較型別混用是錯誤。----
+  #
+  # `op` 是下拉而不是兩顆新積木（D24）：`=` 與 `≈` 問的是同一個問題，差別只在
+  # 「要不要先把兩邊整理成同一種東西」。做成兩顆積木的話，工具箱裡會有四顆長得
+  # 幾乎一樣的比較積木，而使用者要先看懂四個符號才選得下去。
+  #
+  # 欄位值是 `exact` / `approx` 而不是 `=` / `≈`：符號會隨介面語言變（§16 Q5 的
+  # i18n 要換的正是 label），opcode 與欄位值不會（§13.1）。舊專案沒有這一格，
+  # handler 的 fallback 是 `exact`——`=` 的語意一個字都沒有改。
 
   - opcode: eq
     type: boolean
-    text: "%(a) = %(b)"
-    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+    text: "%(a) %(op) %(b)"
+    args:
+      a: { type: string, default: "" }
+      op:
+        type: dropdown
+        field: true
+        default: exact
+        options:
+          - { value: exact, label: "=" }
+          - { value: approx, label: "≈" }
+      b: { type: string, default: "" }
 
   - opcode: neq
     type: boolean
-    text: "%(a) ≠ %(b)"
-    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+    text: "%(a) %(op) %(b)"
+    args:
+      a: { type: string, default: "" }
+      op:
+        type: dropdown
+        field: true
+        default: exact
+        options:
+          - { value: exact, label: "≠" }
+          - { value: approx, label: "≉" }
+      b: { type: string, default: "" }
 
   - opcode: lt
     type: boolean

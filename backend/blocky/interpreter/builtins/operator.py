@@ -2,14 +2,17 @@
 
 **比較語意**（原設計文件未定義，這裡補上並進題庫）：
 
-  eq / neq   不做型別轉換。型別不同即不相等，list / object 走深度比較。
-             等同 JS 的 ===。不報錯，因為「這兩個東西一不一樣」對任何
-             輸入都該有答案。
+  eq / neq   `fields.op` 選 `exact`（= / ≠，預設）時不做型別轉換：型別不同
+             即不相等，list / object 走深度比較，等同 JS 的 ===。不報錯，
+             因為「這兩個東西一不一樣」對任何輸入都該有答案。
+             選 `approx`（≈ / ≉，D24）時走 `_approx_eq` 的四條規則。
   lt/gt/lte/gte  兩邊都是數字 → 數值比較；兩邊都是文字 → 字典序比較；
              **型別混用 → 執行期錯誤**，訊息提示用「轉為數字」。
 
-第二條刻意不學 Scratch 的「能轉數字就轉、否則比字串」。那個規則會讓
+最後一條刻意不學 Scratch 的「能轉數字就轉、否則比字串」。那個規則會讓
 `"10" < "9"` 的答案取決於使用者看不見的嗅探結果，正是 §4.3 想避免的混亂。
+`≈` 不是那條路的回歸：它做的轉換與 Scratch 一樣寬，但**寫在積木上**——選了
+`≈` 的人知道自己選了什麼，而嗅探沒有給任何人這個機會。
 """
 
 from __future__ import annotations
@@ -23,12 +26,14 @@ from blocky.interpreter.engine import Thread
 from blocky.interpreter.registry import value
 from blocky.ir.schema import Block
 from blocky.ir.values import (
+    TYPE_BOOLEAN,
     TYPE_LABELS_ZH,
     TYPE_NUMBER,
     TYPE_STRING,
     divide,
     modulo,
     normalize_index,
+    to_number,
     to_string,
     type_of,
 )
@@ -131,14 +136,32 @@ async def _math_op(t: Thread, b: Block) -> Any:
 async def _eq(t: Thread, b: Block) -> bool:
     a = await t.value(b, "a")
     c = await t.value(b, "b")
-    return _deep_eq(a, c)
+    return _compare(t.field(b, "op", _EXACT), a, c)
 
 
 @value("operator.neq")
 async def _neq(t: Thread, b: Block) -> bool:
     a = await t.value(b, "a")
     c = await t.value(b, "b")
-    return not _deep_eq(a, c)
+    return not _compare(t.field(b, "op", _EXACT), a, c)
+
+
+#: `fields.op` 的兩個值（D24）。舊專案沒有這一格，fallback 是 `exact`。
+_EXACT = "exact"
+_APPROX = "approx"
+
+#: 相對誤差，等同 Python `math.isclose` 的預設。**沒有絕對下限是刻意的**：
+#: 給了下限，任何極小值都會約等於 0，而「算出來幾乎是 0」與「就是 0」在工作流
+#: 裡是兩件事。所以 `0 ≈ x` 只在 x 也是 0 時為真。
+_APPROX_REL_TOL = 1e-9
+
+
+def _compare(op: Any, a: Any, c: Any) -> bool:
+    if op == _APPROX:
+        return _approx_eq(a, c)
+    if op not in (_EXACT, None, ""):
+        raise BlockyError(f"未知的比較方式 {op}")
+    return _deep_eq(a, c)
 
 
 def _deep_eq(a: Any, c: Any) -> bool:
@@ -147,6 +170,64 @@ def _deep_eq(a: Any, c: Any) -> bool:
         return False
     # Python 的 == 對 list / dict 已是深度比較，且 5 == 5.0 為 True（D15 要的）
     return a == c
+
+
+def _approx_eq(a: Any, c: Any) -> bool:
+    """`≈`（D24、§4.4.1）：四條規則依序試，第一條命中就是答案。"""
+    ta, tc = type_of(a), type_of(c)
+
+    # 1. null / list / object 一律走 `=`。
+    #
+    #    §4.3 的轉換表說 `null → number` 是 0、`null → string` 是 ""，照它做
+    #    的話「這個欄位 API 沒有回」會約等於「這個欄位是 0」。寬鬆比對可以少
+    #    問一個型別，不能少問一次「有沒有值」。
+    #
+    #    容器不遞迴是同一種收斂：`["a "] ≈ ["a"]` 為假。要那個語意就是要定義
+    #    「集合的寬鬆相等」，而那是一顆自己的積木，不是一個下拉選項。
+    loose = {TYPE_NUMBER, TYPE_STRING, TYPE_BOOLEAN}
+    if ta not in loose or tc not in loose:
+        return _deep_eq(a, c)
+
+    # 2. 同型別：文字與數字各自放寬，布林直接比。
+    if ta == tc:
+        if ta == TYPE_STRING:
+            return _fold(a) == _fold(c)
+        if ta == TYPE_NUMBER:
+            return math.isclose(a, c, rel_tol=_APPROX_REL_TOL)
+        return a == c
+
+    # 3. 跨型別而兩邊都是數字（`true` → 1、`" 5 "` → 5）。
+    na, nc = _as_number(a), _as_number(c)
+    if na is not None and nc is not None:
+        return math.isclose(na, nc, rel_tol=_APPROX_REL_TOL)
+
+    # 4. 其餘走文字：`true ≈ "TRUE"` 在這裡為真，`false ≈ ""` 在這裡為假。
+    return _fold(to_string(a)) == _fold(to_string(c))
+
+
+def _fold(s: str) -> str:
+    """去頭尾空白 + 不分大小寫。`strip()` 也吃得掉全形空白（U+3000）。"""
+    return s.strip().casefold()
+
+
+def _as_number(v: Any) -> int | float | None:
+    """`to_number` 的不丟例外版本；不能轉就回 None 讓規則 4 接手。
+
+    **空字串在這裡不是 0**，儘管 §4.3 的 `to_number("")` 是 0。理由與規則 1
+    把 `null` 擋掉是同一條：一格沒填的欄位不該約等於數字 0。差別只在 `null`
+    連規則 4 都不走（它連 `""` 都不約等於），而空字串走得到——所以
+    `"" ≈ ""` 仍然為真，`"" ≈ 0` 為假。
+    """
+    if isinstance(v, bool):
+        return 1 if v else 0
+    if isinstance(v, (int, float)):
+        return v
+    if isinstance(v, str) and v.strip() == "":
+        return None
+    try:
+        return to_number(v)
+    except BlockyError:
+        return None
 
 
 async def _ordered(t: Thread, b: Block) -> tuple[Any, Any]:

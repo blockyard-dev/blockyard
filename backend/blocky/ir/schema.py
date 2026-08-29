@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any, Callable, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -99,6 +100,14 @@ class Block(Strict):
 ReturnType = Literal["any", "number", "string", "boolean", "list", "object"]
 
 
+#: 簽章與 manifest `text` 共用的佔位符語法（§4.6、§7.2）。
+#:
+#: **`extensions/manifest.py` 匯入這一份**，不另寫一條：D26 說函式的簽章模板
+#: 「與 manifest 的 `text` 完全一樣」，而兩條各自維護的 regex 遲早會讓那句話
+#: 變成半真的。
+PLACEHOLDER = re.compile(r"%\((\w+)\)")
+
+
 class ProcParam(Strict):
     id: str
     name: str
@@ -106,12 +115,37 @@ class ProcParam(Strict):
 
 
 class Procedure(Strict):
+    """一個自訂函式（§4.6）。
+
+    `name` 是一份**簽章模板**而不是一個名字（D26）：`"跳 %(a1) 次 到 %(a2)"`
+    畫出來是 `跳 (10) 次 到 [左]`。佔位符引用的是參數的 **id**，不是名稱——
+    名稱是使用者隨時會改的東西，而模板不該跟著壞掉。
+
+    一個 `%(` 都沒有的簽章是**合法的相容模式**（排版退回
+    `呼叫 <名稱> 參數名: (孔)`），不是舊資料：AI 生成的 IR（D5）多半長那樣。
+    """
+
     name: str
     params: list[ProcParam] = Field(default_factory=list)
     # null = 無回傳值，呼叫積木為 command 形狀（§4.6）
     returns: ReturnType | None = None
     body: str | None = None
     definitionBlock: str | None = None
+
+    @property
+    def placeholders(self) -> list[str]:
+        """簽章裡引用到的參數 id，依出現順序。"""
+        return PLACEHOLDER.findall(self.name)
+
+    @property
+    def display_name(self) -> str:
+        """給人看的一句話：把 `%(id)` 換成參數名稱。
+
+        `跳 %(a1) 次 到 %(a2)` → `跳 (次數) 次 到 (方向)`。錯誤訊息與工具箱
+        的標題用它——IR 的參數 id 在畫面上一個字都不該出現。
+        """
+        names = {p.id: p.name for p in self.params}
+        return PLACEHOLDER.sub(lambda m: f"({names.get(m.group(1), m.group(1))})", self.name)
 
 
 # --------------------------------------------------------------------------
@@ -230,6 +264,8 @@ ShapeResolver = Callable[[str], frozenset[str]]
 #: opcode → 宣告成 `type: expression` 的欄位名（§4.7b）。與 ShapeResolver
 #: 同一個理由由呼叫端傳進來：這個問題只有宣告層答得出來，而 ir 層不該認識它。
 ExpressionResolver = Callable[[str], frozenset[str]]
+#: opcode → 是不是 cap block（§4.6）。同上：只有宣告層答得出來。
+TerminalResolver = Callable[[str], bool]
 
 
 def load(
@@ -238,6 +274,7 @@ def load(
     strict_refs: bool = True,
     shapes: ShapeResolver | None = None,
     expressions: ExpressionResolver | None = None,
+    terminals: TerminalResolver | None = None,
 ) -> LoadedProject:
     """從 dict 載入並驗證專案。
 
@@ -251,6 +288,9 @@ def load(
     `expressions` 同理（§4.7b）：哪些欄位是運算式寫在宣告裡，呼叫端傳
     `interpreter.declarations.expression_fields`。沒給就不解析，那些欄位在
     執行期會以「沒有被當成運算式載入」失敗——比默默當成字串跑掉好。
+
+    `terminals` 同理（§4.6）：哪些積木是 cap block。沒給就不檢查「下面接了
+    東西」——與 `shapes` 一樣，那是一個要問過擴充系統才答得出來的問題。
     """
     project = Project.model_validate(data)
     templates: dict[tuple[str, str], tpl.Template] = {}
@@ -290,14 +330,14 @@ def load(
             # 無論 IR 帶了什麼，一律以重新解析的結果覆寫
             inp.refs = [r.to_ir() for r in parsed.refs]
 
-    _validate_structure(project)
+    _validate_structure(project, terminals)
     if shapes is not None:
         _validate_shapes(project, shapes)
     return LoadedProject(project, templates, exprs)
 
 
-def _validate_structure(p: Project) -> None:
-    """存檔／載入期的結構驗證（§4.6 return 位置、參照完整性）。"""
+def _validate_structure(p: Project, terminals: TerminalResolver | None = None) -> None:
+    """存檔／載入期的結構驗證（§4.6 return 位置與 cap block、參照完整性）。"""
     for bid, block in p.blocks.items():
         for name, inp in block.inputs.items():
             ref_id = getattr(inp, "id", None)
@@ -312,6 +352,9 @@ def _validate_structure(p: Project) -> None:
         if s.top not in p.blocks:
             raise ValidationError(f"script {s.id} 的 top 指向不存在的積木 {s.top}")
 
+    for proc in p.procedures.values():
+        _validate_signature(proc)
+
     # §4.6：`return` 放在定義積木的 body 之外 → **存檔時**驗證錯誤，
     # 不是執行期才報。
     proc_bodies = {proc.definitionBlock for proc in p.procedures.values()}
@@ -322,8 +365,16 @@ def _validate_structure(p: Project) -> None:
             raise ValidationError(
                 "「回傳」只能放在函式定義裡面", block_id=bid
             )
-        if block.next is not None:
-            raise ValidationError("「回傳」是終止積木，下面不能接積木", block_id=bid)
+
+    # §4.6：cap block 下面不能接積木。這句話原本寫死比對 `procedure.return`，
+    # 現在讀 `terminal` 宣告（D21）——前端據同一句宣告不畫下凸點，所以正常
+    # 操作根本接不上；這裡擋的是手寫或舊版產生的 IR。
+    if terminals is not None:
+        for bid, block in p.blocks.items():
+            if block.next is not None and terminals(block.opcode):
+                raise ValidationError(
+                    f"{block.opcode} 是終止積木，下面不能接積木", block_id=bid
+                )
 
 
 # --------------------------------------------------------------------------
@@ -372,6 +423,41 @@ def _validate_shapes(p: Project, resolve: ShapeResolver) -> None:
         d = proc.definitionBlock
         if d is not None and p.block(d).opcode != "procedure.definition":
             raise ValidationError(f"函式 {pid} 的定義積木不是「定義」積木", block_id=d)
+
+
+def _validate_signature(proc: Procedure) -> None:
+    """簽章模板與參數列必須對得起來（§4.6、D26）。
+
+    兩條規則，方向相反：
+
+    - 引用了不存在的參數 → 那個佔位符畫不出東西來。
+    - **一旦排了版，就必須把每個參數都放進去**。半套排版沒有合理的畫法：漏掉
+      的參數要嘛憑空消失（呼叫端永遠填不到它，而函式體讀得到它）、要嘛偷偷附
+      在句尾——兩種都會讓畫面說謊。
+
+    完全沒有佔位符是**相容模式**，不進這條檢查：那時候版面由 `params` 的順序
+    決定，每個參數都一定畫得出來。
+    """
+    ids = {param.id for param in proc.params}
+    used = proc.placeholders
+
+    if unknown := [ref for ref in used if ref not in ids]:
+        raise ValidationError(
+            f"函式 {proc.display_name} 的簽章引用了不存在的參數："
+            f"%({'), %('.join(sorted(set(unknown)))})",
+            block_id=proc.definitionBlock,
+        )
+
+    if not used:
+        return
+
+    if missing := [param for param in proc.params if param.id not in set(used)]:
+        names = "、".join(param.name for param in missing)
+        raise ValidationError(
+            f"函式 {proc.display_name} 的簽章沒有用到參數 {names}："
+            "簽章一旦自己排版，每個參數都要有位置",
+            block_id=proc.definitionBlock,
+        )
 
 
 def _require_shape(
