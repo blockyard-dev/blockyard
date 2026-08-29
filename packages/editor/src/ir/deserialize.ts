@@ -57,10 +57,12 @@ export function loadProject(
 
   for (const proc of Object.values(project.procedures ?? {})) {
     if (proc.definitionBlock == null) continue;
-    Blockly.serialization.blocks.append(
-      buildBlockState(proc.definitionBlock, project, ctx),
-      workspace,
-    );
+    const state = buildBlockState(proc.definitionBlock, project, ctx);
+    // 沒有座標的話 Blockly 一律把它放在原點——實測回饋：存檔重開之後每一顆
+    // 定義帽子都疊在同一個位置。
+    state.x = proc.x ?? 0;
+    state.y = proc.y ?? 0;
+    Blockly.serialization.blocks.append(state, workspace);
   }
 
   applyUi(project, workspace);
@@ -203,7 +205,14 @@ function buildInputs(
     const input = raw[name]!;
     switch (input.kind) {
       case 'block':
+        // 影子要跟著補回去（見 `shadowUnder`）：IR 只記得孔裡插著哪顆積木，
+        // 沒有記被蓋住的那顆影子，不補的話重載後拔掉 reporter 會留下一個
+        // 填不了東西的空孔。
         out[name] = { block: buildBlockState(input.id, project, ctx) };
+        {
+          const shadow = shadowUnder(registered, name);
+          if (shadow) out[name]!.shadow = shadow;
+        }
         break;
       case 'stack':
         // 空堆疊（if 沒接東西的那一半）：不放任何 key，與 Blockly「這個
@@ -219,6 +228,28 @@ function buildInputs(
     }
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 插著 reporter 的那個孔底下該躺哪一顆影子（§8.5）。
+ *
+ * IR 的 `kind: block` 只說「這個孔由一顆積木求值」，**說不出被它蓋住的影子**
+ * ——那是 Blockly 的概念，不是 §4.2 的四種 `kind` 之一。所以存檔時它本來就
+ * 會掉，而不補回來的後果是：重新載入後把 reporter 拔出來，那一格變成一個灰色
+ * 的空孔，連字都打不進去（從工具箱新拉的同一顆積木沒有這個問題，因為
+ * `toolbox.ts` 把 `registered.shadows` 貼上去了）。
+ *
+ * 補的是 **manifest 宣告的預設影子**，跟工具箱同一份資料。使用者在插 reporter
+ * 之前打過的字救不回來（IR 沒存），但「拔掉之後這格還能編輯」才是這裡要守的
+ * 性質。宣告成 `type: boolean` 的孔沒有影子（六角孔本來就是空的），
+ * `registered.shadows` 也就查不到——那正是對的。
+ */
+function shadowUnder(
+  registered: RegisteredBlock | undefined,
+  name: string,
+): BlockState | undefined {
+  const spec = registered?.shadows[name];
+  return spec ? { type: spec.type, fields: { ...spec.fields } } : undefined;
 }
 
 /**

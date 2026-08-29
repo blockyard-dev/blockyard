@@ -186,3 +186,101 @@ describe('切完存得出對的 JSON 型別', () => {
     expect(savedValue(workspace)).toBe(99);
   });
 });
+
+/**
+ * 孔裡插著 reporter 時，底下那顆影子仍然要在（§8.5）。
+ *
+ * 這是實測回饋的第九輪第一顆：`設定 seconds 為 (取得 seconds)` 存檔重載之後，
+ * 把 `取得` 拉出來，那一格變成灰色的空孔，打不進任何字——而同一顆積木剛從工具箱
+ * 拉出來時是好的。差別就在 IR 的 `kind: block` 說不出「被蓋住的影子是哪一顆」。
+ */
+describe('插著 reporter 的孔底下仍然有影子', () => {
+  /** `設定 count 為 (取得 other)` —— value 孔插著一顆 reporter。 */
+  function withReporter(workspace: Blockly.Workspace): Blockly.BlockSvg {
+    const project: ProjectIR = {
+      formatVersion: 1,
+      meta: { id: 'p', name: 'p' },
+      extensions: [],
+      variables: {},
+      procedures: {},
+      scripts: [{ id: 's1', top: 'b1', x: 0, y: 0 }],
+      blocks: {
+        b1: {
+          opcode: 'data.set',
+          parent: null,
+          next: null,
+          inputs: { value: { kind: 'block', id: 'b2' } },
+          fields: { name: 'count' },
+          mutation: null,
+          ui: null,
+        },
+        b2: {
+          opcode: 'data.get',
+          parent: 'b1',
+          next: null,
+          inputs: {},
+          fields: { name: 'other' },
+          mutation: null,
+          ui: null,
+        },
+      },
+    };
+    loadProject(project, workspace, ctx);
+    return workspace.getBlockById('b1') as Blockly.BlockSvg;
+  }
+
+  it('拔掉 reporter 之後那一格還編輯得了', () => {
+    const workspace = new Blockly.Workspace();
+    const block = withReporter(workspace);
+    expect(shadowOf(block).type).toBe('data.get');
+
+    workspace.getBlockById('b2')!.outputConnection!.disconnect();
+
+    const revealed = shadowOf(block);
+    expect(revealed.isShadow()).toBe(true);
+    expect(shadowKindOf(revealed.type)).toBe('text');
+  });
+
+  it('影子在底下不改變存出去的 IR', () => {
+    const workspace = new Blockly.Workspace();
+    withReporter(workspace);
+    const ir = serializeWorkspace(workspace, ctx, { meta: { id: 'p', name: 'p' } });
+    expect(ir.blocks?.b1?.inputs?.value).toEqual({ kind: 'block', id: 'b2' });
+  });
+
+  it('boolean 孔沒有影子——六角孔本來就是空的', () => {
+    const workspace = new Blockly.Workspace();
+    const project: ProjectIR = {
+      formatVersion: 1,
+      meta: { id: 'p', name: 'p' },
+      extensions: [],
+      variables: {},
+      procedures: {},
+      scripts: [{ id: 's1', top: 'b1', x: 0, y: 0 }],
+      blocks: {
+        b1: {
+          opcode: 'control.if',
+          parent: null,
+          next: null,
+          inputs: { condition: { kind: 'block', id: 'b2' } },
+          fields: {},
+          mutation: null,
+          ui: null,
+        },
+        b2: {
+          opcode: 'operator.not',
+          parent: 'b1',
+          next: null,
+          inputs: {},
+          fields: {},
+          mutation: null,
+          ui: null,
+        },
+      },
+    };
+    loadProject(project, workspace, ctx);
+    const block = workspace.getBlockById('b1')!;
+    workspace.getBlockById('b2')!.outputConnection!.disconnect();
+    expect(block.getInput('condition')!.connection!.targetBlock()).toBeNull();
+  });
+});

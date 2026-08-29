@@ -12,7 +12,14 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 import { buildProjectToolbox, registerManifests, type Registration } from './setup';
 import { isParamType, registerProcedures } from './procedures';
-import { buttonCallbackKey, findVariableReader } from './toolbox';
+import {
+  BLOCK_GAP,
+  buildToolbox,
+  buttonCallbackKey,
+  findVariableReader,
+  groupByManifest,
+} from './toolbox';
+import { defineManifest } from './define';
 import type { Manifest } from '../types/manifest';
 import type { Procedure } from '../types/project';
 
@@ -70,9 +77,91 @@ describe('工具箱按鈕（D25）', () => {
     expect(buttonCallbackKey('discord', 'docs')).not.toBe(buttonCallbackKey('http', 'docs'));
   });
 
-  it('沒宣告按鈕的分類就是一串積木', () => {
+  it('沒宣告按鈕的分類裡就沒有按鈕條目', () => {
     const toolbox = buildProjectToolbox(registration, []);
-    expect(category(toolbox, '資料').contents.every((c) => c.kind === 'block')).toBe(true);
+    expect(category(toolbox, '資料').contents.some((c) => c.kind === 'button')).toBe(false);
+  });
+});
+
+describe('分段與間隔（§8.1）', () => {
+  it('每顆積木都帶同一個間隔', () => {
+    const toolbox = buildProjectToolbox(registration, []);
+    const blocks = category(toolbox, '資料').contents.filter((c) => c.kind === 'block');
+    expect(blocks.length).toBeGreaterThan(0);
+    expect(new Set(blocks.map((c) => c.gap))).toEqual(new Set([BLOCK_GAP]));
+  });
+
+  it('`section: true` 在那顆積木前面插一個更大的間隔', () => {
+    const toolbox = buildProjectToolbox(registration, []);
+    const contents = category(toolbox, '運算').contents;
+    // operator.yaml 的「比較」那一段從 `eq` 開始
+    const at = contents.findIndex((c) => c.type === 'operator.eq');
+    expect(contents[at - 1]).toMatchObject({ kind: 'sep' });
+    // **近的是一段，遠的是換一段**——這個關係才是規格，數字是口味
+    expect(contents[at - 1]!.gap as number).toBeGreaterThan(BLOCK_GAP);
+  });
+
+  it('分類的第一顆不插大間隔——分類標題本身已經是斷點', () => {
+    const groups = groupByManifest(defineManifest({
+      manifestVersion: 1,
+      id: 'demo_first',
+      name: '開頭示範',
+      version: '0.1.0',
+      blocks: [{ opcode: 'a', type: 'command', text: 'a', section: true }],
+    } as Manifest));
+    const contents = (buildToolbox(groups) as { contents: Category[] }).contents
+      .find((c) => c.name === '開頭示範')!.contents;
+
+    expect(contents).toEqual([{ kind: 'block', type: 'demo_first.a', gap: BLOCK_GAP }]);
+  });
+
+  it('`section` 給字串時多一行標題，而標題與它底下那一段更近', () => {
+    // **不讀內建的 yaml**：這一條驗的是展開的機制，不是「運算分類今天有沒有
+    // 用標題」。內建現在六段都是 `section: true`（純間隔），改一次標題就會讓
+    // 一個與標題無關的測試變紅。
+    const groups = groupByManifest(defineManifest({
+      manifestVersion: 1,
+      id: 'demo_section',
+      name: '分段示範',
+      version: '0.1.0',
+      blocks: [
+        { opcode: 'a', type: 'command', text: 'a' },
+        { opcode: 'b', type: 'command', text: 'b', section: '第二段' },
+      ],
+    } as Manifest));
+    const contents = (buildToolbox(groups) as { contents: Category[] }).contents
+      .find((c) => c.name === '分段示範')!.contents;
+
+    const [first, before, label, after, second] = contents;
+    expect(first).toEqual({ kind: 'block', type: 'demo_section.a', gap: BLOCK_GAP });
+    expect(before).toMatchObject({ kind: 'sep' });
+    expect(label).toEqual({ kind: 'label', text: '第二段', 'web-class': 'blocky-section-label' });
+    expect(after).toMatchObject({ kind: 'sep' });
+    expect(second).toEqual({ kind: 'block', type: 'demo_section.b', gap: BLOCK_GAP });
+    // 換一段比同一段遠；標題與它說明的那一段又比同一段更近
+    expect(before!.gap as number).toBeGreaterThan(BLOCK_GAP);
+    expect(after!.gap as number).toBeLessThan(BLOCK_GAP);
+  });
+
+  it('段落標題帶得走 class——theme.ts 靠它把段落標題排除在分類邊界之外', () => {
+    // 它同時是 index.css 的樣式掛勾，兩個檔案共用這個字串（記在 PROGRESS §2.5）
+    const groups = groupByManifest(defineManifest({
+      manifestVersion: 1,
+      id: 'demo_label',
+      name: '標題示範',
+      version: '0.1.0',
+      blocks: [{ opcode: 'a', type: 'command', text: 'a', section: '運算' }],
+    } as Manifest));
+    const contents = (buildToolbox(groups) as { contents: Category[] }).contents
+      .find((c) => c.name === '標題示範')!.contents;
+
+    expect(contents[0]).toEqual({
+      kind: 'label',
+      // **刻意取一個與分類同名的標題**：擋在 `theme.ts` 那條覆寫，不是靠「標題
+      // 不准跟分類同名」的規則，所以這裡產得出來是對的
+      text: '運算',
+      'web-class': 'blocky-section-label',
+    });
   });
 });
 

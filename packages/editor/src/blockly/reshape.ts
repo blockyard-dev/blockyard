@@ -16,6 +16,7 @@
 import * as Blockly from 'blockly/core';
 import { isDefinitionType, paramRefFromType, procIdFromType } from './procedures';
 import { paramsOf } from './signature';
+import type { ConversionContext } from '../ir/context';
 import type { Procedure } from '../types/project';
 
 type BlockState = Blockly.serialization.blocks.State;
@@ -45,6 +46,7 @@ export function reshapeProcedure(
   workspace: Blockly.WorkspaceSvg,
   procId: string,
   proc: Procedure,
+  ctx: ConversionContext,
 ): ReshapeResult {
   const keep = new Set(paramsOf(proc).map((param) => param.id));
 
@@ -80,16 +82,16 @@ export function reshapeProcedure(
           continue;
         }
         // 改名字了：型別已經重新註冊成新的文字，但畫布上這顆是舊的。
-        rebuild(block, 'discard', result);
+        rebuild(block, 'discard', result, ctx);
         continue;
       }
 
       if (isDefinitionType(block.type)) {
-        rebuildDefinitionHat(block, result);
+        rebuildDefinitionHat(block, result, ctx);
         continue;
       }
 
-      const dropped = rebuild(block, keep, result);
+      const dropped = rebuild(block, keep, result, ctx);
       result.orphans.push(...dropped);
     }
   } finally {
@@ -114,13 +116,17 @@ export function reshapeProcedure(
  * 孔一律 `'discard'`：帽子孔裡是參數積木，是畫面不是內容——丟掉，由
  * `fillDefinitionParams` 照新簽章重新長出來。它們不該變成孤兒。
  */
-function rebuildDefinitionHat(hat: Blockly.BlockSvg, result: ReshapeResult): void {
+function rebuildDefinitionHat(
+  hat: Blockly.BlockSvg,
+  result: ReshapeResult,
+  ctx: ConversionContext,
+): void {
   const workspace = hat.workspace as Blockly.WorkspaceSvg;
   const id = hat.id;
   const body = hat.nextConnection?.targetBlock() ?? null;
   body?.previousConnection?.disconnect();
 
-  rebuild(hat, 'discard', result);
+  rebuild(hat, 'discard', result, ctx);
 
   // `rebuild` 保住 id（IR 的 `scripts[].top` / `procedures[].body` 都指著它）。
   const rebuilt = workspace.getBlockById(id) as Blockly.BlockSvg | null;
@@ -140,6 +146,7 @@ function rebuild(
   block: Blockly.BlockSvg,
   keep: Set<string> | 'discard',
   result: ReshapeResult,
+  ctx: ConversionContext,
 ): string[] {
   const workspace = block.workspace as Blockly.WorkspaceSvg;
   const state = Blockly.serialization.blocks.save(block, {
@@ -166,6 +173,8 @@ function rebuild(
       delete state.inputs[name];
     }
   }
+
+  if (keep !== 'discard') fillNewInputs(state, ctx);
 
   block.dispose(false);
 
@@ -200,6 +209,34 @@ function rebuild(
     orphans.push(restored.id);
   });
   return orphans;
+}
+
+/**
+ * 新長出來的孔要補上**預設影子**，不然它是一個打不了字的洞。
+ *
+ * 症狀（實測回饋）：定義好一顆積木之後回去編輯、加一個參數，畫布上原本那顆
+ * 呼叫積木就多一格深色的膠囊——點不進去、也打不了字。
+ *
+ * 成因是 Blockly 的 JSON 積木定義**沒有地方宣告影子**：影子只能掛在工具箱條目
+ * 上（`toolbox.ts::toToolboxBlock`）或序列化狀態裡（`deserialize.ts::shadowUnder`）。
+ * 而重塑走的是第三條路——把舊的 state 照新定義 append 一次，那份舊 state 裡當然
+ * 沒有新孔的任何東西，於是新孔就空著生出來。
+ *
+ * 補的是**同一份資料**（`registered.shadows`，manifest 算出來的那份），所以三條
+ * 路長出來的積木一致：從工具箱拉的、從檔案載入的、改完簽章重塑的。
+ *
+ * 只補「這個孔在舊 state 裡完全沒有東西」的那些：孔裡本來插著積木的不動它
+ * （那是使用者的內容），宣告成 `boolean` 的孔本來就沒有影子（六角孔是空的），
+ * `shadows` 查不到，正是對的。
+ */
+function fillNewInputs(state: BlockState, ctx: ConversionContext): void {
+  const shadows = ctx.blockOf(state.type)?.shadows;
+  if (!shadows) return;
+  for (const [name, spec] of Object.entries(shadows)) {
+    if (state.inputs?.[name]) continue;
+    state.inputs ??= {};
+    state.inputs[name] = { shadow: { type: spec.type, fields: { ...spec.fields } } };
+  }
 }
 
 /**

@@ -79,6 +79,11 @@ export function serializeWorkspace(
         returns: meta?.returns ?? null,
         definitionBlock: state.id ?? null,
         body: state.next?.block?.id ?? null,
+        // 位置跟著函式走，不是跟著 `scripts` 走——定義帽子不是腳本（§5.1 的
+        // 觸發條件是 top 的 opcode，而它永遠不會被觸發）。不存的話存檔重開
+        // 之後每一顆定義帽子都疊在原點。
+        x: state.x ?? 0,
+        y: state.y ?? 0,
       };
       seenProcIds.add(procId);
       continue;

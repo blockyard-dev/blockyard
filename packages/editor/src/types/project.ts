@@ -21,10 +21,12 @@ export type Params = ProcParam[];
 export type Returns = ('any' | 'number' | 'string' | 'boolean' | 'list' | 'object') | null;
 export type Body = string | null;
 export type Definitionblock = string | null;
-export type Id3 = string;
-export type Top = string;
 export type X = number;
 export type Y = number;
+export type Id3 = string;
+export type Top = string;
+export type X1 = number;
+export type Y1 = number;
 export type Enabled = boolean;
 export type Scripts = Script[];
 export type Opcode = string;
@@ -103,6 +105,8 @@ export interface Procedure {
   returns?: Returns;
   body?: Body;
   definitionBlock?: Definitionblock;
+  x?: X;
+  y?: Y;
 }
 export interface ProcParam {
   id: Id2;
@@ -112,8 +116,8 @@ export interface ProcParam {
 export interface Script {
   id: Id3;
   top: Top;
-  x?: X;
-  y?: Y;
+  x?: X1;
+  y?: Y1;
   enabled?: Enabled;
 }
 export interface Blocks {

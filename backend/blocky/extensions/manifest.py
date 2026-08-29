@@ -275,6 +275,15 @@ class BlockSpec(Strict):
     terminal: bool = False
     yields: list[YieldSpec] = Field(default_factory=list)
     concurrency: Concurrency | None = None
+    # §8.1：**這顆積木是工具箱裡新一段的開頭**。`True` 只斷開，字串另外在上面
+    # 放一行標題。宣告的是語意（「這裡是一段」），不是版面——間隔多大、標題長
+    # 什麼樣子由編輯器決定（`toolbox.ts`），否則每個積木包各自決定留白，而使用
+    # 者看到的是同一份工具箱。
+    #
+    # 刻意**不做成 `blocks` 裡的哨兵條目**（TurboWarp 的 `"---"`）：那份清單同時
+    # 是直譯器的宣告表、IR validator 與 AST 測試的資料來源，往裡面塞不是宣告的
+    # 東西，等於每一處 `for spec in blocks` 都要先過濾。
+    section: str | bool = False
 
     @field_validator("opcode")
     @classmethod
@@ -307,6 +316,13 @@ class BlockSpec(Strict):
             raise ValueError("terminal 只適用於 command：它說的是「這顆積木下面不能再接」")
         if self.alsoCommand and self.type != "reporter":
             raise ValueError("alsoCommand 只適用於 reporter：它說的是「這一顆也可能沒有輸出孔」")
+        if isinstance(self.section, str) and not self.section.strip():
+            raise ValueError("section 是空字串：只想斷開一段而不放標題請寫 section: true")
+        # 下架的積木不上工具箱（§13.1），段落開頭掛在它身上等於整段標題默默消失。
+        if self.section and self.deprecated:
+            raise ValueError("deprecated 積木不能是段落開頭：把 section 移到下一顆")
+        if self.section and self.dynamic:
+            raise ValueError("dynamic 積木不上工具箱，宣告 section 沒有意義")
         return self
 
     @property

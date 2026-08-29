@@ -10,6 +10,7 @@
  * 知道「這裡管的是積木包」，而不是「這個按鈕壞了」。
  */
 import { useState } from 'react';
+import { Plus } from 'lucide-react';
 import type { ToolboxGroup } from '../blockly/toolbox';
 
 export function ExtensionsEntry({ groups }: { groups: ToolboxGroup[] }) {
@@ -34,15 +35,16 @@ export function ExtensionsEntry({ groups }: { groups: ToolboxGroup[] }) {
             ))}
           </ul>
           <button type="button" className="button" disabled>
-            ＋ 安裝積木包…
+            <Plus size={14} strokeWidth={2.5} /> 安裝積木包…
           </button>
           <p className="ext-note">
             安裝與設定要等積木包的 Host 接上（P1）。目前有 {installed.length} 個第三方積木包。
           </p>
         </div>
       )}
-      {/* 只有一個 ＋，沒有文字：分類欄只有 38px 寬，帶文字的按鈕會同時蓋掉
-          最後一個分類與 flyout 左邊那一條積木。文字改由 title 交代。 */}
+      {/* 只有一個加號，沒有文字：分類欄是 60px 寬（`index.css`），帶文字的按鈕
+          會同時蓋掉最後一個分類與 flyout 左邊那一條積木。文字由 title 與
+          aria-label 交代。 */}
       <button
         type="button"
         className="ext-button"
@@ -51,7 +53,9 @@ export function ExtensionsEntry({ groups }: { groups: ToolboxGroup[] }) {
         aria-label="積木包"
         title="積木包"
       >
-        <span className="ext-button-icon">＋</span>
+        <span className="ext-button-icon">
+          <Plus size={20} strokeWidth={2.5} />
+        </span>
       </button>
     </div>
   );

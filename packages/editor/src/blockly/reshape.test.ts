@@ -88,8 +88,14 @@ function open(): { workspace: Blockly.Workspace; procedures: Record<string, Proc
 
 /** 改簽章 = 先重新註冊型別，再重塑畫布上的積木。順序反過來就重建出舊形狀。 */
 function apply(workspace: Blockly.Workspace, proc: Procedure) {
-  registerProcedures({ p_jump: proc });
-  return reshapeProcedure(workspace as Blockly.WorkspaceSvg, 'p_jump', proc);
+  const blocks = registerProcedures({ p_jump: proc });
+  // ctx 要**重新註冊之後**的那一份：重塑靠它查新孔的預設影子。
+  return reshapeProcedure(
+    workspace as Blockly.WorkspaceSvg,
+    'p_jump',
+    proc,
+    buildContext([...builtins, ...blocks]),
+  );
 }
 
 describe('改簽章', () => {
@@ -167,14 +173,52 @@ describe('形狀重塑（command ↔ reporter）', () => {
   });
 });
 
+describe('新長出來的孔要能打字', () => {
+  /**
+   * 實測回饋：定義好一顆積木之後回去編輯、加一個參數，畫布上原本那顆呼叫積木
+   * 就多一格**深色的膠囊**——點不進去、也打不了字。
+   *
+   * 成因是 Blockly 的 JSON 積木定義沒有地方宣告影子，而重塑是「把舊 state 照新
+   * 定義 append 一次」——舊 state 裡當然沒有新孔的東西。驗的是「那一格底下有一顆
+   * 影子」，不是「它長什麼樣」：長什麼樣由 manifest 決定，而這裡要守的性質是
+   * **從工具箱拉的、從檔案載入的、改完簽章重塑的，三條路長出同一顆積木**。
+   */
+  it('加一個參數，呼叫積木的新孔底下有影子', () => {
+    const { workspace } = open();
+    const next: Procedure = {
+      ...JUMP,
+      name: '跳 %(a1) 次 到 %(a2) 快 %(a3)',
+      params: [...JUMP.params!, { id: 'a3', name: '速度', type: 'any' }],
+    };
+    apply(workspace, next);
+
+    const added = workspace.getBlockById('call')?.getInput('a3');
+    expect(added).not.toBeNull();
+    const shadow = added?.connection?.targetBlock();
+    expect(shadow?.isShadow()).toBe(true);
+  });
+
+  it('本來就插著積木的孔不動它', () => {
+    const { workspace } = open();
+    const plugged = workspace.getBlockById('call')?.getInput('a1')?.connection?.targetBlock();
+    // 題目裡 a1 插的是一顆影子還是真的積木，由 `project()` 決定；不論哪一種，
+    // 重塑之後那一格的**內容**都要是同一顆。
+    const before = plugged?.id;
+    apply(workspace, { ...JUMP, name: '飛 %(a1) 次 到 %(a2)' });
+    expect(workspace.getBlockById('call')?.getInput('a1')?.connection?.targetBlock()?.id)
+      .toBe(before);
+  });
+});
+
 describe('重塑完仍然存得出對的 IR', () => {
   it('簽章改了，畫布上的積木存出來還是同一份腳本', () => {
     const { workspace } = open();
     const next: Procedure = { ...JUMP, name: '飛 %(a1) 次 到 %(a2)' };
     const blocks = registerProcedures({ p_jump: next });
-    reshapeProcedure(workspace as Blockly.WorkspaceSvg, 'p_jump', next);
+    const ctx = buildContext([...builtins, ...blocks]);
+    reshapeProcedure(workspace as Blockly.WorkspaceSvg, 'p_jump', next, ctx);
 
-    const ir = serializeWorkspace(workspace, buildContext([...builtins, ...blocks]), {
+    const ir = serializeWorkspace(workspace, ctx, {
       procedures: { p_jump: next },
     });
 
@@ -192,7 +236,12 @@ describe('註冊順序', () => {
     const next: Procedure = { ...JUMP, name: '跳 %(a1) 次', params: [JUMP.params![0]!] };
 
     // 故意不重新註冊就重塑：舊定義還在，所以 a2 那個孔還會被建出來。
-    reshapeProcedure(workspace as Blockly.WorkspaceSvg, 'p_jump', next);
+    reshapeProcedure(
+      workspace as Blockly.WorkspaceSvg,
+      'p_jump',
+      next,
+      buildContext(builtins),
+    );
     expect(workspace.getBlockById('call')?.getInput('a2')).not.toBeNull();
 
     // 正確的順序把它收掉。

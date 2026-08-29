@@ -85,7 +85,7 @@ export interface FieldTextOptions {
    * 膠囊才是孔。兩者長得一樣的話，預覽就在「這顆積木會長成什麼樣」這件事上
    * 說謊了——而使用者正是看著預覽在做決定。
    *
-   * 只改外觀（畫成積木底色上的一段白字），不改任何行為。
+   * 只改外觀（畫成積木底色上的一格深色矩形、白字），不改任何行為。
    */
   bare?: boolean;
   /**
@@ -672,6 +672,11 @@ export class FieldText extends FieldMultilineInput {
     if (!input) return;
     // 運算式在編輯中也是等寬字：進出編輯狀態時字形跳一下比一路不等寬更難讀。
     if (this.mode === 'expression') input.classList.add('blocky-mono-input');
+    // 說明文字那幾格在編輯中也要維持「積木上的一段文字」的樣子。Blockly 給
+    // 編輯器的預設是白底、深灰字、膠囊圓角——那正是**旁邊那顆名稱格**的樣子，
+    // 於是一點進去，這一格看起來就變成了一個孔。`bare` 的整個重點是這兩者不
+    // 能長得一樣（見 `FieldTextOptions.bare`），所以編輯中也要蓋掉。
+    if (this.bare) input.classList.add('blocky-bare-input');
 
     this.onInput = () => {
       this.refreshCompletions();

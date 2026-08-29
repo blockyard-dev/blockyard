@@ -27,6 +27,7 @@ blocks:
       time: { type: object }
 
   - opcode: parse
+    section: true
     type: reporter
     returns: object
     text: "解析時間 %(text) %(timezone)"
@@ -53,6 +54,7 @@ blocks:
           - { value: iso, label: "ISO 8601" }
 
   - opcode: add
+    section: true
     type: reporter
     returns: object
     # 天與週走行事曆運算，才能正確跨越日光節約時間（time_ns.py）

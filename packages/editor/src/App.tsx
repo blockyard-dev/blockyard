@@ -14,6 +14,7 @@
  * 單專案模式（`PROJECT_ID` 固定）：專案列表、切換專案是之後的事。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Play, Square } from 'lucide-react';
 import * as Blockly from 'blockly/core';
 import { ApiError, fetchExtensions, fetchProject, saveProject } from './api/client';
 import { RunSocket, startRun, stopRun } from './api/runs';
@@ -38,6 +39,7 @@ import { RunDecorator } from './run/decorate';
 import { useRunStore } from './run/store';
 import { ExtensionsEntry } from './components/ExtensionsEntry';
 import { RunBubbles } from './components/RunBubbles';
+import { FlyoutResizer } from './components/FlyoutResizer';
 import { RunPanel } from './components/RunPanel';
 import { WorkspaceView } from './components/WorkspaceView';
 import type { ButtonSpec } from './types/manifest';
@@ -299,7 +301,9 @@ export function App() {
 
       const proc = procedures[id]!;
       if (target.id === null) placeDefinition(ws, id);
-      else reshapeProcedure(ws, id, proc);
+      // `ctx` 要新的那一份：重塑要照**新簽章**補影子（新長出來的孔沒有影子就是
+      // 一個打不了字的洞），而那份資料在 `procedureBlocks` 裡。
+      else reshapeProcedure(ws, id, proc, ctx);
       // 新的帽子、或重塑過的帽子，孔都是空的——照新簽章把參數長回去。
       fillDefinitionParams(ws, procedures, (id) => deleteRef.current(id));
 
@@ -514,10 +518,10 @@ export function App() {
               onClick={() => void beginRun()}
               disabled={running}
             >
-              ▶ 執行
+              <Play size={14} strokeWidth={2.5} fill="currentColor" /> 執行
             </button>
             <button type="button" className="button" onClick={handleStop} disabled={!running}>
-              ■ 停止
+              <Square size={13} strokeWidth={2.5} fill="currentColor" /> 停止
             </button>
           </div>
         )}
@@ -546,6 +550,7 @@ export function App() {
       {state.status === 'ready' && (
         <div className="stage">
           <WorkspaceView toolbox={state.toolbox} onReady={handleWorkspaceReady} />
+          <FlyoutResizer workspace={workspace} />
           <ExtensionsEntry groups={state.registration.groups} />
           <RunBubbles workspace={workspace} />
           <RunPanel />

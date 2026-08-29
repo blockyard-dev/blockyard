@@ -110,6 +110,9 @@ const fixtures = findFixtures(CORPUS);
  *    **保留現有的值**（`object.to_json` 的 `pretty` 沒設，Blockly 的
  *    `field_checkbox` 一樣會給出它自己的初始值），不猜哪一種寫法「比較
  *    對」，所以留給測試自己拉平。
+ * 3. 同一條規則的第三個消費者：函式的 `x` / `y`（定義帽子的位置）。題庫是
+ *    手寫的語意規格，沒有人在裡面寫座標；而存檔一定寫得出來（schema 的預設
+ *    值就是 0）。省略與明講 0 是同一份 IR。
  */
 function canonicalize(project: ProjectIR, ctx: ConversionContext): ProjectIR {
   const blocks: Record<string, IRBlock> = {};
@@ -142,8 +145,51 @@ function canonicalize(project: ProjectIR, ctx: ConversionContext): ProjectIR {
 
     blocks[id] = { ...block, inputs, fields };
   }
-  return { ...project, blocks };
+
+  const procedures: ProjectIR['procedures'] = {};
+  for (const [id, proc] of Object.entries(project.procedures ?? {})) {
+    procedures![id] = { ...proc, x: proc.x ?? 0, y: proc.y ?? 0 };
+  }
+
+  return { ...project, blocks, procedures };
 }
+
+describe('定義帽子的位置（實測回饋）', () => {
+  /**
+   * 症狀：存檔重開之後**每一顆定義帽子都疊在同一個位置**。
+   *
+   * 成因是位置沒有地方存——定義帽子不進 `scripts`（§5.1 的觸發條件是 top 的
+   * opcode，而它永遠不會被觸發），而 `Procedure` 當時沒有 `x` / `y`。所以這
+   * 一題驗的是**存得出來也讀得回去**，兩個方向都要，只驗一邊會漏掉「寫了但
+   * 沒人讀」這種修法。
+   */
+  it('存得出來，也讀得回去', () => {
+    const path = fixtures.find((f) => f.includes('procedure/no_return_yields_null'))!;
+    const project = JSON.parse(readFileSync(path, 'utf8')) as ProjectIR;
+    const procId = Object.keys(project.procedures!)[0]!;
+    const moved: ProjectIR = {
+      ...project,
+      procedures: { ...project.procedures, [procId]: { ...project.procedures![procId]!, x: 240, y: 88 } },
+    };
+
+    const ctx = buildContext([
+      ...manifestRegistration.blocks,
+      ...registerProcedures(moved.procedures ?? {}),
+    ]);
+    const workspace = new Blockly.Workspace();
+    try {
+      loadProject(moved, workspace, ctx);
+      const hat = workspace.getBlockById(moved.procedures![procId]!.definitionBlock!);
+      expect(hat?.getRelativeToSurfaceXY()).toEqual({ x: 240, y: 88 });
+
+      const out = serializeWorkspace(workspace, ctx, { procedures: moved.procedures });
+      expect(out.procedures?.[procId]?.x).toBe(240);
+      expect(out.procedures?.[procId]?.y).toBe(88);
+    } finally {
+      workspace.dispose();
+    }
+  });
+});
 
 describe('IR → Blockly → IR 等價（63 份題庫）', () => {
   const cases = fixtures

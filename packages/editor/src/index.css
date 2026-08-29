@@ -98,7 +98,13 @@ body,
   align-items: center;
 }
 
+/* 有圖示的按鈕（執行 / 停止 / 安裝積木包）：圖示與文字要對齊在同一條基線上，
+   而 icon 是一個 SVG box，不是一個字——inline 排版會讓它坐在基線上、往下凸。
+   `inline-flex` + `align-items: center` 是這件事唯一乾淨的做法。 */
 .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font: inherit;
   font-size: 0.8125rem;
   padding: 0.3rem 0.9rem;
@@ -156,6 +162,31 @@ body,
 .stage .workspace {
   flex: 1;
   min-width: 0;
+}
+
+/* 積木面板右緣的把手（`FlyoutResizer`）。
+
+   `z-index` 要壓過 flyout（Blockly 給它 20）——不然把手在面板上的那一半會被
+   蓋掉，而使用者抓的正是那條邊。它畫在**邊界的右側**（`left` 就是邊界），所以
+   面板收到 0 的時候它剛好貼著分類欄的右邊，不會壓到分類——而那一欄正是收起來
+   之後唯一的出口（點它就長回來）。
+
+   `touch-action: none` 是 pointer capture 的前提：沒有它，觸控裝置上這一下會
+   被瀏覽器當成捲動。 */
+.flyout-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 25;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.flyout-resizer:hover,
+.flyout-resizer:active {
+  background: rgb(77 151 255 / 45%);
 }
 
 .bubble-layer {
@@ -230,13 +261,41 @@ body,
   animation: blocky-pulse 0.9s ease-in-out infinite;
 }
 
+/* 錯誤的紅框**會淡出**（第九輪回饋），與值氣泡同一組時間：2 秒 + 400ms。
+
+   時間寫在 CSS 而不是 `RunDecorator` 裡，是刻意的：那個類別現在完全是一個
+   無狀態的同步器（store 的 phase → class），給它一個計時器等於開第二本帳，
+   而「同一件事有兩個地方記著」已經在靜態檢查那邊留過一次教訓。class 一掛上
+   動畫就開始跑，下一次執行前 `sync()` 會先把 class 拆掉，所以重跑會重新倒數。
+
+   淡出之後錯誤留在**兩個地方**：輸出面板的那一行 log 與 topbar 的「執行失敗：
+   ⋯」。這是這條能做的前提——沒有那兩處，淡出就等於把錯誤藏起來。
+
+   代價（明知而接受）：框的淡出是 CSS 的，氣泡的是 `RunBubbles` 的 rAF 迴圈，
+   於是滑鼠停在氣泡上凍得住氣泡、凍不住框。框是提示、氣泡才是內容。 */
 .blocky-run-error>.blocklyPath {
   stroke: #fff;
   stroke-width: 3px;
+  animation: blocky-error-stroke 0.4s ease 2s forwards;
 }
 
 .blocky-run-error {
   filter: drop-shadow(0 0 3px #e03b3b) drop-shadow(0 0 7px #d43b3b);
+  animation: blocky-error-glow 0.4s ease 2s forwards;
+}
+
+/* 描邊與外發光在兩個不同的元素上（`>` 的理由見上），所以是兩段。發光那段
+   淡到透明而不是 `none`：filter 只在前後的函式串一樣時才補得出中間格。 */
+@keyframes blocky-error-stroke {
+  to {
+    stroke-opacity: 0;
+  }
+}
+
+@keyframes blocky-error-glow {
+  to {
+    filter: drop-shadow(0 0 3px rgb(224 59 59 / 0%)) drop-shadow(0 0 7px rgb(212 59 59 / 0%));
+  }
 }
 
 @keyframes blocky-pulse {
@@ -430,68 +489,141 @@ body,
 }
 
 /* ------------------------------------------------------------------ *
- * 擴充功能入口（§8.1）。位置就是 Scratch 的「添加擴展」：工具箱左下角。
- * 疊在工具箱上而不是插進它裡面——Blockly 的工具箱 DOM 是它自己畫的，
- * 插進去等於跟著它的版本走。
+ * 擴充功能入口（§8.1）。位置就是 Scratch 的「添加擴展」：分類欄的最底下，
+ * 釘住不跟著分類清單捲。
+ *
+ * 它**疊在**工具箱上而不是插進去——Blockly 的工具箱 DOM 是它自己畫的，插進去
+ * 等於跟著它的版本走。所以「看起來是分類欄的一部分」要靠對齊做出來：寬度等於
+ * 欄寬、左右下三邊都貼齊、不留圓角也不打陰影，那三樣任何一個都會讓它浮起來
+ * 變成一張卡片。欄底則用 `.blocklyToolbox` 的 `padding-bottom` 讓出等高的位置，
+ * 最後一個分類才捲得過它。
  * ------------------------------------------------------------------ */
 
 .ext-entry {
   position: absolute;
-  left: 0.6rem;
-  bottom: 0.6rem;
-  /* 高過 Blockly 的工具箱（`.blocklyToolbox` 是 z-index 70）：入口疊在工具箱
-     欄位的左下角，就是 Scratch 放「添加擴展」的位置。 */
+  left: 0;
+  bottom: 0;
+  width: 60px;
+  /* 高過 Blockly 的工具箱（`.blocklyToolbox` 是 z-index 70）。 */
   z-index: 80;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  /* 按鈕撐滿欄寬；`.ext-panel` 自己有寫死的 width，不會被一起拉。 */
+  align-items: stretch;
   gap: 0.5rem;
 }
 
-/* 分類名的字級縮小，讓分類欄不用因為長一點的名字（如「示範」）就被撐寬。 */
-.blocklyToolboxCategoryLabel {
-  font-size: 0.8rem;
+/* ------------------------------------------------------------------ *
+ * 分類欄（§8.1）。版面照 Scratch 原生：**固定 60px 寬的一欄**，每一格是
+ * 「色圓點在上、分類名在下」的置中直排。
+ *
+ * 欄寬寫死是這一段的關鍵。原本是讓 Blockly 依最長的分類名去撐（實測 38px），
+ * 於是三件事全被那個數字綁住：圓點只能縮到擠不下的大小、字級要跟著壓、擴充
+ * 按鈕只能做成一顆小方塊。而且它會**隨著裝進來的積木包改變**——多一個名字長
+ * 的積木包，整條畫布就往右挪。寫死之後尺寸才有得談，長名字改成換行處理。
+ *
+ * 下面全部的選擇器都掛在 `.blocklyToolbox` 底下拉高權重：Blockly 與
+ * continuous-toolbox 的 CSS 是 `Blockly.Css.register` 在 `inject()` 時才塞進
+ * `<head>` 的，比打包好的這份晚，同權重會贏。
+ * ------------------------------------------------------------------ */
+
+.blocklyToolbox {
+  width: 60px;
+  box-sizing: border-box;
+  /* Blockly 預設 `padding: 4px 0`。上緣那 4px 要拿掉：第一個分類被選取時，那塊
+     灰底會從一條白邊底下開始，看起來像對不齊。 */
+  padding-top: 0;
+  /* 分類清單捲到底時，底部留一格給擴充按鈕。沒有它，最後一個分類會停在按鈕
+     底下——而那正是**最後裝進來的那個積木包**，使用者最可能要點的那一個。
+     加在捲動容器（`.blocklyToolbox` 自己 overflow-y: auto）上，不是加在內層
+     的 flex group 上：後者的 padding 不算進捲動範圍。高度要跟 `.ext-button`
+     對齊（2.5rem），多了會在欄底留一段空白。 */
+  padding-bottom: 2.5rem;
 }
 
-/* 選取分類時的灰底（continuous-toolbox 用 inline style 塗滿整列，見
-   ContinuousCategory.ts 的 setSelected）本來就是塗滿整欄寬度，欄寬是被
-   ext-button 撐出來的，跟圖示/文字縮小無關。字體變小後兩側會露出明顯的
-   多餘灰色，改成貼齊內容的圓角膠囊，視覺上比較收斂。 */
-.blocklyToolboxCategory {
-  margin: 0 4px;
-  border-radius: 0.4rem;
+/* 一格的高度由內容決定（Blockly 預設寫死 22px 的單行列高）。`white-space` 要
+   從 Blockly 的 `nowrap` 改回來，長名字（「函式積木」再長一點）才會在欄內換行
+   而不是滿出去。 */
+.blocklyToolbox .blocklyToolboxCategory {
+  height: initial;
+  line-height: 1.25;
+  margin: 0;
+  padding: 0.375rem 0;
+  text-align: center;
+  white-space: normal;
 }
 
-/* 分類欄的寬度是 Blockly 依最寬的分類名算出來的（現在 38px），入口按鈕必須
-   塞得進去，所以是一顆正方形圖示而不是帶文字的按鈕——Scratch 的「添加擴展」
-   也是這樣。 */
+/* 整格都可以點（Blockly 的點擊判定是抓 `event.target` 的 id，圓點與文字都在
+   那一格裡），所以游標也要整格都是手指。分類名要單獨再寫一次：Blockly 給它
+   的是 `cursor: default`。 */
+.blocklyToolbox .blocklyToolboxCategory,
+.blocklyToolbox .blocklyToolboxCategoryLabel,
+.blocklyToolbox .categoryBubble {
+  cursor: pointer;
+}
+
+/* 色圓點。填色是 continuous-toolbox 用 inline style 塗的（分類自己的 colour），
+   這裡只管尺寸與那一圈邊。邊不用 `currentColor`（plugin 的預設，會變成每顆都
+   鑲一圈深灰），改成半透明黑——不管填什麼色都剛好是「深一階」。 */
+.blocklyToolbox .categoryBubble {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0 auto 0.125rem;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 100%;
+}
+
+/* Blockly 的預設是 `font: 16px sans-serif`，那個簡寫會把字體家族一起蓋掉，所以
+   要先 `inherit` 拿回介面字體再訂字級。 */
+.blocklyToolbox .blocklyToolboxCategoryLabel {
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0;
+  text-align: center;
+}
+
+/* 選取的那一格。continuous-toolbox 的 `setSelected` 是直接寫 inline
+   `background-color: gray`（ContinuousCategory.ts），只有 `!important` 蓋得掉。 */
+.blocklyToolbox .blocklyToolboxCategory.blocklyToolboxSelected {
+  background-color: #e9eef2 !important;
+}
+
+/* Blockly 預設選取時把分類名轉白——那是給深色工具箱用的，這裡的底是淺灰。 */
+.blocklyToolbox .blocklyToolboxSelected .blocklyToolboxCategoryLabel {
+  color: inherit;
+}
+
+/* Scratch 的 hover 不動底色，是把名字轉藍。 */
+.blocklyToolbox .blocklyToolboxCategory:hover .blocklyToolboxCategoryLabel {
+  color: #4c97ff;
+}
+
+/* 裡面維持一個 ＋：這裡還沒有安裝流程（P1），一個符號比一個看不懂的圖示誠實，
+   文字則由 title/aria-label 交代。 */
 .ext-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 100%;
+  height: 2.5rem;
   font: inherit;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  background: #fff;
-  box-shadow: 0 1px 4px rgb(20 20 40 / 12%);
+  border: none;
+  border-radius: 0;
+  background: #e8574a;
+  color: #fff;
   cursor: pointer;
 }
 
-.ext-button-icon {
-  font-size: 0.9rem;
-  line-height: 1;
+.ext-button:hover {
+  background: #f0685c;
 }
 
-/* 分類清單捲到底時，底部留一格給入口按鈕。沒有它，最後一個分類會停在按鈕
-   底下——而那正是**最後裝進來的那個積木包**，使用者最可能要點的那一個。
-   加在捲動容器（`.blocklyToolbox` 自己 overflow-y: auto）上，不是加在內層的
-   flex group 上：後者的 padding 不算進捲動範圍。 */
-.blocklyToolbox {
-  padding-bottom: 2.8rem;
-  box-sizing: border-box;
+.ext-button-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .ext-panel {
@@ -597,6 +729,35 @@ body,
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* 編輯「說明文字」那一格時的輸入框（`bare`，見 blockly/declaration.ts）。
+
+   Blockly 的欄位編輯器一律是白底、深灰字、12.5px 的膠囊圓角——而那正是旁邊
+   那顆**名稱格**的樣子。不蓋掉的話，一點進說明文字，它看起來就變成了一個孔，
+   而 `bare` 的整個重點就是這兩者不能長得一樣。
+
+   底色用透明：底下那顆深色矩形本來就畫在那裡（編輯中不會被收走），所以「編輯
+   中」與「編輯完」看起來是同一格，游標只是出現在原地。
+
+   **`color` 與 `border-radius` 要 `!important`**，其餘不用。Blockly 把這兩個
+   （而且只有這兩個）寫成 input 的 **inline style**——`background` 與
+   `caret-color` 它沒寫，所以那兩條照一般權重就蓋得過。實測過：不加的話
+   `color` 會停在主題的 `#575E75`（一個深藍灰），畫在深紅上糊成一團，而圓角
+   會停在 12.5px，也就是旁邊那顆名稱格的膠囊。 */
+.blocky-bare-input.blocklyHtmlInput {
+  background: transparent;
+  color: #fff !important;
+  border-radius: 3px !important;
+  caret-color: #fff;
+}
+
+/* 選取的反白：預設的瀏覽器藍畫在深紅上會髒掉，而這一格的選取又特別常用到
+   （預設文字是「積木名稱」，使用者第一件事就是全選重打）。反白往**深**的
+   那一邊走，白字才留得住——往淺的走等於白字配淺底。 */
+.blocky-bare-input.blocklyHtmlInput::selection {
+  background: rgb(0 0 0 / 35%);
+  color: #fff;
+}
+
 /* ------------------------------------------------------------------ *
  * 欄位編輯中的自動完成（§8.5）
  *
@@ -686,6 +847,9 @@ body,
 .modal-close {
   position: absolute;
   right: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 1.5rem;
   height: 1.5rem;
   font: inherit;
@@ -714,6 +878,48 @@ body,
    （畫布超出 viewBox 的部分不會露出來），所以放開這一層是安全的。 */
 .modal-preview .injectionDiv {
   overflow: visible;
+}
+
+/* 預覽區與它上面那條浮動工具列的共同原點。工具列畫在預覽區的**上緣之外**
+   （貼著那一格的正上方），所以這一層不能裁切。 */
+.modal-preview-wrap {
+  position: relative;
+  overflow: visible;
+}
+
+/* 分段的浮動工具列（§8.5）：點進一格時浮在那一格正上方。位置由
+   ProcedureModal 量出來寫進 style，這裡只負責「往上、置中」那一段位移。 */
+.segment-toolbar {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  transform: translate(-50%, calc(-100% - 0.35rem));
+  border-radius: 0.4rem;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(20 20 40 / 22%);
+}
+
+.segment-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  border: none;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: #2f3a52;
+  cursor: pointer;
+}
+
+.segment-button:hover {
+  background: #e7eefc;
 }
 
 .modal-adders {
@@ -808,16 +1014,25 @@ body,
   padding: 0.8rem 1rem 1rem;
 }
 
-/* 預覽積木上的說明文字：積木底色上的一段白字，不是一顆白色膠囊
+/* 預覽積木上的說明文字：積木底色上的一格**深色矩形**（白字），不是一顆白色膠囊
    （`FieldText` 的 `bare`，見 blockly/declaration.ts）。白色膠囊在這套視覺
    文法裡一直都是「這一格的內容是資料」——說明文字不是，它會變成積木文字的
-   一部分。外框留著（點得到），只是換成一層很淡的白。
+   一部分。底色留著（看得出點得到），只是往深的那一邊走。
 
    選擇器要帶著 `.zelos-renderer.blocky-theme` 前綴，因為 zelos 對可編輯欄位
    的預設（白底、深字）就是掛在那個前綴下的——少了它，同分而 Blockly 的樣式
    後注入，於是這兩條看起來完全沒有作用。 */
 .zelos-renderer.blocky-theme .blocky-bare-field.blocklyEditableField>rect.blocklyFieldRect {
-  fill: rgb(255 255 255 / 22%);
+  /* **比積木底色深，而不是比它淺**：淺的那一版（白色半透明）讀起來像一顆褪色
+     的白色膠囊，而白色膠囊在這套視覺文法裡就是「這一格會變成一個孔」——說明
+     文字正好相反，它會變成積木文字的一部分。用黑色半透明而不是寫死一個紅色，
+     是因為它得跟著積木的顏色走（顏色來自 manifest，§8.1）。 */
+  fill: rgb(0 0 0 / 16%);
+  /* 矩形，不是膠囊。zelos 把欄位的 rx 設成半個高度（那是膠囊的作法），而形狀
+     正是這一格與旁邊那顆白色名稱格唯一的差別。SVG2 的 rx / ry 是 CSS 屬性，
+     蓋得過 Blockly 寫在 attribute 上的值。 */
+  rx: 3px;
+  ry: 3px;
 }
 
 .zelos-renderer.blocky-theme .blocky-bare-field.blocklyEditableField>g>text,
@@ -858,6 +1073,23 @@ body,
 
 .blocky-flyout-button:active>.blocklyFlyoutButtonBackground {
   fill: #e6e8f2;
+}
+
+/* ------------------------------------------------------------------ *
+ * 段落標題（manifest 的 `section`，§8.1）。
+ *
+ * 它與分類標題是同一種 Blockly 條目（`kind: 'label'`），所以**要靠樣式說出
+ * 它比分類小一階**——不然使用者會把「比較」讀成一個新的分類。小一號、灰
+ * 一階、不粗體：它是一段的名字，不是一個入口。
+ *
+ * 那個 class 同時是 `theme.ts` 認它的依據：continuous-toolbox 靠 label 認
+ * 分類邊界，段落標題必須被排除掉。
+ * ------------------------------------------------------------------ */
+
+.blocklyFlyout .blocky-section-label>text.blocklyFlyoutLabelText {
+  fill: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 /* ------------------------------------------------------------------ *

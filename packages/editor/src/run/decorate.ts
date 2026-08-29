@@ -68,3 +68,32 @@ export function blockRect(
   const root = workspace.getBlockById(blockId)?.getSvgRoot();
   return root ? root.getBoundingClientRect() : null;
 }
+
+/**
+ * 這顆積木現在該不該說話（§8.3 的值氣泡）。
+ *
+ * **只有落單的 reporter 才冒值氣泡**（第九輪回饋）。判斷只看這顆積木自己的
+ * `outputConnection` 有沒有接上——插在孔裡的那顆，它的值已經被外面那顆用掉
+ * 了，再冒一次只是把畫面吵滿：`1 + (2 * 3)` 於是只有 `+` 說話。裡面的孔有沒有
+ * 東西不看，所以巢狀自動只剩最外面那顆。
+ *
+ * 規則寫成「**有 output 而且接上了 → 不冒**」而不是「沒接上 → 冒」：command
+ * 與 hat 根本沒有 `outputConnection`，前者自動不受影響，後者會把它們一起關掉。
+ *
+ * **錯誤氣泡不受這條管。** 插在很深的地方的積木出錯，那句話必須看得見——它
+ * 也是唯一會指到那顆積木的東西。
+ *
+ * 換掉的是什麼要知道：整份專案跑起來時，`設定 x 為 (a + b)` 裡的 `+` 不再報
+ * 值，少了一個除錯的抓手；換到的是畫面不吵。
+ */
+export function speaks(
+  state: BlockState,
+  workspace: Blockly.Workspace | null,
+  blockId: string,
+): boolean {
+  if (state.phase === 'error') return state.error !== undefined;
+  // 積木被刪掉了（執行中拖走一顆）就當它落單：反正氣泡沒有東西可以貼。
+  if (workspace?.getBlockById(blockId)?.outputConnection?.isConnected()) return false;
+  if (state.phase === 'hot') return true;
+  return state.phase === 'done' && state.value !== undefined;
+}

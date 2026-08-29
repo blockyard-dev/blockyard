@@ -148,15 +148,15 @@ function argFor(segment: Segment): ArgSpec {
 }
 
 /**
- * 說明文字那幾格畫成「積木底色上的一段白字」而不是白色膠囊（`FieldText` 的
- * `bare`）。
+ * 說明文字那幾格畫成「積木底色上的一格**深色矩形**（白字）」而不是白色膠囊
+ * （`FieldText` 的 `bare`）。
  *
  * 為什麼在這裡改而不是宣告在 `ArgSpec` 上：`bare` 不是 manifest 的概念——沒有
  * 一顆積木包的積木需要它，它是這個對話框的視覺。把它加進 manifest schema 等於
  * 為了一個預覽多開一個公開欄位。
  *
  * 差別要看得出來，因為它就是「這一格會變成什麼」：白色膠囊會變成呼叫積木上的
- * 一個孔，白字不會。
+ * 一個孔，深色矩形不會。
  */
 function markLabelFields(definition: Record<string, unknown>, draft: Draft): void {
   const labels = new Set(
@@ -226,6 +226,29 @@ function indexOfName(name: string): number | null {
 export function segmentAt(draft: Draft, index: number | null): Segment | null {
   if (index === null) return null;
   return draft.segments[index] ?? null;
+}
+
+/**
+ * 第 `index` 段畫在畫面上的位置（viewport 座標），給浮動工具列定位用。
+ *
+ * 標籤是積木自己的欄位，參數是孔裡那顆白色名稱格——與 `readSegmentTexts`
+ * 同一對規則。**它是量出來的**（`getBoundingClientRect`），所以 jsdom 測不到：
+ * 與半形單字置中、flyout 版面同一類，只有瀏覽器實測守得住。
+ */
+export function segmentRect(
+  block: Blockly.BlockSvg,
+  draft: Draft,
+  index: number,
+): DOMRect | null {
+  const segment = draft.segments[index];
+  if (!segment) return null;
+  const name = fieldName(index);
+  if (segment.kind === 'label') {
+    const root = block.getField(name)?.getSvgRoot();
+    return root ? root.getBoundingClientRect() : null;
+  }
+  const shadow = block.getInput(name)?.connection?.targetBlock() as Blockly.BlockSvg | null;
+  return shadow ? shadow.getSvgRoot().getBoundingClientRect() : null;
 }
 
 export { isParam };

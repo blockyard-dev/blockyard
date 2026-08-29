@@ -207,3 +207,45 @@ export function draftIssue(draft: Draft): string | null {
   }
   return null;
 }
+
+/**
+ * 把一段往左或往右搬一格（§8.5 的浮動工具列）。
+ *
+ * D26 已經講明「`params[]` 是集合，模板是版面」——`segments` 就是那份版面，
+ * 所以換順序在資料層是**陣列裡搬一格**，`toProcedure` 一行不改。原本做不到
+ * 這件事：只能刪掉再加，而 `addParam` / `addLabel` 都是 push，新的一段永遠
+ * 排到最後。
+ *
+ * 搬到界外就原樣回傳。工具列在端點本來就不畫那個箭頭（見 `segmentActions`），
+ * 這裡是第二道——純函數不該假設呼叫端已經擋過。
+ */
+export function moveSegment(draft: Draft, index: number, delta: number): Draft {
+  const to = index + delta;
+  const segments = [...draft.segments];
+  const moved = segments[index];
+  if (moved === undefined || to < 0 || to >= segments.length) return draft;
+  segments.splice(index, 1);
+  segments.splice(to, 0, moved);
+  return { ...draft, segments };
+}
+
+/** 浮動工具列上這一格畫得出哪幾個圖示。 */
+export interface SegmentActions {
+  left: boolean;
+  remove: boolean;
+  right: boolean;
+}
+
+/**
+ * 端點的箭頭**不畫**而不是畫成灰色（§8.5）：三個圖示的一列裡，一個灰掉的
+ * 箭頭讀起來像壞了。只剩一段時不畫 `🗑`——刪光了就沒有積木，與右鍵選單的
+ * `preconditionFn` 同一條規則。
+ */
+export function segmentActions(draft: Draft, index: number): SegmentActions {
+  const last = draft.segments.length - 1;
+  return {
+    left: index > 0,
+    remove: draft.segments.length > 1,
+    right: index >= 0 && index < last,
+  };
+}

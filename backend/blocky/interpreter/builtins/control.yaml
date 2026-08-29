@@ -30,6 +30,7 @@ blocks:
       else: { type: stack }
 
   - opcode: repeat
+    section: true
     type: command
     text: "重複 %(times) 次"
     args:
@@ -60,6 +61,7 @@ blocks:
       body: { type: stack }
 
   - opcode: wait
+    section: true
     type: command
     text: "等待 %(seconds) 秒"
     args:
@@ -72,6 +74,7 @@ blocks:
       condition: { type: boolean, default: false }
 
   - opcode: stop
+    section: true
     type: command
     # cap block（§16 Q18 決議：改）。`停止` 之後的積木永遠跑不到，而形狀不說
     # 這件事的話，使用者接得上去、按存檔才被打回來。

@@ -148,8 +148,13 @@ describe('改簽章之後帽子上的參數還在（§4.6）', () => {
   /** 對話框按下確定時 `App.tsx` 跑的那三步，順序一字不差。 */
   function apply(workspace: Blockly.Workspace, proc: Procedure) {
     const procedures = { p_jump: proc };
-    registerProcedures(procedures);
-    reshapeProcedure(workspace as Blockly.WorkspaceSvg, 'p_jump', proc);
+    const blocks = registerProcedures(procedures);
+    reshapeProcedure(
+      workspace as Blockly.WorkspaceSvg,
+      'p_jump',
+      proc,
+      buildContext([...builtins, ...blocks]),
+    );
     fillDefinitionParams(workspace, procedures);
   }
 

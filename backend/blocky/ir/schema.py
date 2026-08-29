@@ -131,6 +131,18 @@ class Procedure(Strict):
     returns: ReturnType | None = None
     body: str | None = None
     definitionBlock: str | None = None
+    # 定義帽子在畫布上的位置。
+    #
+    # **為什麼放這裡而不是 `scripts`**：`scripts` 是「一條會被觸發的腳本」
+    # （§5.1 的觸發條件是「top 的 opcode 等於這次的 trigger」），而定義帽子
+    # 永遠不會被觸發——把它記成 script 等於在 `scripts` 裡放一條永遠不會跑的
+    # 東西，而且 `definitionBlock` 已經指著同一顆積木了，兩邊遲早漂移。
+    #
+    # 不存的後果實測過：存檔重開之後**每一顆定義帽子都疊在同一個位置**
+    # （載入時沒有座標，Blockly 一律放在原點）。位置是呈現而不是語意，但
+    # 「刪掉不影響執行結果」不等於「可以不存」——§4.2 的 `ui` 規則講的是前者。
+    x: float = 0
+    y: float = 0
 
     @property
     def placeholders(self) -> list[str]:

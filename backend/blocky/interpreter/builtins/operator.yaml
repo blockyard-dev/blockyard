@@ -103,6 +103,7 @@ blocks:
   # handler 的 fallback 是 `exact`——`=` 的語意一個字都沒有改。
 
   - opcode: eq
+    section: true
     type: boolean
     text: "%(a) %(op) %(b)"
     args:
@@ -159,6 +160,7 @@ blocks:
   # 讀起來像在問問題。兩顆沒有參數的積木把那條路補上。
 
   - opcode: "true"
+    section: true
     type: boolean
     text: "真"
 
@@ -184,6 +186,7 @@ blocks:
   # ---- 字串。索引 1-based（§4.3）。----
 
   - opcode: join
+    section: true
     type: reporter
     returns: string
     text: "連接 %(a) 和 %(b)"
@@ -266,6 +269,7 @@ blocks:
           - { value: lower, label: "小寫" }
 
   - opcode: regex_match
+    section: true
     type: boolean
     text: "%(text) 符合樣式 %(pattern)"
     args:
@@ -291,6 +295,7 @@ blocks:
       replace: { type: string, default: "#" }
 
   - opcode: random
+    section: true
     type: reporter
     returns: number
     text: "隨機取 %(from) 到 %(to)"

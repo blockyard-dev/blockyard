@@ -48,6 +48,7 @@ blocks:
       key: { type: string, default: "name" }
 
   - opcode: keys
+    section: true
     type: reporter
     returns: list
     text: "%(object) 的所有欄位名"
@@ -62,6 +63,7 @@ blocks:
       object: { type: object }
 
   - opcode: parse_json
+    section: true
     type: reporter
     returns: any
     # 回傳型別是 any 而不是 object：伺服器回什麼就是什麼，那正是它必須顯式的理由

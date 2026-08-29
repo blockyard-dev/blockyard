@@ -45,6 +45,7 @@ blocks:
       default: { type: string, default: "" }
 
   - opcode: is
+    section: true
     type: boolean
     # 問**實際型別**：is([], 物件) 為 false，is(null, 物件) 也是
     text: "%(value) 的型別是 %(type)"
@@ -78,6 +79,7 @@ blocks:
           - { value: boolean, label: "是非值" }
 
   - opcode: of
+    section: true
     type: reporter
     returns: string
     text: "%(value) 的型別"

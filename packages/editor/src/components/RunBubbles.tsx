@@ -13,18 +13,25 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type * as Blockly from 'blockly/core';
-import { blockRect } from '../run/decorate';
+import { blockRect, speaks } from '../run/decorate';
 import { useRunStore, type BlockState } from '../run/store';
 import { JsonTree } from './JsonTree';
 
-/** §8.3：值氣泡 2 秒後淡出。錯誤氣泡不會——它要留著讓人看。 */
+/**
+ * §8.3：氣泡 2 秒後淡出（最後 400ms 淡）。
+ *
+ * **錯誤氣泡也淡**（第九輪回饋）。它原本是 `Infinity`，理由是「錯誤要留著讓
+ * 人看」——而回饋說的正是那個代價：一顆改好了的積木身上還掛著上一次的紅氣
+ * 泡。改這條的前提是錯誤在別處留得住：輸出面板的 log 與 topbar 的「執行失
+ * 敗：⋯」都不會淡出，紅框那半在 `index.css`（同一組 2 秒 + 400ms）。
+ */
 const VALUE_TTL_MS = 2000;
 
 interface Bubble {
   blockId: string;
   seq: number;
   state: BlockState;
-  /** 到期時間；錯誤氣泡是 Infinity。 */
+  /** 到期時間。滑鼠停在上面時每一幀往後推（§8.3）。 */
   until: number;
 }
 
@@ -44,19 +51,19 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
       const before = new Map(prev.map((b) => [b.blockId, b]));
       const next: Bubble[] = [];
       for (const [blockId, state] of blocks) {
-        if (!speaks(state)) continue;
+        if (!speaks(state, workspace, blockId)) continue;
         const old = before.get(blockId);
         const fresh = old === undefined || old.seq !== state.seq;
         next.push({
           blockId,
           seq: state.seq,
           state,
-          until: state.phase === 'error' ? Infinity : fresh ? now + VALUE_TTL_MS : old.until,
+          until: fresh ? now + VALUE_TTL_MS : old.until,
         });
       }
       return same(prev, next) ? prev : next;
     });
-  }, [blocks]);
+  }, [blocks, workspace]);
 
   // 一個 rAF 迴圈同時做兩件事：跟著積木移動、把到期的氣泡收掉。
   useEffect(() => {
@@ -71,7 +78,7 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
         // §8.3：滑鼠在上面就把倒數推到現在之後，移開才重新開始。每一幀都推，
         // 所以「停住」不需要記住是什麼時候進來的；離開時剩下的正好是完整的
         // 2 秒，跟第一次冒出來時一樣。
-        if (hovered.current === bubble.blockId && bubble.until !== Infinity) {
+        if (hovered.current === bubble.blockId) {
           bubble.until = now + VALUE_TTL_MS;
         }
         if (now > bubble.until) {
@@ -84,9 +91,11 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
           continue;
         }
         node.style.visibility = 'visible';
-        // §8.3：對齊積木的**中央**，不是左緣。reporter 常常插在一顆很寬的積木
-        // 的某個孔裡，靠左的氣泡會飄到跟它無關的欄位上方——看起來像在說隔壁
-        // 那顆積木的事，而值氣泡唯一的工作就是「說清楚是誰回了什麼」。
+        // §8.3：對齊積木的**中央**，不是左緣。原本的理由是「reporter 常常插在
+        // 一顆很寬的積木的某個孔裡」，而那個理由在「只有落單的才冒泡」之後就
+        // 不存在了（見 `speaks`）。留著中央的新理由比較單純：冒泡的是一整顆
+        // 積木，而靠左的氣泡在一顆很寬的積木上會偏到它的一端，看起來像在說
+        // 那一格的事——值氣泡唯一的工作是「說清楚是誰回了什麼」。
         // 往左收半個氣泡寬由 CSS 的 translate 做（見 index.css 的 .bubble）。
         node.style.transform = `translate(${rect.left + rect.width / 2}px, ${rect.top}px)`;
         // 最後 400ms 淡出
@@ -143,13 +152,6 @@ function BubbleBody({ state }: { state: BlockState }) {
       {state.truncated && <div className="bubble-hint">值太長，已截斷（§6.2）</div>}
     </>
   );
-}
-
-/** 有值、在跑很兇、或出錯的積木才冒氣泡。command 跑完不冒（§8.3 只說 reporter）。 */
-function speaks(state: BlockState): boolean {
-  if (state.phase === 'error') return state.error !== undefined;
-  if (state.phase === 'hot') return true;
-  return state.phase === 'done' && state.value !== undefined;
 }
 
 function same(a: Bubble[], b: Bubble[]): boolean {

@@ -57,6 +57,7 @@ blocks:
       name: { type: variable, default: "", reads: true }
 
   - opcode: new_list
+    section: true
     type: reporter
     returns: list
     text: "空清單"
@@ -69,6 +70,7 @@ blocks:
   # ---- 清單。索引 1-based（§4.3）。----
 
   - opcode: list_add
+    section: true
     type: command
     text: "把 %(item) 加到 %(name)"
     args:
@@ -139,6 +141,7 @@ blocks:
   # ---- 持久值（§5.4 第 4 層、D12）。key 不是變數。----
 
   - opcode: persist_set
+    section: true
     type: command
     text: "記住 %(name) 為 %(value)"
     args:

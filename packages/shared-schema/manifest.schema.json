@@ -250,6 +250,18 @@
           ],
           "default": null,
           "title": "Concurrency"
+        },
+        "section": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "default": false,
+          "title": "Section"
         }
       },
       "required": [

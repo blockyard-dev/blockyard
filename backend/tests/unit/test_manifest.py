@@ -256,6 +256,40 @@ def test_packs_may_declare_terminal_blocks() -> None:
     assert manifest.block("halt").terminal is True
 
 
+def test_section_marks_the_start_of_a_toolbox_group() -> None:
+    """`section` 是語意宣告：字串多一行標題，`True` 只斷開（§8.1）。"""
+    manifest = parse_manifest(
+        mf(blocks=[
+            {"opcode": "a", "type": "command", "text": "a", "section": "比較"},
+            {"opcode": "b", "type": "command", "text": "b", "section": True},
+            {"opcode": "c", "type": "command", "text": "c"},
+        ]),
+        where="test",
+    )
+    assert manifest.block("a").section == "比較"
+    assert manifest.block("b").section is True
+    assert manifest.block("c").section is False
+
+
+def test_section_cannot_be_an_empty_string() -> None:
+    """空字串是「我想要斷開但不想寫標題」寫錯了，而它畫出來是一行看不見的標題。"""
+    bad(
+        mf(blocks=[{"opcode": "a", "type": "command", "text": "a", "section": "  "}]),
+        "section: true",
+    )
+
+
+def test_deprecated_block_cannot_start_a_section() -> None:
+    """下架的積木不上工具箱（§13.1）——整段的標題會跟著它默默消失。"""
+    bad(
+        mf(blocks=[{
+            "opcode": "a", "type": "command", "text": "a",
+            "section": "比較", "deprecated": True,
+        }]),
+        "把 section 移到下一顆",
+    )
+
+
 def test_dropdown_needs_source_or_options() -> None:
     base = {"opcode": "go", "type": "command", "text": "go %(x)"}
     bad(mf(blocks=[{**base, "args": {"x": {"type": "dropdown"}}}]), "source（動態）或 options")

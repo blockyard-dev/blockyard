@@ -60,6 +60,7 @@ export type Name1 = string;
 export type Type3 = string;
 export type Yields = YieldSpec[];
 export type Concurrency = ('drop' | 'queue' | 'restart' | 'parallel') | null;
+export type Section = string | boolean;
 export type Blocks = BlockSpec[];
 export type Id1 = string;
 export type Label3 = string;
@@ -113,6 +114,7 @@ export interface BlockSpec {
   terminal?: Terminal;
   yields?: Yields;
   concurrency?: Concurrency;
+  section?: Section;
 }
 export interface Args {
   [k: string]: ArgSpec;

@@ -21,8 +21,10 @@ import {
   blankDraft,
   draftIssue,
   fromProcedure,
+  moveSegment,
   nextParamId,
   removeSegment,
+  segmentActions,
   setSegmentType,
   toProcedure,
   type Draft,
@@ -149,6 +151,52 @@ describe('版面編輯', () => {
   it('參數名稱套 §4.5 的字元限制', () => {
     const draft = applyTexts(fromProcedure(JUMP), { 1: ' 次 數${x}. ' });
     expect(toProcedure(draft).params?.[0]?.name).toBe('次 數x');
+  });
+});
+
+/**
+ * 分段的順序（§8.5 的浮動工具列）。
+ *
+ * 換順序在資料層是**免費的**——D26 已經講明「`params[]` 是集合，模板是版面」，
+ * 而 `segments` 就是那份版面。這幾題釘的正是那句話：搬完之後 `name` 換了位置、
+ * `params` 跟著同一個順序走，而 `toProcedure` 一行都沒改。
+ */
+describe('分段的順序（moveSegment）', () => {
+  it('把第二個參數移到前面，簽章與 params 一起換位置', () => {
+    const proc = toProcedure(moveSegment(fromProcedure(JUMP), 3, -1));
+    expect(proc.name).toBe('跳 %(a1) %(a2) 次 到');
+    expect(proc.params?.map((p) => p.id)).toEqual(['a1', 'a2']);
+  });
+
+  it('說明文字那一格也搬得動——D26 之下它沒有特權', () => {
+    const proc = toProcedure(moveSegment(fromProcedure(JUMP), 0, 1));
+    expect(proc.name).toBe('%(a1) 跳 次 到 %(a2)');
+  });
+
+  it('搬到界外就原樣回傳', () => {
+    const draft = fromProcedure(JUMP);
+    expect(moveSegment(draft, 0, -1)).toBe(draft);
+    expect(moveSegment(draft, draft.segments.length - 1, 1)).toBe(draft);
+    expect(moveSegment(draft, 99, -1)).toBe(draft);
+  });
+
+  it('搬過去再搬回來等於沒動', () => {
+    const draft = fromProcedure(JUMP);
+    expect(toProcedure(moveSegment(moveSegment(draft, 1, 1), 2, -1))).toEqual(toProcedure(draft));
+  });
+});
+
+describe('工具列畫得出哪幾個圖示（segmentActions）', () => {
+  it('端點不畫那一側的箭頭', () => {
+    const draft = fromProcedure(JUMP);
+    expect(segmentActions(draft, 0).left).toBe(false);
+    expect(segmentActions(draft, 0).right).toBe(true);
+    expect(segmentActions(draft, draft.segments.length - 1).right).toBe(false);
+  });
+
+  it('只剩一段時不畫刪除——刪光了就沒有積木', () => {
+    const one: Draft = { segments: [{ kind: 'label', text: '名字' }], returns: null };
+    expect(segmentActions(one, 0)).toEqual({ left: false, remove: false, right: false });
   });
 });
 
