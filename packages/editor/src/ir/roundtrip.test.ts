@@ -205,14 +205,79 @@ describe('IR → Blockly → IR 等價（63 份題庫）', () => {
     const workspace = new Blockly.Workspace();
     try {
       loadProject(project, workspace, ctx);
+      // `extensions` 不傳：它是**算出來的**（§13.3）。題庫的每一份 fixture
+      // 都宣告了它真的用到的包，所以這一題順便驗那條推導——算錯就是這裡紅。
       const result = serializeWorkspace(workspace, ctx, {
         formatVersion: project.formatVersion,
         meta: project.meta,
-        extensions: project.extensions,
         procedures: project.procedures,
       });
 
       expect(canonicalize(result, ctx)).toEqual(canonicalize(project, ctx));
+    } finally {
+      workspace.dispose();
+    }
+  });
+});
+
+/**
+ * §13.3 的 `extensions` 宣告。
+ *
+ * 上面那 63 題驗的是「fixture 宣告什麼、算出來就是什麼」，而它們是**手寫**的
+ * IR——每一份都已經宣告對了。真正會出事的是另一個方向：使用者從工具箱拉一顆
+ * 新的積木出來，那一刻宣告要跟著長出來。P1 第一個積木包當天撞到的就是這件事
+ * （症狀：按下執行，後端說「這個版本不認得積木 http.get」）。
+ */
+describe('extensions 是從畫布算出來的（§13.3）', () => {
+  const demo = manifestRegistration.blocks.find((b) => b.manifest.id === 'demo')!.manifest;
+
+  function fresh() {
+    return {
+      workspace: new Blockly.Workspace(),
+      ctx: buildContext(manifestRegistration.blocks),
+    };
+  }
+
+  it('拉一顆積木包的積木出來 = 宣告用到它', () => {
+    const { workspace, ctx } = fresh();
+    try {
+      workspace.newBlock('demo.announce');
+      expect(serializeWorkspace(workspace, ctx).extensions).toEqual([
+        { id: 'demo', version: demo.version },
+      ]);
+    } finally {
+      workspace.dispose();
+    }
+  });
+
+  it('刪掉最後一顆，宣告也跟著不見', () => {
+    const { workspace, ctx } = fresh();
+    try {
+      const block = workspace.newBlock('demo.announce');
+      block.dispose(false);
+      expect(serializeWorkspace(workspace, ctx).extensions).toEqual([]);
+    } finally {
+      workspace.dispose();
+    }
+  });
+
+  it('內建積木不進宣告——它沒有資料夾也沒有 main.py', () => {
+    const { workspace, ctx } = fresh();
+    try {
+      workspace.newBlock('debug.log');
+      workspace.newBlock('control.repeat');
+      expect(serializeWorkspace(workspace, ctx).extensions).toEqual([]);
+    } finally {
+      workspace.dispose();
+    }
+  });
+
+  it('同一個包用了兩顆積木也只宣告一次', () => {
+    const { workspace, ctx } = fresh();
+    try {
+      workspace.newBlock('demo.announce');
+      workspace.newBlock('demo.echo');
+      expect(serializeWorkspace(workspace, ctx).extensions).toHaveLength(1);
     } finally {
       workspace.dispose();
     }

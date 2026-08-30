@@ -11,6 +11,21 @@
 
 ## 0.0 變更摘要
 
+### v0.18
+
+**P1 開工：第一個手寫積木包 `http`，以及它逼出來的三件事。** 三個包裡它排第一，
+理由是「沒有外部帳號、沒有 SDK 依賴」——所以撞到的問題一定是路本身的問題。它當天
+就撞到兩個，兩個都不是網路的事。
+
+| 類別 | 變更 | 章節 |
+|---|---|---|
+| **落地** | **`ctx.http` 由 host 提供**（不是積木包自己 `import httpx`）：逾時／連線重試／UA 的預設值只設一次，連線池一包一份，生命週期歸 host。積木包的 `requirements` 因此是空的 | §7.4 |
+| **新增** | **`permissions: [net]` 有了第一個真的檢查**：沒宣告就拿不到 `ctx.http`。一句沒有人檢查的宣告，使用者讀了也不能信 | §7.4、§12.1 |
+| **新增** | SDK 多一個 `BlockError`：積木包**寫給使用者看的**錯誤，訊息的主詞是使用者的網址而不是「這個包壞掉了」 | §7.3 |
+| **修正** | **`extensions` 宣告改成由編輯器從畫布算出來**，不再是存檔時的 passthrough。原本的症狀：從工具箱拉一顆 `http.get` 出來、按執行，後端說「這個版本不認得積木 http.get」——因為執行只載入專案宣告過的包，而畫布上多一顆積木從來不會改到那份宣告 | §13.3、§8.4 |
+| **新增** | §15 的 P1 有施工順序表（四步），與 P0b 同一種寫法 | §15 |
+| **新增** | §14 多一節「改了什麼要重啟什麼」——三條都是實際踩過的，症狀都長得像「改動沒生效」 | §14 |
+
 ### v0.17
 
 **§16 Q10 定案：開發者路線。** 它從 v0.3 掛到現在，是唯一一條「不阻擋任何實作、
@@ -1473,6 +1488,16 @@ async def on_message(ctx):
 
 **Trigger 用 async generator**：每 `yield` 一次就啟動一個 Thread，yield 的 dict 綁成 hat 的 `yields` 變數。cron 與 webhook 是內建 trigger，用同一套介面實作，沒有特例。
 
+#### `BlockError`：積木包寫給使用者看的錯誤
+
+`from blocky import BlockError`。未被接住的例外由 Host 包成「積木包「HTTP」的
+`http.get` 執行時發生錯誤：ConnectError: …」——那句話的主詞是**這個包壞了**，而
+「連不上一個使用者自己打的網址」不是包壞了。`BlockError` 原樣往上送，讓積木包說
+得出一句主詞正確的話；`try_catch` 兩者都攔得到。
+
+判準是**誰做錯了**：使用者打錯網址、伺服器沒回應、token 過期 → `BlockError`；
+`main.py` 自己 index out of range → 讓它炸，那句「這個包壞了」是對的。
+
 ### 7.4 ctx 介面
 
 | 成員 | 說明 |
@@ -1481,8 +1506,32 @@ async def on_message(ctx):
 | `ctx.state` | 該 extension 的常駐狀態（連線池、client） |
 | `ctx.log(msg, level)` | 推 `log` 事件到前端 |
 | `ctx.block_id` | 當前執行的積木 id（錯誤定位用） |
-| `ctx.http` | 共用的 httpx client（帶逾時與重試預設值） |
+| `ctx.http` | 共用的 httpx client（帶逾時與重試預設值），見下 |
 | `ctx.cancelled` | 協作式取消檢查點，長迴圈中應主動檢查 |
+
+#### `ctx.http` 由 host 提供，不由積木包自己開
+
+積木包**可以** `import httpx`，但不該自己建 client。三個理由，一個比一個實際：
+
+1. **預設值只設一次。** 逾時、連線重試、redirect、User-Agent 是每個包都會答錯一次
+   的東西——而一個沒有逾時的請求會讓一條 Thread 永遠掛著，§5.5 的停止只等得到一個
+   會回來的 await。
+2. **連線池共用。** 一個包一個 client 等於一個包一組連線池。
+3. **它是權限的落點。** `permissions: [net]` 在 §12.1 是安裝畫面上的一句話，而
+   `ctx.http` 是它第一個真的守得住的地方：沒宣告 `net` 的包拿不到 client。守不住的
+   宣告不如不宣告。
+
+**重試只重試「連不上」**（連線建立階段）。收到回應之後一律不重試：`POST` 不是冪等
+的，而「幫你重送一次訂單」是這一層最不該自作主張的事。要重試的積木包自己寫迴圈，
+那時它看得到 status code。
+
+client 是**碰到才建**（`ctx.http` 第一次被讀取），由 host 在 `unload` 時關掉——
+`on_unload` 沒有義務知道它存在。跨 process 之後（§7.6）這份設定跟著 SDK 進到子
+process，與 `boundary.py` 同一個理由：一致不是靠自律，是靠共用同一段程式碼。
+
+**httpx 因此是 runtime 的相依，不是某個積木包的。** 首批三個包的 `requirements`
+少一項，而 §7.6 要隔離的本來就是**包自己**帶的那些（`discord.py`、`openai`），不是
+這一份。
 
 #### 沒有 `ctx.get_var / set_var`（D16）
 
@@ -1970,6 +2019,20 @@ def migrate(block: dict) -> dict:
 
 同一條原則延伸到**任何**認不得的 opcode（例如專案來自更新版的 runtime）：它不是載入期錯誤，而是保留為佔位符，執行到它時給出 `unknown_block` 錯誤。因此形狀驗證（§4.2）刻意跳過認不得的 opcode——否則佔位符會在開檔時就把整份專案擋掉。
 
+#### `extensions` 宣告是**算出來的**，不是存下來的
+
+`project.json` 的 `extensions` 是「這份專案需要哪幾個包」。它由編輯器在存檔時從
+**畫布上的積木**推導（`ir/serialize.ts::usedExtensions`）：用到哪個包的積木，就
+宣告那個包，版本取現在裝著的那一份。
+
+一度它是 passthrough——載入時是什麼，存回去就是什麼。P1 的第一個積木包當天就撞到
+那個洞：從工具箱拉一顆 `http.get` 出來、按下執行，後端說**「這個版本不認得積木
+http.get」**。因為執行只載入專案宣告過的包（`only=declared`，見上一段的理由），而
+「畫布上多了一顆積木」從來不會改到那份宣告。使用者每一步都做對了，錯誤卻指著積木。
+
+刪掉最後一顆該包的積木，宣告也跟著消失。這是刻意的：留著一筆沒有人用的宣告，代價
+是「那個包後來被移除」時，一份根本用不到它的專案會打不開。
+
 ---
 
 ## 14. 專案目錄結構
@@ -2005,6 +2068,20 @@ blocky/
 └── docs/
 ```
 
+### 14.1 改了什麼要重啟什麼
+
+三條都實際踩過，而且症狀都長得像「改動沒生效」——最難查的那一種，因為看起來像是
+改錯了地方。
+
+| 改了 | 要做什麼 | 不做的症狀 |
+|---|---|---|
+| 內建 manifest（`builtins/*.yaml`）、`blocky/__init__.py`、SDK | **重啟後端**。`declarations` 在 import 期讀 YAML，`_SDK` 也是 import 期的常數 | 「積木長得跟改之前一樣」；或積木包 `ImportError: cannot import name …` |
+| IR 的 pydantic 模型（`ir/schema.py`） | **重啟後端**，而且順序是 `schema.py` → `tools/export_schema.py` → `npm run gen:types` → 重啟 | 更兇：`Strict` 是 `extra="forbid"`，前端一送出新欄位就是 **422「Extra inputs are not permitted」**，存檔整個失敗 |
+| 註冊給 Blockly 的類別（`FieldText` 等） | **重新整理瀏覽器**。vite 的 Fast Refresh 收得下 `App.tsx`，但 Blockly 的 field 註冊表裡放的仍然是舊的那個類別 | 「CSS 生效了、行為沒變」 |
+
+第三方積木包的 `manifest.yaml` **不必**重啟——`discover()` 每次請求都重掃，重新整理
+瀏覽器就看得到新積木。`main.py` 也不必：它在每次 Run 開始時才被 import。
+
 `shared-schema` 是 IR **與 manifest** 的唯一真實來源：從 JSON Schema 產生 TS 型別，後端直接用 pydantic 模型，兩邊同源。manifest 也在裡面，是因為 D21 之後它同樣是前後端介面——§8.1 的動態註冊照著 `args[].type` 決定畫哪種欄位。兩份都由 `backend/tools/export_schema.py` 產生，CI 跑 `--check`。
 
 ---
@@ -2021,8 +2098,9 @@ blocky/
 |---|---|
 | P0a 語意核心 | **完成**。63 題題庫、214 個測試 |
 | P1 的 Host 邊界（§7.5） | **提前完成**。manifest schema、`ExtensionHost` / `HostChannel`、`InProcessHost`、邊界的正規化與驗證、24 題合約測試 |
-| P0b 編輯器 | **完成**。第 1～8 步、九輪實測回饋、四條驗收全部通過 ← 現在在這裡：Q10 已決議，下一步直接進 P1 |
-| P1 其餘（SubprocessHost、三個手寫包） | 延後 |
+| P0b 編輯器 | **完成**。第 1～8 步、九輪實測回饋、四條驗收全部通過 |
+| P1 第 1 步（`http` 包） | **完成**。`ctx.http` 落地、`permissions: [net]` 有了檢查、`extensions` 宣告改成算出來的 ← 現在在這裡 |
+| P1 其餘（SubprocessHost、`openai`、`discord`） | 第 2～4 步，見下面的施工順序 |
 
 **為什麼 Host 邊界提前、其餘 P1 延後**：介面不能晚做，實作可以。`ExtensionHost` / `HostChannel` 兩個方向的介面與 `boundary.py` 都已經定案，合約測試也已經對 host 實作參數化——SubprocessHost 之後接上去只要在 `HOSTS` 加一行，題目一題都不用改。反過來，P1 剩下的「手寫三個包」原本卡在 Q10，而 **Q10 已經決議（開發者路線）**——三個包的選擇與順序不變，因為它們本來就是開發者取向。
 
@@ -2150,6 +2228,25 @@ reporter 一律冒值氣泡，都是這份文件現在明寫的行為（見 §8.
 3. `discord` — 最後做，因為它是唯一需要**長連線 trigger**（§7.3 的 async generator）的，複雜度最高。
 
 **驗收**：新增一個資料夾、重啟後端，新積木自動出現在工具箱且可執行；三個包能串成「抓 API → 丟給 LLM 摘要 → 發到 Discord」；§17.4 的 Host 合約測試在 InProcess 與 Subprocess 兩種實作下都綠。
+
+#### 施工順序
+
+P1 的一半在 P0b 期間已經提前做完（見「目前進度」）：manifest schema、
+`ExtensionHost` / `HostChannel`、`InProcessHost`、`boundary.py` 與 24 題合約測試。
+剩下的排成四步，原則與 P0b 同一條——**先讓最短的一條路真的走通，再換掉底下的實作**。
+
+| # | 步驟 | 估計 | 為什麼排這裡 |
+|---|---|---|---|
+| ~~1~~ | ~~**`http` 包跑在 `InProcessHost` 上**，配本地假伺服器~~ **完成** | 3～4 天 | 它是唯一一個**不需要外部帳號、也不需要 SDK 依賴**的包，所以這一步錯的一定是「manifest → 積木 → 執行」這條路本身。而那條路從來沒有人真的從頭走過一次——`demo` 包只走到 host，沒有走到工具箱與畫布 |
+| 2 | **SubprocessHost + 跨 process 反向通道**（§7.5、§7.6） | 1.5～2 週 | 合約測試已經對 host 參數化，`HOSTS` 加一行就跑得起來；而第 1 步的 `http` 包當場變成第二個實作的第一個真實用戶。**排在 `openai` 之前**：`openai` 是第一個帶 `requirements` 的包，而依賴隔離正是子 process 存在的理由——反過來做等於先讓一個假的隔離上線 |
+| 3 | **`openai` 包**：secret 管理（keyring）、§12.2 的值遮蔽、uv venv、長時間請求 | 1～1.5 週 | 第一個需要金鑰的包。三件新東西（金鑰庫、遮蔽、venv）都只有在真的有一個要金鑰、要裝東西的包時才試得出來 |
+| 4 | **`discord` 包**：長連線 trigger（§7.3 的 async generator） | 1～1.5 週 | 最貴的留最後。它是唯一需要**常駐連線**的包，而 trigger 的生命週期與 P2 的 Trigger Manager 有交集——先做完 2、3，那時 host 邊界與 venv 都已經定下來 |
+
+**動態下拉（`source`）最晚要在第 3 步之前接上。** 端點是
+`POST /api/extensions/{id}/dropdown/{source}`（附錄 A），前端目前用文字影子頂著
+（形狀與 IR 表示與接上之後完全相同，換掉的只有影子的型別）。`openai` 的模型清單
+是它的第一個真實消費者；`http` 的 `method` 已經是一個宣告好的下拉，可以當它的
+第一個測試對象——選項封閉、答案不會變，錯了一眼看得出來。
 
 ### P2 — 自動化（3～4 週）
 **範圍**：Trigger Manager（cron / webhook / stream，含 §4.9 的 timezone）；專案 active 狀態與後端重啟恢復；§6.3 的事件落地策略；執行歷史與日誌檢視；`try_catch`；錯誤重試策略；**manifest 的可重複參數群組（§16 Q19）與它的第一批消費者**——`如果⋯否則如果⋯` 的 `+` `−` 與 `try_catch` 的多個 catch。排在這裡而不是 P1，是因為它要先被 P1 的三個手寫包磨過一輪；`try_catch` 本來就在這一階段，兩件事會用到同一個機制。

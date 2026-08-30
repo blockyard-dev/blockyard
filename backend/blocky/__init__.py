@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-_SDK = frozenset({"Ctx", "block", "dropdown", "on_load", "on_unload", "trigger"})
+_SDK = frozenset({"BlockError", "Ctx", "block", "dropdown", "on_load", "on_unload", "trigger"})
 
 __all__ = sorted(_SDK)
 

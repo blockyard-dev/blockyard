@@ -7,9 +7,16 @@
  * C 型堆疊，规则一致（見 `flattenBlock`）。
  *
  * `procedures` 的 `name` / `params` / `returns` 這一步**沒有編輯介面**
- * （mutator 是第 7 步的事），所以當成與 `meta` / `extensions` 同等的
- * passthrough：呼叫端把載入時的原始 `procedures` 傳進來，這裡只重新掃描
- * `definitionBlock` / `body`（那兩個會隨使用者編輯函式體而變，不能 passthrough）。
+ * （mutator 是第 7 步的事），所以當成與 `meta` 同等的 passthrough：呼叫端把
+ * 載入時的原始 `procedures` 傳進來，這裡只重新掃描 `definitionBlock` / `body`
+ * （那兩個會隨使用者編輯函式體而變，不能 passthrough）。
+ *
+ * **`extensions` 不是 passthrough，是從畫布上的積木算出來的**（§13.3）。它曾經
+ * 是 passthrough，症狀是 P1 第一個積木包當天就撞到的那件事：從工具箱拉一顆
+ * `http.get` 出來、按下執行，後端說「這個版本不認得積木 http.get」——因為
+ * 執行只載入專案**宣告過**的包（`conformance.py`、`api/validation.py` 的
+ * `only=declared`），而畫布上多了一顆積木從來不會改到那份宣告。使用者做對了
+ * 每一步，錯誤卻指著積木。
  */
 import * as Blockly from 'blockly/core';
 import { BOOLEAN_TRUE, SHADOW_FIELD, shadowKindOf, type RegisteredBlock } from '../blockly/define';
@@ -39,7 +46,6 @@ type IRInput = LiteralInput | TemplateInput | BlockInput | StackInput;
 export interface SerializeOptions {
   formatVersion?: number;
   meta?: ProjectIR['meta'];
-  extensions?: ProjectIR['extensions'];
   /** 載入時的 `project.procedures`，見檔案頂端的說明。 */
   procedures?: Record<string, Procedure>;
 }
@@ -125,7 +131,7 @@ export function serializeWorkspace(
   return {
     formatVersion: opts.formatVersion ?? 1,
     meta: opts.meta ?? {},
-    extensions: opts.extensions ?? [],
+    extensions: usedExtensions(workspace, ctx),
     // §4.5：只是索引，刪掉重新產生不影響執行語意。變數監看面板要用到之前
     // 都先留空——比起算出一份跟語意無關、卻可能跟這裡的規則慢慢漂移的索引，
     // 空值更誠實。
@@ -134,6 +140,31 @@ export function serializeWorkspace(
     scripts,
     blocks,
   };
+}
+
+/**
+ * 畫布上真的用到哪幾個積木包（§13.3）。
+ *
+ * 版本取的是**現在裝著的那一份**，不是載入時宣告的那一份：宣告的意思是
+ * 「這份專案需要這個包」，而使用者存檔的當下需要的就是他現在正在用的版本。
+ *
+ * 用完最後一顆積木、把它刪掉之後宣告也跟著消失——這是刻意的。留著一筆沒有人
+ * 用的宣告，代價是「那個包後來被移除」時一份根本用不到它的專案會打不開。
+ */
+function usedExtensions(
+  workspace: Blockly.Workspace,
+  ctx: ConversionContext,
+): ProjectIR['extensions'] {
+  const used = new Map<string, string>();
+  for (const block of workspace.getAllBlocks(false)) {
+    const manifest = ctx.blockOf(block.type)?.manifest;
+    // 內建沒有 `main.py` 也沒有資料夾，不進宣告（`manifest.py` 的 `builtin`）。
+    if (!manifest || manifest.builtin) continue;
+    used.set(manifest.id, manifest.version);
+  }
+  return [...used]
+    .map(([id, version]) => ({ id, version }))
+    .sort((a, b) => a.id.localeCompare(b.id));
 }
 
 function flattenBlock(

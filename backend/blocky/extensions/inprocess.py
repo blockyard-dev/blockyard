@@ -19,6 +19,7 @@ from typing import Any, Awaitable, Callable
 from blocky.errors import BlockyError, ExtensionError
 from blocky.extensions.boundary import normalize_args, validate_return
 from blocky.extensions.host import CallContext, CallContexts, HostChannel
+from blocky.extensions.httpclient import new_client
 from blocky.extensions.manifest import BlockSpec, ExtensionSource, Manifest
 from blocky.extensions.sdk import Ctx, exports
 
@@ -26,7 +27,10 @@ from blocky.extensions.sdk import Ctx, exports
 class _Loaded:
     """一個已載入的積木包在 host 這一側的全部狀態。"""
 
-    __slots__ = ("source", "module", "blocks", "dropdowns", "triggers", "unload", "config", "state")
+    __slots__ = (
+        "source", "module", "blocks", "dropdowns", "triggers", "unload", "config", "state",
+        "http",
+    )
 
     def __init__(self, source: ExtensionSource, module: Any) -> None:
         self.source = source
@@ -37,6 +41,8 @@ class _Loaded:
         self.unload: Callable[..., Any] | None = None
         self.config: dict[str, Any] = {}
         self.state: dict[str, Any] = {}
+        # `ctx.http` 第一次被碰到才建（§7.4）。碰都沒碰過的包不會有連線池。
+        self.http: Any | None = None
 
     @property
     def manifest(self) -> Manifest:
@@ -120,6 +126,10 @@ class InProcessHost:
                 await self._invoke(loaded.unload, ctx, {}, what=f"{ext_id} 的 on_unload")
             finally:
                 self.contexts.close(ctx._token)
+        # client 是 host 開的，所以由 host 關——`on_unload` 沒有義務知道它存在。
+        if loaded.http is not None:
+            await loaded.http.aclose()
+            loaded.http = None
         sys.modules.pop(loaded.module.__name__, None)
 
     # ---- dispatch ----
@@ -207,7 +217,23 @@ class InProcessHost:
             channel=self.channel,
             token=ctx.token if ctx else "",
             block_id=block_id,
+            http=lambda: self._http_for(loaded),
         )
+
+    def _http_for(self, loaded: _Loaded) -> Any:
+        """`ctx.http` 的落點（§7.4）。
+
+        **權限在這裡才真的守得住**：`permissions: [net]` 在 §12.1 是安裝畫面上
+        的一句話，而一句沒有人檢查的宣告，使用者讀了也不能信。沒宣告就拿不到
+        client——訊息指名是包的宣告漏了，不是使用者的流程錯了。
+        """
+        if "net" not in loaded.manifest.permissions:
+            raise ExtensionError(
+                f'積木包「{loaded.manifest.name}」沒有宣告 net 權限，不能使用 ctx.http'
+            )
+        if loaded.http is None:
+            loaded.http = new_client()
+        return loaded.http
 
     async def _invoke(
         self,

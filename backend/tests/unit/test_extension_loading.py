@@ -17,6 +17,7 @@ manifestVersion: 1
 id: {id}
 name: 測試包
 version: 0.1.0
+permissions: [{permissions}]
 blocks:
 {blocks}
 """
@@ -28,11 +29,13 @@ ONE_BLOCK = """\
 """
 
 
-def write_pack(root, ext_id: str, *, blocks: str = ONE_BLOCK, main: str) -> None:
+def write_pack(
+    root, ext_id: str, *, blocks: str = ONE_BLOCK, main: str, permissions: str = ""
+) -> None:
     d = root / ext_id
     d.mkdir()
     (d / "manifest.yaml").write_text(
-        MANIFEST.format(id=ext_id, blocks=blocks), encoding="utf-8"
+        MANIFEST.format(id=ext_id, blocks=blocks, permissions=permissions), encoding="utf-8"
     )
     if main is not None:
         (d / "main.py").write_text(main, encoding="utf-8")
@@ -95,7 +98,7 @@ async def test_missing_entrypoint(tmp_path) -> None:
     d = tmp_path / "p5"
     d.mkdir()
     (d / "manifest.yaml").write_text(
-        MANIFEST.format(id="p5", blocks=ONE_BLOCK), encoding="utf-8"
+        MANIFEST.format(id="p5", blocks=ONE_BLOCK, permissions=""), encoding="utf-8"
     )
     with pytest.raises(ExtensionError, match="缺少 main.py"):
         await make_host(tmp_path).load("p5")
@@ -143,3 +146,63 @@ async def test_sync_implementations_are_allowed(tmp_path) -> None:
     host = InProcessHost(discover(tmp_path), EventSinkChannel(EventSink(), contexts), contexts)
     await host.load("p8")
     assert await host.call("p8.go", {}, contexts.open("p8").token) == 42
+
+
+# ---- ctx.http（§7.4、§12.1）----
+
+HTTP_BLOCK = '  - opcode: go\n    type: reporter\n    returns: number\n    text: "go"\n'
+TOUCH_HTTP = (
+    "from blocky import block\n"
+    "@block('{id}.go')\n"
+    "async def go(ctx): return id(ctx.http)\n"
+)
+
+
+async def test_ctx_http_needs_the_net_permission(tmp_path) -> None:
+    """`permissions: [net]` 在這裡才第一次真的守得住（§12.1）。
+
+    安裝畫面上那句「這個包會上網」，如果沒有任何地方檢查，使用者讀了也不能信。
+    """
+    write_pack(tmp_path, "p9", blocks=HTTP_BLOCK, main=TOUCH_HTTP.format(id="p9"))
+    contexts = CallContexts()
+    host = InProcessHost(discover(tmp_path), EventSinkChannel(EventSink(), contexts), contexts)
+    await host.load("p9")
+
+    ctx = contexts.open("p9")
+    with pytest.raises(ExtensionError, match="沒有宣告 net 權限"):
+        await host.call("p9.go", {}, ctx.token)
+
+
+async def test_ctx_http_is_one_client_per_pack_and_host_closes_it(tmp_path) -> None:
+    """一個包一份 client：連線池共用，而生命週期不是積木包的事。"""
+    write_pack(
+        tmp_path, "p10", blocks=HTTP_BLOCK, main=TOUCH_HTTP.format(id="p10"), permissions="net"
+    )
+    contexts = CallContexts()
+    host = InProcessHost(discover(tmp_path), EventSinkChannel(EventSink(), contexts), contexts)
+    await host.load("p10")
+
+    ctx = contexts.open("p10")
+    first = await host.call("p10.go", {}, ctx.token)
+    second = await host.call("p10.go", {}, ctx.token)
+    assert first == second
+
+    client = host._loaded["p10"].http
+    await host.unload("p10")
+    # 開的人負責關——`on_unload` 沒有義務知道它存在。
+    assert client.is_closed
+
+
+async def test_no_client_until_someone_asks(tmp_path) -> None:
+    """碰都沒碰過 ctx.http 的包不該有連線池（httpx 也不必被 import 進來）。"""
+    write_pack(
+        tmp_path,
+        "p11",
+        main="from blocky import block\n@block('p11.go')\nasync def go(ctx): pass\n",
+    )
+    contexts = CallContexts()
+    host = InProcessHost(discover(tmp_path), EventSinkChannel(EventSink(), contexts), contexts)
+    await host.load("p11")
+    ctx = contexts.open("p11")
+    await host.call("p11.go", {}, ctx.token)
+    assert host._loaded["p11"].http is None

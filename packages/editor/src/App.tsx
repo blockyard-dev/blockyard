@@ -193,10 +193,11 @@ export function App() {
     // 一起拆掉。
     for (const block of ws.getAllBlocks(false)) block.setWarningText(null, SAVE_WARNING_ID);
 
+    // `extensions` 不在這裡：它由 `serializeWorkspace` 從畫布上的積木算出來
+    // （§13.3）。拉一顆積木包的積木出來就等於宣告用到了它。
     const project = serializeWorkspace(ws, state.ctx, {
       formatVersion: state.project.formatVersion,
       meta: state.project.meta,
-      extensions: state.project.extensions,
       procedures: state.project.procedures,
     });
 

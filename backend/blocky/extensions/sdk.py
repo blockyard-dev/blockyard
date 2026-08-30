@@ -14,6 +14,15 @@ from __future__ import annotations
 
 from typing import Any, Callable, TypeVar
 
+from blocky.errors import ExtensionError
+
+# 積木包**寫給使用者看的**錯誤。與 `raise ValueError(...)` 的差別在訊息的主詞：
+# 未被包住的例外會被 host 包成「積木包「HTTP」的 http.request 執行時發生錯誤：
+# ConnectError: …」——那句話說壞掉的是這個包，而連不上一個使用者自己打的網址
+# 不是包壞掉。`BlockError` 原樣往上送（`inprocess.py::_invoke` 對 `BlockyError`
+# 放行），所以積木包能說出一句主詞正確的話，而 `try_catch` 一樣攔得到。
+BlockError = ExtensionError
+
 F = TypeVar("F", bound=Callable[..., Any])
 
 _MARK = "__blocky_export__"
@@ -71,7 +80,7 @@ class Ctx:
     而 `ctx.block_id` 每次都不同。
     """
 
-    __slots__ = ("config", "state", "block_id", "_channel", "_token")
+    __slots__ = ("config", "state", "block_id", "_channel", "_token", "_http")
 
     def __init__(
         self,
@@ -81,12 +90,16 @@ class Ctx:
         channel: Any,
         token: str,
         block_id: str | None = None,
+        http: Callable[[], Any] | None = None,
     ) -> None:
         self.config = config
         self.state = state
         self.block_id = block_id
         self._channel = channel
         self._token = token
+        # 取得 client 的**函式**而不是 client 本身：建一個 `AsyncClient` 會開連線
+        # 池，而多數積木碰都不會碰它。權限檢查也在這個函式裡（§12.1）。
+        self._http = http
 
     def log(self, message: str, level: str = "info") -> None:
         """推一個 `log` 事件到前端（§6.1）。同步，見 host.py 的說明。"""
@@ -103,8 +116,23 @@ class Ctx:
 
     @property
     def http(self) -> Any:
-        # P1 的三個手寫包才需要；現在誠實地擋住，而不是讓人以為有。
-        raise NotImplementedError("ctx.http 要等 P1 的共用 httpx client（§7.4）")
+        """共用的 httpx client（§7.4、`httpclient.py`）。
+
+        每個包一份、由 host 建立與關閉——積木包不必也不該自己管它的生命週期。
+        沒宣告 `permissions: [net]` 的包在這裡就被擋下來。
+        """
+        if self._http is None:
+            raise ExtensionError("這個 host 沒有提供 ctx.http")
+        return self._http()
 
 
-__all__ = ["Ctx", "block", "dropdown", "exports", "on_load", "on_unload", "trigger"]
+__all__ = [
+    "BlockError",
+    "Ctx",
+    "block",
+    "dropdown",
+    "exports",
+    "on_load",
+    "on_unload",
+    "trigger",
+]

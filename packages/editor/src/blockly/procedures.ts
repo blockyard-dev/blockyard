@@ -108,7 +108,16 @@ export function procIdFromType(type: string): string | null {
  * 動態產生的。
  */
 export function registerProcedures(procedures: Record<string, Procedure>): RegisteredBlock[] {
-  const manifest: Manifest = { id: NAMESPACE, name: '函式', version: '1.0.0', color: PROCEDURE_COLOUR };
+  // `builtin: true` 不是裝飾：§13.3 的 `extensions` 宣告是從畫布上的積木算出來的
+  // （`serialize.ts::usedExtensions`），而函式積木沒有資料夾、也沒有 main.py
+  // ——一份用了自訂函式的專案不該宣告自己需要一個叫「procedure」的積木包。
+  const manifest: Manifest = {
+    id: NAMESPACE,
+    name: '函式',
+    version: '1.0.0',
+    color: PROCEDURE_COLOUR,
+    builtin: true,
+  };
   const definitions: Record<string, unknown>[] = [];
   const registered: RegisteredBlock[] = [];
   registerUndeletableExtension();
