@@ -9,7 +9,16 @@
  * → `%1` 的轉換在這裡。
  */
 import * as Blockly from 'blockly/core';
-import type { ArgSpec, BlockSpec, Manifest } from '../types/manifest';
+import type {
+  ArgSpec,
+  BlockSpec,
+  ButtonSpec,
+  Manifest,
+  Palette,
+  SectionSpec,
+} from '../types/manifest';
+
+export type PaletteEntry = Palette[number];
 import { FIELD_TEXT_TYPE, type FieldTextOptions } from './fields/FieldText';
 
 /** Blockly 的積木型別名稱 = IR 的 opcode，一字不差。 */
@@ -139,6 +148,32 @@ function isField(arg: ArgSpec): boolean {
 }
 
 /**
+ * `palette` 的三種條目怎麼分（§7.2）。
+ *
+ * manifest 的 `palette` 是**一份清單、三種條目**：一顆積木、一顆按鈕、一個分段。
+ * 寫的人只寫一次，而讀的人各拿各的 view——後端那一側是 `Manifest.blocks`
+ * （pydantic 的 property），前端這一側就是這三個函式。
+ *
+ * 用「有沒有那個 key」認種類，與後端同一條規則（`manifest.py::_entry_shape`）。
+ */
+export function isBlockEntry(entry: PaletteEntry): entry is BlockSpec {
+  return 'opcode' in entry;
+}
+
+export function isButtonEntry(entry: PaletteEntry): entry is ButtonSpec {
+  return 'button' in entry;
+}
+
+export function isSectionEntry(entry: PaletteEntry): entry is SectionSpec {
+  return 'section' in entry;
+}
+
+/** 純積木的 view。註冊、IR 轉換與型別檢查看到的是這一份。 */
+export function blocksOf(manifest: Manifest): BlockSpec[] {
+  return (manifest.palette ?? []).filter(isBlockEntry);
+}
+
+/**
  * 把一份 manifest 轉成 Blockly 的定義並註冊。
  *
  * `dynamic: true` 的積木（`procedure.definition` / `procedure.call`）**不在
@@ -165,7 +200,7 @@ export function buildDefinitions(manifest: Manifest): {
   const blocks: RegisteredBlock[] = [];
   const definitions: Record<string, unknown>[] = [];
 
-  for (const spec of manifest.blocks ?? []) {
+  for (const spec of blocksOf(manifest)) {
     if (spec.dynamic) continue;
     const built = buildBlock(manifest, spec);
     definitions.push(built.definition, ...built.shadowDefinitions);

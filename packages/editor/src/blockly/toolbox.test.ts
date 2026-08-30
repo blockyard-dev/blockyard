@@ -83,78 +83,70 @@ describe('工具箱按鈕（D25）', () => {
   });
 });
 
-describe('按鈕的位置（§7.2 的 before / after）', () => {
-  /** 三顆積木 a b c，按鈕由 `place` 決定釘在哪。 */
-  function layout(place: Record<string, unknown>[], blocks?: Record<string, unknown>[]) {
+describe('按鈕的位置（§7.2 的 palette）', () => {
+  /** 畫出來的順序，只留種類與名字——版面數字由「分段與間隔」那一組驗。 */
+  function layout(palette: Record<string, unknown>[]) {
     const groups = groupByManifest(defineManifest({
       manifestVersion: 1,
-      id: 'demo_anchor',
-      name: '錨點示範',
+      id: 'demo_order',
+      name: '順序示範',
       version: '0.1.0',
-      blocks: blocks ?? [
-        { opcode: 'a', type: 'command', text: 'a' },
-        { opcode: 'b', type: 'command', text: 'b' },
-        { opcode: 'c', type: 'command', text: 'c' },
-      ],
-      buttons: place,
+      palette,
     } as unknown as Manifest));
     return (buildToolbox(groups) as { contents: Category[] }).contents
-      .find((c) => c.name === '錨點示範')!.contents
+      .find((c) => c.name === '順序示範')!.contents
       .filter((entry) => entry.kind !== 'sep')
       .map((entry) => (entry.kind === 'button' ? `[${String(entry.text)}]` : String(entry.type)));
   }
 
-  const button = (id: string, extra: Record<string, unknown> = {}) => ({
-    id,
+  const block = (opcode: string) => ({ opcode, type: 'command', text: opcode });
+  const button = (id: string) => ({
+    button: id,
     label: id,
     action: 'open_url',
     url: 'https://example.com',
-    ...extra,
   });
 
-  it('沒寫錨點 = 分類最上面（這個欄位出現之前唯一的位置）', () => {
-    expect(layout([button('說明')])).toEqual([
-      '[說明]', 'demo_anchor.a', 'demo_anchor.b', 'demo_anchor.c',
+  it('寫在哪兩顆積木中間，畫出來就在那裡', () => {
+    // 使用者要的排版：積木、按鈕、按鈕、積木。palette 怎麼寫，工具箱就怎麼長。
+    expect(layout([block('a'), button('測試'), button('說明'), block('b')])).toEqual([
+      'demo_order.a', '[測試]', '[說明]', 'demo_order.b',
     ]);
   });
 
-  it('before 指名的積木前面——積木、按鈕、按鈕、積木', () => {
-    // 使用者要的排版：兩顆按鈕夾在兩顆積木中間，順序照宣告。
-    expect(layout([button('測試', { before: 'b' }), button('說明', { before: 'b' })])).toEqual([
-      'demo_anchor.a', '[測試]', '[說明]', 'demo_anchor.b', 'demo_anchor.c',
+  it('放在最上面就是最上面（Scratch 放「製作積木」的位置）', () => {
+    expect(layout([button('說明'), block('a'), block('b')])).toEqual([
+      '[說明]', 'demo_order.a', 'demo_order.b',
     ]);
   });
 
-  it('after 指名的積木後面——最後一顆積木底下也放得了', () => {
-    expect(layout([button('說明', { after: 'c' })])).toEqual([
-      'demo_anchor.a', 'demo_anchor.b', 'demo_anchor.c', '[說明]',
+  it('最後一顆積木底下也放得了', () => {
+    expect(layout([block('a'), block('b'), button('說明')])).toEqual([
+      'demo_order.a', 'demo_order.b', '[說明]',
     ]);
   });
 
-  it('錨點指到不上架的積木時退回最上面，不是消失', () => {
-    // 載入期已經擋掉這種宣告（`manifest.py`），這裡是防守：一顆畫不出來的按鈕
-    // 不該讓整個分類少一個條目。
-    const contents = layout([button('說明', { before: 'gone' })]);
-    expect(contents[0]).toBe('[說明]');
+  it('deprecated 的積木不上架，但它前後的東西照樣接得起來', () => {
+    // 「註冊但不上架」（§13.1）：舊專案載得進來，工具箱裡沒有它。
+    expect(layout([
+      block('a'),
+      { opcode: 'gone', type: 'command', text: 'gone', deprecated: true },
+      button('說明'),
+    ])).toEqual(['demo_order.a', '[說明]']);
   });
 
-  it('before 的按鈕在分段標題**底下**——它屬於這一段，不是上一段的尾巴', () => {
+  it('按鈕的 callbackKey 用的是 palette 條目上的 button id', () => {
     const groups = groupByManifest(defineManifest({
       manifestVersion: 1,
-      id: 'demo_anchor_section',
-      name: '錨點分段',
+      id: 'demo_key',
+      name: '按鈕 key',
       version: '0.1.0',
-      blocks: [
-        { opcode: 'a', type: 'command', text: 'a' },
-        { opcode: 'b', type: 'command', text: 'b', section: '第二段' },
-      ],
-      buttons: [{ ...button('測試'), before: 'b' }],
+      palette: [{ ...button('docs'), button: 'docs' }, block('a')],
     } as unknown as Manifest));
-    const kinds = (buildToolbox(groups) as { contents: Category[] }).contents
-      .find((c) => c.name === '錨點分段')!.contents
-      .map((entry) => entry.kind);
+    const contents = (buildToolbox(groups) as { contents: Category[] }).contents
+      .find((c) => c.name === '按鈕 key')!.contents;
 
-    expect(kinds).toEqual(['block', 'sep', 'label', 'sep', 'button', 'block']);
+    expect(contents[0]).toMatchObject({ callbackKey: buttonCallbackKey('demo_key', 'docs') });
   });
 });
 
@@ -182,7 +174,7 @@ describe('分段與間隔（§8.1）', () => {
       id: 'demo_first',
       name: '開頭示範',
       version: '0.1.0',
-      blocks: [{ opcode: 'a', type: 'command', text: 'a', section: true }],
+      palette: [{ section: true }, { opcode: 'a', type: 'command', text: 'a' }],
     } as Manifest));
     const contents = (buildToolbox(groups) as { contents: Category[] }).contents
       .find((c) => c.name === '開頭示範')!.contents;
@@ -199,9 +191,10 @@ describe('分段與間隔（§8.1）', () => {
       id: 'demo_section',
       name: '分段示範',
       version: '0.1.0',
-      blocks: [
+      palette: [
         { opcode: 'a', type: 'command', text: 'a' },
-        { opcode: 'b', type: 'command', text: 'b', section: '第二段' },
+        { section: '第二段' },
+        { opcode: 'b', type: 'command', text: 'b' },
       ],
     } as Manifest));
     const contents = (buildToolbox(groups) as { contents: Category[] }).contents
@@ -225,7 +218,7 @@ describe('分段與間隔（§8.1）', () => {
       id: 'demo_label',
       name: '標題示範',
       version: '0.1.0',
-      blocks: [{ opcode: 'a', type: 'command', text: 'a', section: '運算' }],
+      palette: [{ section: '運算' }, { opcode: 'a', type: 'command', text: 'a' }],
     } as Manifest));
     const contents = (buildToolbox(groups) as { contents: Category[] }).contents
       .find((c) => c.name === '標題示範')!.contents;

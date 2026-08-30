@@ -16,10 +16,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import Field, field_validator, model_validator
+from pydantic import Discriminator, Field, PrivateAttr, Tag, field_validator, model_validator
 from pydantic import ValidationError as PydanticError
 
 from blocky.errors import ExtensionError
@@ -187,27 +187,22 @@ class ButtonSpec(Strict):
     Run 執行——「開說明文件」「測一下 token 對不對」硬做成積木就是把它塞進一個
     不屬於它的形狀。
 
-    **位置由 `before` / `after` 指名**（沒寫就是分類最上面，Scratch 放「製作積木」
-    的位置）。它們指的是同一份 manifest 裡某顆積木的 opcode 短名——「這顆按鈕
-    屬於那顆積木旁邊」，而不是「第 3 個位置」：宣告的是關係，序號會在別人插一顆
-    積木時默默指到別的地方去。
-
-    **刻意不做成一份 `toolbox:` 版面清單**，理由與 §7.2 對 `section` 的決定同一
-    條：那份清單要把每顆積木再列一次，於是加一顆積木要改兩個地方，漏了就不會出現
-    在工具箱裡——而「兩份會漂移」是這份文件反覆付過錢的東西。掛在按鈕上的一個
-    可選欄位不動任何人。
+    **位置就是它在 `palette` 裡的位置**（§7.2）——寫在哪兩顆積木中間，畫出來就在
+    那裡。`button:` 這個 key 同時是條目的種類與它的 id。
     """
 
-    id: str
+    button: str                 # 這顆按鈕的 id，同時是條目的種類
     label: str
     action: ButtonAction
     url: str | None = None      # open_url 專用
     handler: str | None = None  # call 專用：main.py 裡 @button 的名字
-    # 版面錨點（§7.2）。兩個都不寫 = 分類最上面。
-    before: str | None = None   # 排在這顆 opcode 的積木前面
-    after: str | None = None    # 排在這顆 opcode 的積木後面
 
-    @field_validator("id")
+    @property
+    def id(self) -> str:
+        """`button` 就是 id。留這個名字是因為「按鈕的 id」讀起來才是那件事。"""
+        return self.button
+
+    @field_validator("button")
     @classmethod
     def _id_shape(cls, v: str) -> str:
         if not _IDENT.match(v):
@@ -229,19 +224,44 @@ class ButtonSpec(Strict):
                 raise ValueError("call 按鈕必須宣告 handler（main.py 的 @button 名稱）")
         elif self.handler:
             raise ValueError(f"只有 call 按鈕能宣告 handler：{self.id}")
+        return self
 
-        if self.before and self.after:
-            raise ValueError(f"按鈕 {self.id}：before 與 after 只能寫一個")
+
+class SectionSpec(Strict):
+    """工具箱的分段（§7.2、§8.1）。
+
+    `section: true` 只斷開，字串另外在上面放一行標題：
+
+    ```yaml
+    palette:
+      - opcode: divide
+      - section: true        # 從這裡起是新的一段（只斷開）
+      - opcode: gt
+      - section: 文字        # 斷開，並在上面放一行標題
+      - opcode: contains
+    ```
+
+    宣告的是**語意**（「這裡是一段的開頭」），不是版面——間隔多大、標題長什麼
+    樣子由編輯器決定（`toolbox.ts`）。寫成 `gap: 24` 就是把留白的決定權發給每一
+    個積木包作者，而使用者看到的是同一份工具箱。
+    """
+
+    # **沒有預設值**：`_dump` 用 `exclude_defaults=True`（那是 `default: null` 與
+    # 「沒寫 default」分得開的方式，§7.2），而一個有預設值的 `section: true` 會在
+    # 那裡被整個丟掉——前端收到一個空條目，純斷開的分段就默默消失了。
+    section: str | bool
+
+    @model_validator(mode="after")
+    def _check(self) -> SectionSpec:
+        if self.section is False:
+            raise ValueError("section: false 沒有意義——不想分段就不要寫這個條目")
+        if isinstance(self.section, str) and not self.section.strip():
+            raise ValueError("section 是空字串：只想斷開而不放標題請寫 section: true")
         return self
 
     @property
-    def anchor(self) -> tuple[str, str] | None:
-        """(`before` | `after`, opcode 短名)，沒有錨點時回 None。"""
-        if self.before:
-            return ("before", self.before)
-        if self.after:
-            return ("after", self.after)
-        return None
+    def title(self) -> str | None:
+        return self.section if isinstance(self.section, str) else None
 
 
 class YieldSpec(Strict):
@@ -299,15 +319,6 @@ class BlockSpec(Strict):
     terminal: bool = False
     yields: list[YieldSpec] = Field(default_factory=list)
     concurrency: Concurrency | None = None
-    # §8.1：**這顆積木是工具箱裡新一段的開頭**。`True` 只斷開，字串另外在上面
-    # 放一行標題。宣告的是語意（「這裡是一段」），不是版面——間隔多大、標題長
-    # 什麼樣子由編輯器決定（`toolbox.ts`），否則每個積木包各自決定留白，而使用
-    # 者看到的是同一份工具箱。
-    #
-    # 刻意**不做成 `blocks` 裡的哨兵條目**（TurboWarp 的 `"---"`）：那份清單同時
-    # 是直譯器的宣告表、IR validator 與 AST 測試的資料來源，往裡面塞不是宣告的
-    # 東西，等於每一處 `for spec in blocks` 都要先過濾。
-    section: str | bool = False
 
     @field_validator("opcode")
     @classmethod
@@ -340,13 +351,6 @@ class BlockSpec(Strict):
             raise ValueError("terminal 只適用於 command：它說的是「這顆積木下面不能再接」")
         if self.alsoCommand and self.type != "reporter":
             raise ValueError("alsoCommand 只適用於 reporter：它說的是「這一顆也可能沒有輸出孔」")
-        if isinstance(self.section, str) and not self.section.strip():
-            raise ValueError("section 是空字串：只想斷開一段而不放標題請寫 section: true")
-        # 下架的積木不上工具箱（§13.1），段落開頭掛在它身上等於整段標題默默消失。
-        if self.section and self.deprecated:
-            raise ValueError("deprecated 積木不能是段落開頭：把 section 移到下一顆")
-        if self.section and self.dynamic:
-            raise ValueError("dynamic 積木不上工具箱，宣告 section 沒有意義")
         return self
 
     @property
@@ -358,6 +362,31 @@ class BlockSpec(Strict):
         if self.type == "boolean":
             return "boolean"
         return self.returns
+
+
+def _entry_kind(v: Any) -> str | None:
+    """`palette` 的條目是哪一種——**用有沒有那個 key 認**。
+
+    做成 discriminated union 而不是讓 pydantic 自己試三次：試的話，一顆 `url`
+    忘了寫的按鈕會回報「BlockSpec 少了 opcode」，因為比對不中時三種候選的錯誤
+    全部都在，而第一個是積木。作者看到的必須是**他真的寫錯的那一句**。
+    """
+    keys = v.keys() if isinstance(v, dict) else ()
+    if isinstance(v, BlockSpec) or "opcode" in keys:
+        return "block"
+    if isinstance(v, ButtonSpec) or "button" in keys:
+        return "button"
+    if isinstance(v, SectionSpec) or "section" in keys:
+        return "section"
+    return None
+
+
+PaletteEntry = Annotated[
+    Annotated[BlockSpec, Tag("block")]
+    | Annotated[ButtonSpec, Tag("button")]
+    | Annotated[SectionSpec, Tag("section")],
+    Discriminator(_entry_kind),
+]
 
 
 class Manifest(Strict):
@@ -379,9 +408,18 @@ class Manifest(Strict):
     permissions: list[Permission] = Field(default_factory=list)
     requirements: list[str] = Field(default_factory=list)
     config: list[ConfigSpec] = Field(default_factory=list)
-    blocks: list[BlockSpec] = Field(default_factory=list)
-    # D25：工具箱裡的非積木條目。第一個使用者是函式分類的「＋ 創建積木」。
-    buttons: list[ButtonSpec] = Field(default_factory=list)
+    # **一份清單，三種條目**（§7.2）：一顆積木、一顆按鈕（D25）、一個分段。
+    # 順序就是工具箱裡的順序——寫在哪兩顆積木中間，畫出來就在那裡。
+    #
+    # 這份清單同時是宣告與版面，但**讀的人各拿各的 view**：直譯器、IR validator
+    # 與 §8.1 的三個 AST 測試看到的仍然是 `blocks`（純積木，由下面導出），只有
+    # 工具箱那一個消費者讀 `palette` 本身。這是「往 blocks 裡塞哨兵條目」與
+    # 「另外維護一份版面清單」都不必付的那條路：**寫的人只寫一次，讀的人不必
+    # 過濾**。
+    palette: list[PaletteEntry] = Field(default_factory=list)
+    # 兩個 view，`model_post_init` 算一次（`block(opcode)` 每顆積木執行時都會查）。
+    _blocks: list[BlockSpec] = PrivateAttr(default_factory=list)
+    _buttons: list[ButtonSpec] = PrivateAttr(default_factory=list)
     # D21：內建命名空間的宣告（`interpreter/builtins/*.yaml`）。載入積木包的
     # 那條路徑（`discover`）會拒絕它，所以第三方沒辦法自稱內建。
     builtin: bool = False
@@ -392,6 +430,39 @@ class Manifest(Strict):
         if not _IDENT.match(v):
             raise ValueError(f"積木包 id 必須是小寫識別字：{v}")
         return v
+
+    @field_validator("palette", mode="before")
+    @classmethod
+    def _entry_shape(cls, v: Any) -> Any:
+        """認不出來的條目要當場說清楚。
+
+        沒有這一段的話，union 比對不中時 pydantic 會把**三種**條目的錯誤全部
+        列出來（「opcode 少了」「button 少了」「section 少了」），而作者只是漏
+        打了一個 key。
+        """
+        if not isinstance(v, list):
+            return v
+        for i, entry in enumerate(v):
+            if isinstance(entry, dict) and not ({"opcode", "button", "section"} & entry.keys()):
+                keys = "、".join(sorted(map(str, entry))) or "（空的）"
+                raise ValueError(
+                    f"palette 第 {i + 1} 個條目認不出種類：要有 opcode、button 或 "
+                    f"section 其中一個 key，這裡只有 {keys}"
+                )
+        return v
+
+    @property
+    def blocks(self) -> list[BlockSpec]:
+        """純積木的 view。直譯器、validator、題庫看到的是這一份。"""
+        return self._blocks
+
+    @property
+    def buttons(self) -> list[ButtonSpec]:
+        return self._buttons
+
+    def model_post_init(self, _: Any) -> None:
+        self._blocks = [e for e in self.palette if isinstance(e, BlockSpec)]
+        self._buttons = [e for e in self.palette if isinstance(e, ButtonSpec)]
 
     @model_validator(mode="after")
     def _check(self) -> Manifest:
@@ -409,21 +480,6 @@ class Manifest(Strict):
                 raise ValueError(f"按鈕 id 重複：{b.id}")
             ids.add(b.id)
 
-        # 錨點指到的積木要真的存在、而且**看得見**。指到一顆不上架的積木
-        # （`deprecated` / `dynamic`）不會壞掉，只會讓按鈕默默跑回最上面——
-        # 而「宣告寫得下去、但畫出來不是那樣」正是 §7.2 那兩條載入期規則要擋的。
-        for b in self.buttons:
-            anchor = b.anchor
-            if anchor is None:
-                continue
-            field, opcode = anchor
-            spec = next((x for x in self.blocks if x.opcode == opcode), None)
-            if spec is None:
-                raise ValueError(f"按鈕 {b.id} 的 {field} 指到不存在的 opcode：{opcode}")
-            if spec.deprecated or spec.dynamic:
-                raise ValueError(
-                    f"按鈕 {b.id} 的 {field} 指到 {opcode}，而它不會出現在工具箱裡"
-                )
 
         keys: set[str] = set()
         for c in self.config:

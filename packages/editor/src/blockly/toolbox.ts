@@ -4,16 +4,19 @@
  * 一份 manifest 一個分類，順序照 `GET /api/extensions` 吐出來的順序——後端
  * 已經把內建排在積木包前面（`api/extensions.py`），前端不再重排。
  */
-import type { RegisteredBlock } from './define';
-import type { ButtonSpec } from '../types/manifest';
+import { isButtonEntry, isSectionEntry, type RegisteredBlock } from './define';
+import type { ButtonSpec, Palette } from '../types/manifest';
 
 export interface ToolboxGroup {
   id: string;
   name: string;
   colour: string;
   builtin: boolean;
+  /** 這個分類註冊得出來的積木（`dynamic` 的不在裡面）。 */
   blocks: RegisteredBlock[];
-  /** 非積木條目（D25）。位置由 `before` / `after` 指名，見 `categoryEntries`。 */
+  /** manifest 的 `palette`：積木、按鈕、分段的**順序**（§7.2）。 */
+  palette: Palette;
+  /** 純按鈕的 view，給 `App.tsx` 註冊回呼用。 */
   buttons: ButtonSpec[];
 }
 
@@ -41,7 +44,8 @@ export function groupByManifest(blocks: RegisteredBlock[]): ToolboxGroup[] {
         colour: manifest.color ?? DEFAULT_COLOUR,
         builtin: manifest.builtin === true,
         blocks: [],
-        buttons: manifest.buttons ?? [],
+        palette: manifest.palette ?? [],
+        buttons: (manifest.palette ?? []).filter(isButtonEntry),
       };
       groups.set(manifest.id, group);
     }
@@ -112,87 +116,72 @@ const SECTION_GAP = 40;
 const LABEL_GAP = 8;
 
 /**
- * 一個分類的全部條目：積木與按鈕交錯（§7.2、D25）。
+ * 一個分類的全部條目，**照 manifest 的 `palette` 順序**（§7.2、§8.1、D25）。
  *
- * 按鈕的位置由 manifest 的 `before` / `after` 指名一顆積木，沒寫的排在最上面
- * （Scratch 放「製作積木」的位置，也是這個欄位出現之前唯一的位置）。
+ * `palette` 是一份清單、三種條目：積木、按鈕、分段。寫在哪兩顆積木中間，畫出來
+ * 就在那裡——所以這個函式沒有版面決策，只有展開：
  *
- * **`before: X` 是「緊貼在 X 上面」，在 X 的分段標題之下**：分段是「從這顆起是
- * 新的一段」，而指名 X 的按鈕屬於那一段——排到標題上面等於把它掛在上一段的尾巴。
+ * - **積木**：查得到註冊資訊、而且沒有 `deprecated` 才畫（`deprecated: true` 是
+ *   「註冊但不上架」，舊專案載得進來但沒有人能再拉出新的一顆，§13.1）。`dynamic`
+ *   的積木根本沒被註冊（`define.ts`），所以也查不到。
+ * - **分段**：`sep`（+ 選填的標題）。相鄰的兩個 sep 由 Blockly 的
+ *   `normalizeSeparators` 收成一個，而它 `splice` 掉的是**前面**那個——所以我們插
+ *   的 sep 蓋掉上一顆積木自帶的 `BLOCK_GAP`，是取代不是相加。標題底下再補一個
+ *   `LABEL_GAP`，同樣蓋掉 label 自帶的預設 24：標題要貼近它說明的那一段，不然它
+ *   看起來像上一段的結尾。**分類的第一個條目不插 sep**——分類標題本身已經是斷點。
+ * - **按鈕**：一個 `kind: 'button'` 條目。
  *
- * 錨點指到一顆不上架的積木（`deprecated` / `dynamic`）時退回最上面。載入期已經
- * 擋掉這種宣告（`manifest.py`），這裡是防守：畫不出來的宣告不該讓整個分類消失。
+ * 版面數字（12 / 40 / 8）只有這裡有。manifest 說的是語意（「這裡是一段」「這裡
+ * 有一顆按鈕」），多寬、標題長什麼樣子由編輯器決定，否則每個積木包各自決定留白。
  */
 function categoryEntries(group: ToolboxGroup): Record<string, unknown>[] {
-  const blocks = group.blocks.filter((block) => !block.spec.deprecated);
-  const visible = new Set(blocks.map((block) => block.spec.opcode));
+  // 用 Blockly 的 type 而不是 opcode 當 key：`procedure.call#p_x` 有很多顆，而它們
+  // 的 `spec.opcode` 全都是 `call`（見下面那段「專案資料生成的積木」）。
+  const registered = new Map(group.blocks.map((block) => [block.type, block]));
+  const rendered = new Set<string>();
+  const entries: Record<string, unknown>[] = [];
 
-  const before = new Map<string, ButtonSpec[]>();
-  const after = new Map<string, ButtonSpec[]>();
-  const top: ButtonSpec[] = [];
-  for (const button of group.buttons) {
-    const anchor = button.before ?? button.after;
-    if (!anchor || !visible.has(anchor)) {
-      top.push(button);
+  for (const entry of group.palette) {
+    if (isSectionEntry(entry)) {
+      if (entries.length > 0) entries.push({ kind: 'sep', gap: SECTION_GAP });
+      if (typeof entry.section === 'string') {
+        entries.push(
+          // 這一行標題**不是分類標題**。continuous-toolbox 靠「文字比對得到分類
+          // 名」認分類邊界，所以 `theme.ts` 用這個 class 把它排除掉——否則一段叫
+          // 「運算」的標題會被當成運算分類的起點，捲動定位跟著錯。
+          { kind: 'label', text: entry.section, 'web-class': 'blocky-section-label' },
+          { kind: 'sep', gap: LABEL_GAP },
+        );
+      }
       continue;
     }
-    // 同一顆積木上釘兩顆按鈕：依 manifest 的宣告順序。
-    const bucket = button.before ? before : after;
-    bucket.set(anchor, [...(bucket.get(anchor) ?? []), button]);
-  }
 
-  const asEntry = (button: ButtonSpec) => ({
-    kind: 'button',
-    text: button.label,
-    callbackKey: buttonCallbackKey(group.id, button.id),
-    // Blockly 把 `web-class` 原封不動放到那個 `<g>` 上（`FlyoutButton` 的
-    // `this.cssClass`）。這是**唯一**能對按鈕下樣式的掛勾——它畫的三個 SVG
-    // 元素都沒有我們認得的 class。
-    'web-class': 'blocky-flyout-button',
-  });
-
-  return blockEntries(blocks, {
-    top: top.map(asEntry),
-    before: (opcode) => (before.get(opcode) ?? []).map(asEntry),
-    after: (opcode) => (after.get(opcode) ?? []).map(asEntry),
-  });
-}
-
-interface ButtonPlacement {
-  top: Record<string, unknown>[];
-  before(opcode: string): Record<string, unknown>[];
-  after(opcode: string): Record<string, unknown>[];
-}
-
-/**
- * 把 `section` 宣告展開成 Blockly 的條目（§8.1）。
- *
- * 相鄰的兩個 sep 由 Blockly 的 `normalizeSeparators` 收成一個，而它 `splice` 掉的
- * 是**前面**那個——所以我們插的 sep 蓋掉上一顆積木自帶的 `BLOCK_GAP`，是取代不是
- * 相加。標題底下再補一個 `LABEL_GAP`，同樣蓋掉 label 自帶的預設 24：標題要貼近它
- * 說明的那一段，不然它看起來像上一段的結尾。
- *
- * 分類的第一顆不插 sep——分類標題本身已經是斷點。
- */
-function blockEntries(
-  blocks: RegisteredBlock[],
-  buttons: ButtonPlacement,
-): Record<string, unknown>[] {
-  const entries: Record<string, unknown>[] = [...buttons.top];
-  for (const block of blocks) {
-    const { section, opcode } = block.spec;
-    if (section && entries.length > 0) entries.push({ kind: 'sep', gap: SECTION_GAP });
-    if (typeof section === 'string') {
-      entries.push(
-        // 這一行標題**不是分類標題**。continuous-toolbox 靠「文字比對得到分類名」
-        // 認分類邊界，所以 `theme.ts` 用這個 class 把它排除掉——否則一段叫「運算」
-        // 的標題會被當成運算分類的起點，捲動定位跟著錯。
-        { kind: 'label', text: section, 'web-class': 'blocky-section-label' },
-        { kind: 'sep', gap: LABEL_GAP },
-      );
+    if (isButtonEntry(entry)) {
+      entries.push({
+        kind: 'button',
+        text: entry.label,
+        callbackKey: buttonCallbackKey(group.id, entry.button),
+        // Blockly 把 `web-class` 原封不動放到那個 `<g>` 上（`FlyoutButton` 的
+        // `this.cssClass`）。這是**唯一**能對按鈕下樣式的掛勾——它畫的三個 SVG
+        // 元素都沒有我們認得的 class。
+        'web-class': 'blocky-flyout-button',
+      });
+      continue;
     }
-    entries.push(...buttons.before(opcode), toToolboxBlock(block), ...buttons.after(opcode));
+
+    const block = registered.get(`${group.id}.${entry.opcode}`);
+    if (!block || block.spec.deprecated) continue;
+    entries.push(toToolboxBlock(block));
+    rendered.add(block.type);
   }
+
+  // **專案資料生成的積木接在後面**（§4.6）：每個自訂函式一顆 `procedure.call#p_x`，
+  // 而 palette 裡只有那顆 `dynamic: true` 的原型——原型本身不上架，生出來的要上。
+  // 認法是「註冊了、但 palette 沒有列到它」，所以之後再有別種生成積木也不必改這裡。
+  for (const block of group.blocks) {
+    if (!rendered.has(block.type) && !block.spec.deprecated) entries.push(toToolboxBlock(block));
+  }
+
   return entries;
 }
 

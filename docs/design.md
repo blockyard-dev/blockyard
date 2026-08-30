@@ -13,15 +13,18 @@
 
 ### v0.19
 
-**工具箱按鈕可以排在積木之間了**（`buttons[].before` / `after`）。原本按鈕一律在分類
-最上面，而「這顆按鈕屬於這一段積木」說不出口——`http` 的狀態碼說明該貼著完整版
-`request` 那顆積木，不是貼著分類標題。
+**manifest 改成一份 `palette` 條目清單**：`blocks:` 與 `buttons:` 合併成一份照工具箱
+順序寫的清單，三種條目——積木、按鈕、分段。原本按鈕一律在分類最上面，而「這顆按鈕
+屬於這一段積木」說不出口。
 
 | 類別 | 變更 | 章節 |
 |---|---|---|
-| **新增** | `buttons[].before` / `after`：指名一顆積木的 opcode，按鈕就排在它前／後。兩個都不寫 = 分類最上面（既有 manifest 一份都不用改）。同一顆積木上釘兩顆按鈕依宣告順序，所以「積木、按鈕、按鈕、積木」寫得出來 | §7.2 |
-| **決定** | **不做 `toolbox:` 版面清單**：那份清單要把每顆積木再列一次，加一顆積木要改兩個地方、漏了就不見——與 §7.2 拒絕「`blocks` 裡的哨兵條目」同一條理由 | §7.2 |
-| **載入期** | 錨點必須指到一顆存在、而且會上架的積木（`deprecated` / `dynamic` 的擋掉）；`before` 與 `after` 只能寫一個 | §7.2 |
+| **格式** | `blocks:` + `buttons:` → **`palette:`**（`- opcode:` / `- button:` / `- section:`）。寫在哪兩顆積木中間，畫出來就在那裡；「積木、按鈕、按鈕、積木」不需要任何額外語法 | §7.2 |
+| **關鍵** | **一份宣告、兩個 view**：`blocks` 由模型導出（後端是 property、前端是 `blocksOf`），所以直譯器、validator 與 AST 測試那 38 個消費者一行都不用改。這是「往 blocks 塞哨兵」與「另外維護一份 `toolbox:` 引用清單」都不必付的那條路 | §7.2 |
+| **刪掉** | `BlockSpec.section` 欄位與它的兩條載入期規則（段落開頭不能是 `deprecated` / `dynamic` 的積木）——分段自己是條目之後，那兩條**不是搬家，是不存在了** | §7.2 |
+| **刪掉** | 同一天稍早的 `buttons[].before` / `after` 錨點，連同它帶來的三條載入期錯誤。為什麼那一版是錯的，記在 §7.2 的引言裡——**推理綁在 `blocks` 那個 key 上，不是綁在「可選欄位」那個做法上** | §7.2 |
+| **載入期** | 條目認不出種類就是錯誤（三種 key 要有一個）。實作是 pydantic 的 discriminated union，否則 `url` 忘了寫的按鈕會被回報成「積木少了 opcode」 | §7.2 |
+| **工具箱** | 專案資料生成的積木（每個函式一顆 `procedure.call#p_x`）接在該分類最後面——`palette` 裡只有那顆 `dynamic` 的原型 | §8.1 |
 
 ### v0.18
 
@@ -1286,7 +1289,7 @@ config:                      # 使用者需填的設定，secret 型別存進金
     label: "Bot Token"
     help: "從 Discord Developer Portal 取得"
 
-blocks:
+palette:
   - opcode: send_message
     type: command                       # command | reporter | boolean | hat
     text: "發送訊息 %(message) 到頻道 %(channel)"
@@ -1295,8 +1298,9 @@ blocks:
       channel: { type: dropdown, source: list_channels }
     blocking: false
 
+  - section: Webhook                    # 工具箱從這裡起是新的一段，見下
+
   - opcode: post_webhook
-    section: Webhook                    # 工具箱從這顆起是新的一段，見下
     type: reporter
     returns: object                     # 合約，Host 在邊界驗證，見 §7.5
     text: "POST %(url) 內容 %(body)"
@@ -1321,13 +1325,13 @@ blocks:
       - { name: channel, type: string }
     concurrency: parallel
 
-buttons:                                # 工具箱裡的非積木條目（D25）
-  - id: docs
+  # 工具箱裡的非積木條目（D25）。位置就是它在 palette 裡的位置。
+  - button: docs
     label: "說明文件"
     action: open_url
     url: "https://discord.com/developers/docs"
 
-  - id: test
+  - button: test
     label: "測試連線"
     action: call                        # 呼叫 main.py 的 @button，見 §7.3
     handler: check_token
@@ -1358,43 +1362,6 @@ buttons:                                # 工具箱裡的非積木條目（D25�
 
 按鈕**不需要 permission**：`open_url` 不執行任何東西，而 `call` 的 handler 受的是
 與積木同一套 `permissions` 約束（它就住在同一個 `main.py` 裡）。
-
-#### 按鈕的位置：`before` / `after`（v0.19）
-
-```yaml
-blocks:
-  - opcode: get
-  - opcode: post
-  - opcode: request
-  - opcode: url_encode
-    section: 工具
-
-buttons:
-  - id: status_codes
-    label: "方法與狀態碼說明"
-    action: open_url
-    url: "https://…"
-    before: request        # 釘在這顆積木前面
-```
-
-畫出來是 `GET` / `POST` / **[方法與狀態碼說明]** / `完整版 request` / ── 工具 ──
-/ `編成網址片段`。兩顆按鈕釘在同一顆積木上時依 `buttons` 的宣告順序，所以
-「積木、按鈕、按鈕、積木」寫得出來。
-
-三條規則：
-
-- **指的是關係，不是序號。** `before: request` 說的是「這顆按鈕屬於那顆積木旁邊」；
-  寫成「第 3 個位置」的話，別人插一顆積木它就默默指到別的地方去了。
-- **`before: X` 在 X 的分段標題之下**（緊貼 X）。分段的語意是「從這顆起是新的一段」，
-  而指名 X 的按鈕屬於那一段——排到標題上面等於把它掛在上一段的尾巴。
-- **錨點要指到一顆真的、而且會上架的積木**，載入期擋。指到不存在的 opcode 是打錯字，
-  指到 `deprecated` / `dynamic` 的積木則是「宣告寫得下去、但畫出來不是那樣」——與
-  §7.2 的 `section` 那兩條載入期規則同一族。前端另有一層防守（退回最上面），因為
-  一顆畫不出來的按鈕不該讓整個分類少一個條目。
-
-**刻意不做成一份 `toolbox:` 版面清單。** 那份清單要把每顆積木再列一次，於是加一顆
-積木要改兩個地方、漏了就不會出現在工具箱裡——與 §7.2 拒絕「`blocks` 裡的哨兵條目」
-同一條理由，而那一次的結論也是同一句：**掛在宣告上的一個可選欄位不動任何人**。
 
 `open_url` 的 URL **只收 `http(s)`，而且擋在載入期**。前端拿到那個字串是要交給
 瀏覽器開的，所以一個 `javascript:` 就是「積木包在編輯器裡執行任意程式碼」——正是
@@ -1446,31 +1413,67 @@ IR 值，替它挑一個預設型別等於替使用者決定他要存什麼。�
 「結束」積木沒有壞處。反過來，寫死一個 opcode 的代價是「哪些積木是終止積木」
 只有讀過那一行原始碼的人知道，而且積木包永遠做不出一顆末端積木（D21）。
 
-#### `section`：工具箱的分段是一句宣告，不是一個哨兵條目
+#### `palette`：一份清單、三種條目
 
-一個分類裡的積木不是一串平的清單——`加 減 乘 除` 是一組，`大於 小於` 是另一組，
-而預設的版面讓這兩件事看起來一樣遠。`section` 讓宣告說得出這件事：
+一個分類裡的積木不是一串平的清單——`加 減 乘 除` 是一組，`大於 小於` 是另一組；
+而「說明文件」那顆按鈕該貼著它說明的那幾顆積木，不是永遠釘在最上面。`palette`
+讓宣告直接說出版面：
 
 ```yaml
-  - opcode: divide
-  - opcode: gt
-    section: true          # 從這顆起是新的一段（只斷開）
-  - opcode: contains
-    section: 文字          # 斷開，並在上面放一行標題
+palette:
+  - opcode: get
+    type: reporter
+    text: "GET %(url)"
+    args: { url: { type: string } }
+
+  - button: status_codes           # key 本身就是這顆按鈕的 id
+    label: "方法與狀態碼說明"
+    action: open_url
+    url: "https://…"
+
+  - opcode: request
+    …
+
+  - section: 工具                  # 斷開，並在上面放一行標題
+  - opcode: url_encode
+    …
 ```
 
-它宣告的是**語意**（「這裡是一段的開頭」），不是版面。間隔多寬、標題長什麼樣子
-由編輯器決定（§8.1）——寫成 `gap: 24` 就是把留白的決定權發給每一個積木包作者，
-而使用者看到的是同一份工具箱。
+**寫在哪兩顆積木中間，畫出來就在那裡。** 「積木、按鈕、按鈕、積木」不需要任何額外
+的語法，就是照那個順序寫。
 
-**刻意不做成 `blocks` 裡的哨兵條目**（TurboWarp 的 `"---"`）。那個作法在 Scratch
-成立是因為 `getInfo().blocks` 就是調色盤描述；這裡的 `blocks` 同時是直譯器的宣告
-表、IR validator 與 §8.1 那三個 AST 測試的資料來源，往裡面塞不是宣告的東西，等於
-每一處 `for spec in blocks` 都要先過濾——為了一個純版面的需求，去動所有執行期的
-消費者。掛在積木上的一個可選欄位不動任何人。
+分段條目宣告的仍然是**語意**（「這裡是一段的開頭」），不是版面：間隔多寬、標題長
+什麼樣子由編輯器決定（§8.1）——寫成 `gap: 24` 就是把留白的決定權發給每一個積木包
+作者，而使用者看到的是同一份工具箱。
 
-兩條載入期規則，都是「宣告寫得下去、但畫出來會默默消失」：`deprecated` 的積木
-不上工具箱（§13.1），所以它不能是段落開頭；`dynamic` 的積木本來就不上架（§4.6）。
+**一份宣告，兩個 view。** 這是這個形狀成立的關鍵，也是它與 TurboWarp 的 `"---"`
+哨兵不同的地方：`palette` 是版面，而**直譯器、IR validator 與 §8.1 那三個 AST 測試
+看到的是 `blocks`**——一份只有積木的 view，由模型導出（後端是 `Manifest.blocks` 這個
+property，前端是 `define.ts::blocksOf`）。所以「往宣告表裡塞不是宣告的東西」這件事
+沒有發生：38 個 `mf.blocks` 的消費者一行都不用改，而寫的人只寫一次。
+
+它也不是「另外維護一份版面清單」（`toolbox:` 引用 opcode 的那種）：那份清單要把每顆
+積木再列一次，加一顆積木就要改兩個地方、漏了就不會出現在工具箱裡——**兩份會漂移**
+是這份文件反覆付過錢的東西。
+
+> **v0.19 的第一版是錯的，記在這裡當作提醒。** 那一版把位置做成按鈕上的錨點
+> （`before: request` / `after: url_encode`），理由是「掛在宣告上的一個可選欄位不動
+> 任何人」——與 `section` 當初的推理同一句。它能用，但它把版面拆成兩份要對照著讀的
+> 清單，而且帶來一整族新的載入期錯誤（錨點指到不存在的 opcode、指到不上架的積木、
+> `before` 與 `after` 同時寫）。條目化之後那些規則**不是搬家，是不存在了**。原本
+> 的推理漏掉的是：反對哨兵的理由是「`blocks` 那份清單有很多消費者」，而那句話一旦
+> 換成「版面自己一份清單、宣告表由它導出」就不再成立。**推理綁在那個 key 上，不是
+> 綁在那個做法上。**
+
+一條載入期規則：**條目認不出種類就是錯誤**——三種 key（`opcode` / `button` /
+`section`）要有其中一個。沒有這句話的話，`url` 忘了寫的按鈕會被回報成「積木少了
+opcode」，因為 union 比對不中時三種候選的錯誤全部都在（實作用的是 pydantic 的
+discriminated union，見 `manifest.py::_entry_kind`）。
+
+`deprecated` 的積木仍然註冊但不上架（§13.1），`dynamic` 的積木本來就不上架
+（§4.6）——它們留在 `palette` 裡，工具箱跳過它們。**專案資料生成的積木**
+（每個自訂函式一顆 `procedure.call#p_x`）反過來：`palette` 裡只有那顆 `dynamic`
+的原型，生出來的那些接在該分類的最後面（`toolbox.ts::categoryEntries`）。
 
 #### 只有內建能用的宣告（D22）
 
@@ -1688,9 +1691,10 @@ in-process 實作是直接呼叫，subprocess 實作是 stdio JSON-RPC 的另一
   **捲到那一段**，不是換一份清單。這讓「我不知道那顆積木在哪一類」從一個要先答對
   才問得出口的問題，變成滑一遍就解決的問題——而那正是新使用者最常有的處境。
   官方外掛 `@blockly/continuous-toolbox` 就是做這件事的。
-- **分類最上面可以有按鈕**（D25）：manifest 的 `buttons` 宣告，Blockly 原生的
-  `{kind: 'button'}` + `registerButtonCallback` 就是這件事。第一個使用者是函式分類
-  的 `建立一個積木`（§8.5）。動作字彙表見 §7.2——**不開放積木包自帶前端程式碼**。
+- **按鈕排在它該在的地方**（D25）：manifest 的 `palette` 裡一個 `- button:` 條目，
+  Blockly 原生的 `{kind: 'button'}` + `registerButtonCallback` 就是這件事。寫在哪兩顆
+  積木中間就畫在那裡（§7.2）；第一個使用者是函式分類最上面的 `建立一個積木`
+  （§8.5）。動作字彙表見 §7.2——**不開放積木包自帶前端程式碼**。
 - **間隔說的是分組**：同一段的積木之間近（12），換一段遠（28），段落標題與它說明
   的那一段之間更近（8）。Blockly 的預設對每個條目都是同一個 `GAP_Y`（24），於是
   「還是加減乘除」與「換成比較了」看起來一樣遠——**版面沒有講出結構已經有的事**。

@@ -11,7 +11,7 @@ version: 1.0.0
 color: "#FFBF00"
 description: 腳本的起點。每個腳本最上面必須是一顆事件積木
 
-blocks:
+palette:
   - opcode: when_flag_clicked
     type: hat
     text: "當 ▶ 被點擊"

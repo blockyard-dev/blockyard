@@ -17,7 +17,7 @@ version: 1.0.0
 color: "#59C059"
 description: 算術、比較、邏輯、字串與正規表達式
 
-blocks:
+palette:
   # ---- 算術 ----
   #
   # `expr` 與下面那些單一運算的積木**刻意並存**（§4.7b）。一顆一顆拉是看得見
@@ -102,8 +102,8 @@ blocks:
   # i18n 要換的正是 label），opcode 與欄位值不會（§13.1）。舊專案沒有這一格，
   # handler 的 fallback 是 `exact`——`=` 的語意一個字都沒有改。
 
+  - section: true
   - opcode: eq
-    section: true
     type: boolean
     text: "%(a) %(op) %(b)"
     args:
@@ -159,8 +159,8 @@ blocks:
   # 要一個常數 false」在畫布上原本沒有出口，只能繞 `不成立 (空孔)`，而那顆積木
   # 讀起來像在問問題。兩顆沒有參數的積木把那條路補上。
 
+  - section: true
   - opcode: "true"
-    section: true
     type: boolean
     text: "真"
 
@@ -185,8 +185,8 @@ blocks:
 
   # ---- 字串。索引 1-based（§4.3）。----
 
+  - section: true
   - opcode: join
-    section: true
     type: reporter
     returns: string
     text: "連接 %(a) 和 %(b)"
@@ -268,8 +268,8 @@ blocks:
           - { value: upper, label: "大寫" }
           - { value: lower, label: "小寫" }
 
+  - section: true
   - opcode: regex_match
-    section: true
     type: boolean
     text: "%(text) 符合樣式 %(pattern)"
     args:
@@ -294,8 +294,8 @@ blocks:
       text: { type: string, default: "訂單 12345" }
       replace: { type: string, default: "#" }
 
+  - section: true
   - opcode: random
-    section: true
     type: reporter
     returns: number
     text: "隨機取 %(from) 到 %(to)"

@@ -7,7 +7,7 @@ version: 1.0.0
 color: "#5CB1D6"
 description: log 與值的檢視
 
-blocks:
+palette:
   - opcode: log
     type: command
     # 多行是 §8.5 的第一層：積木作者最清楚訊息內文需要多行，應主動宣告

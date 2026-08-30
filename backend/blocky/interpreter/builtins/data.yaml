@@ -20,7 +20,7 @@ version: 1.0.0
 color: "#FF8C1A"
 description: 免宣告變數、清單操作、跨執行的持久值
 
-blocks:
+palette:
   # ---- 變數（§4.5）。寫入即建立，讀取未建立的變數是錯誤。----
 
   - opcode: set
@@ -56,8 +56,8 @@ blocks:
       # 一模一樣（reporter + 一個 variable 參數），沒有它就分不出誰是「取得」。
       name: { type: variable, default: "", reads: true }
 
+  - section: true
   - opcode: new_list
-    section: true
     type: reporter
     returns: list
     text: "空清單"
@@ -69,8 +69,8 @@ blocks:
 
   # ---- 清單。索引 1-based（§4.3）。----
 
+  - section: true
   - opcode: list_add
-    section: true
     type: command
     text: "把 %(item) 加到 %(name)"
     args:
@@ -140,8 +140,8 @@ blocks:
 
   # ---- 持久值（§5.4 第 4 層、D12）。key 不是變數。----
 
+  - section: true
   - opcode: persist_set
-    section: true
     type: command
     text: "記住 %(name) 為 %(value)"
     args:

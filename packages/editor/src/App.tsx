@@ -327,7 +327,7 @@ export function App() {
     if (!workspace || !groups) return;
     for (const group of groups) {
       for (const button of group.buttons) {
-        workspace.registerButtonCallback(buttonCallbackKey(group.id, button.id), () =>
+        workspace.registerButtonCallback(buttonCallbackKey(group.id, button.button), () =>
           buttonRef.current(button),
         );
       }
@@ -335,7 +335,7 @@ export function App() {
     return () => {
       for (const group of groups) {
         for (const button of group.buttons) {
-          workspace.removeButtonCallback(buttonCallbackKey(group.id, button.id));
+          workspace.removeButtonCallback(buttonCallbackKey(group.id, button.button));
         }
       }
     };

@@ -12,16 +12,15 @@ version: 1.0.0
 color: "#FF6680"
 description: 可回傳值的自訂函式
 
-# D25：工具箱的非積木條目。函式分類最上面那顆按鈕是**建立函式的唯一入口**
-# ——不是拖一顆「定義函式」出來。拖出來的作法要在 drop 事件裡配 proc id 與
-# 註冊型別，中間還會存在一個「還沒有名字的函式」，而那東西存進 `procedures`
-# 就是半成品（§8.5、D26）。
-buttons:
-  - id: create
+palette:
+  # D25：工具箱的非積木條目。函式分類最上面那顆按鈕是**建立函式的唯一入口**
+  # ——不是拖一顆「定義函式」出來。拖出來的作法要在 drop 事件裡配 proc id 與
+  # 註冊型別，中間還會存在一個「還沒有名字的函式」，而那東西存進 `procedures`
+  # 就是半成品（§8.5、D26）。
+  - button: create
     label: "建立一個積木"
     action: create_procedure
 
-blocks:
   - opcode: definition
     type: hat
     dynamic: true

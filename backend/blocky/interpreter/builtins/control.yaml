@@ -13,7 +13,7 @@ version: 1.0.0
 color: "#FFAB19"
 description: 條件、迴圈、等待、錯誤處理
 
-blocks:
+palette:
   - opcode: if
     type: command
     text: "如果 %(condition) 那麼"
@@ -29,8 +29,8 @@ blocks:
       then: { type: stack }
       else: { type: stack }
 
+  - section: true
   - opcode: repeat
-    section: true
     type: command
     text: "重複 %(times) 次"
     args:
@@ -60,8 +60,8 @@ blocks:
       list: { type: list }
       body: { type: stack }
 
+  - section: true
   - opcode: wait
-    section: true
     type: command
     text: "等待 %(seconds) 秒"
     args:
@@ -73,8 +73,8 @@ blocks:
     args:
       condition: { type: boolean, default: false }
 
+  - section: true
   - opcode: stop
-    section: true
     type: command
     # cap block（§16 Q18 決議：改）。`停止` 之後的積木永遠跑不到，而形狀不說
     # 這件事的話，使用者接得上去、按存檔才被打回來。

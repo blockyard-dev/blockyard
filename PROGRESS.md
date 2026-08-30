@@ -57,6 +57,10 @@ cd packages/editor && npm run check           # 343 passed（13 檔）+ tsc 乾�
   會怎樣**沒有驗過**——後端已經會給 `unknown_block`，前端那一半是空的。
 - **積木包自帶的 `tests/` 靠 `testpaths = ["tests", "../extensions"]` 收**。包來自
   repo 外面時這條就不成立了。
+- **manifest 是 `palette` 一份清單**（v0.19）：三種條目（`opcode` / `button` /
+  `section`），`blocks` 由模型導出。**加第四種條目時記得兩邊都要認**——後端
+  `manifest.py::_entry_kind`、前端 `define.ts` 的三個 narrowing 函式，共用的是「有沒有
+  那個 key」這條規則，而它沒有被抽成一份東西。
 - **一個包的 manifest 壞掉，整個 `GET /api/extensions` 就 500**，編輯器變成「連不上
   後端」。`discover()` 一份讀不過就整批拋——與 §13.3「不要因為一個包毀掉整份專案」
   同一個形狀，但目前只有專案那一半有守。

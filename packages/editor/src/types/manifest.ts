@@ -60,16 +60,13 @@ export type Name1 = string;
 export type Type3 = string;
 export type Yields = YieldSpec[];
 export type Concurrency = ('drop' | 'queue' | 'restart' | 'parallel') | null;
-export type Section = string | boolean;
-export type Blocks = BlockSpec[];
-export type Id1 = string;
+export type Button = string;
 export type Label3 = string;
 export type Action = 'open_url' | 'open_config' | 'call' | 'create_procedure';
 export type Url = string | null;
 export type Handler = string | null;
-export type Before = string | null;
-export type After = string | null;
-export type Buttons = ButtonSpec[];
+export type Section = string | boolean;
+export type Palette = (BlockSpec | ButtonSpec | SectionSpec)[];
 export type Builtin = boolean;
 
 /**
@@ -86,8 +83,7 @@ export interface BlockyExtensionManifest {
   permissions?: Permissions;
   requirements?: Requirements;
   config?: Config;
-  blocks?: Blocks;
-  buttons?: Buttons;
+  palette?: Palette;
   builtin?: Builtin;
 }
 /**
@@ -116,7 +112,6 @@ export interface BlockSpec {
   terminal?: Terminal;
   yields?: Yields;
   concurrency?: Concurrency;
-  section?: Section;
 }
 export interface Args {
   [k: string]: ArgSpec;
@@ -165,24 +160,36 @@ export interface YieldSpec {
  * Run 執行——「開說明文件」「測一下 token 對不對」硬做成積木就是把它塞進一個
  * 不屬於它的形狀。
  *
- * **位置由 `before` / `after` 指名**（沒寫就是分類最上面，Scratch 放「製作積木」
- * 的位置）。它們指的是同一份 manifest 裡某顆積木的 opcode 短名——「這顆按鈕
- * 屬於那顆積木旁邊」，而不是「第 3 個位置」：宣告的是關係，序號會在別人插一顆
- * 積木時默默指到別的地方去。
- *
- * **刻意不做成一份 `toolbox:` 版面清單**，理由與 §7.2 對 `section` 的決定同一
- * 條：那份清單要把每顆積木再列一次，於是加一顆積木要改兩個地方，漏了就不會出現
- * 在工具箱裡——而「兩份會漂移」是這份文件反覆付過錢的東西。掛在按鈕上的一個
- * 可選欄位不動任何人。
+ * **位置就是它在 `palette` 裡的位置**（§7.2）——寫在哪兩顆積木中間，畫出來就在
+ * 那裡。`button:` 這個 key 同時是條目的種類與它的 id。
  */
 export interface ButtonSpec {
-  id: Id1;
+  button: Button;
   label: Label3;
   action: Action;
   url?: Url;
   handler?: Handler;
-  before?: Before;
-  after?: After;
+}
+/**
+ * 工具箱的分段（§7.2、§8.1）。
+ *
+ * `section: true` 只斷開，字串另外在上面放一行標題：
+ *
+ * ```yaml
+ * palette:
+ *   - opcode: divide
+ *   - section: true        # 從這裡起是新的一段（只斷開）
+ *   - opcode: gt
+ *   - section: 文字        # 斷開，並在上面放一行標題
+ *   - opcode: contains
+ * ```
+ *
+ * 宣告的是**語意**（「這裡是一段的開頭」），不是版面——間隔多大、標題長什麼
+ * 樣子由編輯器決定（`toolbox.ts`）。寫成 `gap: 24` 就是把留白的決定權發給每一
+ * 個積木包作者，而使用者看到的是同一份工具箱。
+ */
+export interface SectionSpec {
+  section: Section;
 }
 
 /** 這份檔案的入口型別。schema 的 `title` 決定了上面那個名字。 */

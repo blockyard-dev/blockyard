@@ -284,10 +284,20 @@ def test_extensions_include_builtins_marked_as_such(client: TestClient) -> None:
     assert by_id["demo"].get("builtin", False) is False
 
 
+def block_of(manifest: dict, opcode: str) -> dict:
+    """從 wire 上的 `palette` 撈一顆積木。
+
+    前端拿到的是**一份 palette**（積木、按鈕、分段照工具箱的順序，§7.2），
+    導出 `blocks` 那件事在後端是 property、在前端是 `define.ts::blocksOf`——
+    JSON 上只有 palette 一份。
+    """
+    return next(e for e in manifest["palette"] if e.get("opcode") == opcode)
+
+
 def test_extension_payload_is_enough_to_draw_a_block(client: TestClient) -> None:
     """§8.1 第 2 步：manifest → Blockly block definition 要有的東西都在。"""
     by_id = {m["id"]: m for m in client.get("/api/extensions").json()}
-    repeat = next(b for b in by_id["control"]["blocks"] if b["opcode"] == "repeat")
+    repeat = block_of(by_id["control"], "repeat")
 
     assert repeat["type"] == "command"
     assert "%(times)" in repeat["text"]
@@ -299,11 +309,11 @@ def test_extension_payload_is_enough_to_draw_a_block(client: TestClient) -> None
 def test_static_dropdown_options_are_declared(client: TestClient) -> None:
     """內建的下拉是靜態的（選項就是宣告的一部分），積木包的是動態的。"""
     by_id = {m["id"]: m for m in client.get("/api/extensions").json()}
-    stop = next(b for b in by_id["control"]["blocks"] if b["opcode"] == "stop")
+    stop = block_of(by_id["control"], "stop")
     values = [o["value"] for o in stop["args"]["scope"]["options"]]
     assert values == ["this_script", "all"]
     assert stop["args"]["scope"]["field"] is True
 
-    color_of = next(b for b in by_id["demo"]["blocks"] if b["opcode"] == "color_of")
+    color_of = block_of(by_id["demo"], "color_of")
     assert color_of["args"]["fruit"]["source"] == "list_fruits"
     assert "options" not in color_of["args"]["fruit"]

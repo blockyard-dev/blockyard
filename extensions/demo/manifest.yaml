@@ -20,7 +20,7 @@ config:
     label: "打招呼用的開頭"
     default: "hi"
 
-blocks:
+palette:
   # 最單純的一顆：吃字串、吐字串，順便驗 ctx.config / ctx.state / ctx.log
   - opcode: echo
     type: reporter

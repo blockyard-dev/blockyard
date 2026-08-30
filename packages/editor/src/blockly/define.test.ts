@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { buildDefinitions, SHADOW_NUMBER, SHADOW_TEXT } from './define';
 import { FIELD_TEXT_TYPE } from './fields/FieldText';
-import type { Manifest } from '../types/manifest';
+import type { BlockSpec, Manifest } from '../types/manifest';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -30,8 +30,8 @@ function loadBuiltins(): Manifest[] {
     .map((f) => parse(readFileSync(join(BUILTINS, f), 'utf8')) as Manifest);
 }
 
-function manifestOf(blocks: Manifest['blocks']): Manifest {
-  return { id: 'test', name: '測試', version: '1.0.0', color: '#123456', blocks };
+function manifestOf(blocks: BlockSpec[]): Manifest {
+  return { id: 'test', name: '測試', version: '1.0.0', color: '#123456', palette: blocks };
 }
 
 /** 一顆積木的所有 `messageN` / `argsN`，依序攤平。 */

@@ -38,14 +38,14 @@ def test_id_must_be_an_identifier() -> None:
 
 def test_opcode_must_not_carry_the_namespace() -> None:
     bad(
-        mf(blocks=[{"opcode": "demo2.echo", "type": "reporter", "text": "x"}]),
+        mf(palette=[{"opcode": "demo2.echo", "type": "reporter", "text": "x"}]),
         "不含命名空間前綴",
     )
 
 
 def test_duplicate_opcode() -> None:
     b = {"opcode": "echo", "type": "reporter", "text": "x"}
-    bad(mf(blocks=[b, dict(b)]), "opcode 重複")
+    bad(mf(palette=[b, dict(b)]), "opcode 重複")
 
 
 # ---- 積木宣告的內部一致性 ----
@@ -54,21 +54,21 @@ def test_duplicate_opcode() -> None:
 def test_text_placeholder_without_an_arg() -> None:
     """`%(message)` 沒有對應參數 = 前端渲染時會少一個孔。"""
     bad(
-        mf(blocks=[{"opcode": "send", "type": "command", "text": "送出 %(message)"}]),
+        mf(palette=[{"opcode": "send", "type": "command", "text": "送出 %(message)"}]),
         r"%\(message\) 沒有對應的參數",
     )
 
 
 def test_command_cannot_declare_returns() -> None:
     bad(
-        mf(blocks=[{"opcode": "go", "type": "command", "text": "go", "returns": "object"}]),
+        mf(palette=[{"opcode": "go", "type": "command", "text": "go", "returns": "object"}]),
         "不會回傳值",
     )
 
 
 def test_dropdown_arg_needs_a_source() -> None:
     bad(
-        mf(blocks=[{
+        mf(palette=[{
             "opcode": "pick", "type": "reporter", "text": "挑 %(x)",
             "args": {"x": {"type": "dropdown"}},
         }]),
@@ -78,7 +78,7 @@ def test_dropdown_arg_needs_a_source() -> None:
 
 def test_min_max_only_on_numbers() -> None:
     bad(
-        mf(blocks=[{
+        mf(palette=[{
             "opcode": "pick", "type": "reporter", "text": "挑 %(x)",
             "args": {"x": {"type": "string", "max": 3}},
         }]),
@@ -88,7 +88,7 @@ def test_min_max_only_on_numbers() -> None:
 
 def test_yields_only_on_hat() -> None:
     bad(
-        mf(blocks=[{
+        mf(palette=[{
             "opcode": "go", "type": "command", "text": "go",
             "yields": [{"name": "x"}],
         }]),
@@ -107,7 +107,7 @@ def test_unknown_field_is_rejected() -> None:
 def test_absent_default_differs_from_explicit_null() -> None:
     """「沒寫 default」是必填，`default: null` 是預設值為 null。"""
     m = parse_manifest(
-        mf(blocks=[{
+        mf(palette=[{
             "opcode": "go", "type": "command", "text": "go %(a) %(b)",
             "args": {"a": {"type": "string"}, "b": {"type": "string", "default": None}},
         }]),
@@ -121,7 +121,7 @@ def test_absent_default_differs_from_explicit_null() -> None:
 def test_interpolate_defaults_follow_section_4_7() -> None:
     """string 預設開插值、code 預設關——shell 指令裡的 `${HOME}` 不該被替換。"""
     m = parse_manifest(
-        mf(blocks=[{
+        mf(palette=[{
             "opcode": "go", "type": "command", "text": "go %(a) %(b) %(c)",
             "args": {
                 "a": {"type": "string"},
@@ -139,7 +139,7 @@ def test_interpolate_defaults_follow_section_4_7() -> None:
 
 def test_boolean_block_declares_its_return_by_its_shape() -> None:
     m = parse_manifest(
-        mf(blocks=[{"opcode": "ok", "type": "boolean", "text": "ok"}]), where="test"
+        mf(palette=[{"opcode": "ok", "type": "boolean", "text": "ok"}]), where="test"
     )
     assert m.blocks[0].declared_return == "boolean"
 
@@ -201,7 +201,7 @@ def test_packs_cannot_declare_builtin_only_arg_types() -> None:
     """
     for arg_type in ("variable", "stack", "expression"):
         bad(
-            mf(blocks=[{
+            mf(palette=[{
                 "opcode": "go", "type": "command", "text": "go",
                 "args": {"x": {"type": arg_type}},
             }]),
@@ -212,14 +212,14 @@ def test_packs_cannot_declare_builtin_only_arg_types() -> None:
 def test_packs_cannot_declare_fields_or_static_dropdowns() -> None:
     """積木包的參數一律是輸入孔；下拉一律是動態的（選項來自外部服務）。"""
     bad(
-        mf(blocks=[{
+        mf(palette=[{
             "opcode": "go", "type": "command", "text": "go %(x)",
             "args": {"x": {"type": "string", "field": True}},
         }]),
         "不能是 field",
     )
     bad(
-        mf(blocks=[{
+        mf(palette=[{
             "opcode": "go", "type": "command", "text": "go %(x)",
             "args": {"x": {"type": "dropdown", "options": ["a", "b"]}},
         }]),
@@ -230,7 +230,7 @@ def test_packs_cannot_declare_fields_or_static_dropdowns() -> None:
 def test_packs_cannot_declare_dynamic_blocks() -> None:
     """dynamic 積木由專案資料生成（§4.6 的函式），只有內建有。"""
     bad(
-        mf(blocks=[{"opcode": "go", "type": "reporter", "text": "go", "dynamic": True}]),
+        mf(palette=[{"opcode": "go", "type": "reporter", "text": "go", "dynamic": True}]),
         "只有內建有",
     )
 
@@ -242,7 +242,7 @@ def test_terminal_only_applies_to_command() -> None:
     body 的帽子——兩者都是宣告寫錯了，該在載入積木包時就說。
     """
     bad(
-        mf(blocks=[{"opcode": "go", "type": "reporter", "text": "go", "terminal": True}]),
+        mf(palette=[{"opcode": "go", "type": "reporter", "text": "go", "terminal": True}]),
         "terminal 只適用於 command",
     )
 
@@ -250,51 +250,65 @@ def test_terminal_only_applies_to_command() -> None:
 def test_packs_may_declare_terminal_blocks() -> None:
     """`terminal` **不在**內建專屬名單裡：它不碰 §7.5 的邊界（§4.6）。"""
     manifest = parse_manifest(
-        mf(blocks=[{"opcode": "halt", "type": "command", "text": "結束", "terminal": True}]),
+        mf(palette=[{"opcode": "halt", "type": "command", "text": "結束", "terminal": True}]),
         where="test",
     )
     assert manifest.block("halt").terminal is True
 
 
-def test_section_marks_the_start_of_a_toolbox_group() -> None:
-    """`section` 是語意宣告：字串多一行標題，`True` 只斷開（§8.1）。"""
+def test_section_is_an_entry_of_its_own() -> None:
+    """`section` 是 palette 裡的一個條目：字串多一行標題，`True` 只斷開（§8.1）。"""
     manifest = parse_manifest(
-        mf(blocks=[
-            {"opcode": "a", "type": "command", "text": "a", "section": "比較"},
-            {"opcode": "b", "type": "command", "text": "b", "section": True},
-            {"opcode": "c", "type": "command", "text": "c"},
+        mf(palette=[
+            {"section": "比較"},
+            {"opcode": "a", "type": "command", "text": "a"},
+            {"section": True},
+            {"opcode": "b", "type": "command", "text": "b"},
         ]),
         where="test",
     )
-    assert manifest.block("a").section == "比較"
-    assert manifest.block("b").section is True
-    assert manifest.block("c").section is False
+    assert [type(e).__name__ for e in manifest.palette] == [
+        "SectionSpec", "BlockSpec", "SectionSpec", "BlockSpec",
+    ]
+    assert manifest.palette[0].title == "比較"
+    assert manifest.palette[2].title is None
+    # 導出的 view 只有積木——直譯器與 validator 看到的是這一份。
+    assert [b.opcode for b in manifest.blocks] == ["a", "b"]
 
 
 def test_section_cannot_be_an_empty_string() -> None:
     """空字串是「我想要斷開但不想寫標題」寫錯了，而它畫出來是一行看不見的標題。"""
-    bad(
-        mf(blocks=[{"opcode": "a", "type": "command", "text": "a", "section": "  "}]),
-        "section: true",
-    )
+    bad(mf(palette=[{"section": "  "}]), "section: true")
 
 
-def test_deprecated_block_cannot_start_a_section() -> None:
-    """下架的積木不上工具箱（§13.1）——整段的標題會跟著它默默消失。"""
-    bad(
-        mf(blocks=[{
-            "opcode": "a", "type": "command", "text": "a",
-            "section": "比較", "deprecated": True,
-        }]),
-        "把 section 移到下一顆",
+def test_section_false_is_meaningless() -> None:
+    """條目化之後 `section: false` 不再是「這顆積木不是段落開頭」，而是一個空條目。"""
+    bad(mf(palette=[{"section": False}]), "沒有意義")
+
+
+def test_a_section_before_a_deprecated_block_is_fine_now() -> None:
+    """條目化**刪掉了一條規則**。
+
+    `section` 掛在積木上的時候，「段落開頭是一顆不上架的積木」等於整段標題默默
+    消失，所以載入期要擋。分段自己是一個條目之後，它跟哪顆積木上不上架無關——
+    規則不是搬家，是不存在了。
+    """
+    m = parse_manifest(
+        mf(palette=[
+            {"section": "比較"},
+            {"opcode": "a", "type": "command", "text": "a", "deprecated": True},
+            {"opcode": "b", "type": "command", "text": "b"},
+        ]),
+        where="test",
     )
+    assert m.palette[0].title == "比較"
 
 
 def test_dropdown_needs_source_or_options() -> None:
     base = {"opcode": "go", "type": "command", "text": "go %(x)"}
-    bad(mf(blocks=[{**base, "args": {"x": {"type": "dropdown"}}}]), "source（動態）或 options")
+    bad(mf(palette=[{**base, "args": {"x": {"type": "dropdown"}}}]), "source（動態）或 options")
     bad(
-        mf(id="data", builtin=True, blocks=[{
+        mf(id="data", builtin=True, palette=[{
             **base, "args": {"x": {"type": "dropdown", "source": "s", "options": ["a"]}},
         }]),
         "只能擇一",
@@ -304,7 +318,7 @@ def test_dropdown_needs_source_or_options() -> None:
 def test_option_shorthand_expands_to_value_only() -> None:
     """`options: [upper, lower]` 是 `[{value: upper}, …]` 的簡寫。"""
     m = parse_manifest(
-        mf(id="data", builtin=True, blocks=[{
+        mf(id="data", builtin=True, palette=[{
             "opcode": "go", "type": "command", "text": "go %(x)",
             "args": {"x": {"type": "dropdown", "field": True, "options": ["upper", {
                 "value": "lower", "label": "小寫"}]}},
@@ -318,7 +332,7 @@ def test_option_shorthand_expands_to_value_only() -> None:
 def test_expression_args_are_always_fields() -> None:
     """運算式是這顆積木自己的內容，不是可以被別的積木蓋掉的孔（§4.7b）。"""
     m = parse_manifest(
-        mf(id="operator", builtin=True, blocks=[{
+        mf(id="operator", builtin=True, palette=[{
             "opcode": "expr", "type": "reporter", "text": "運算 %(expr)",
             "args": {"expr": {"type": "expression", "default": "1 + 1"}},
         }]),
@@ -331,7 +345,7 @@ def test_expression_args_are_always_fields() -> None:
 def test_variable_args_are_always_fields() -> None:
     """變數名稱不能由積木求值——它是積木自己的欄位（§4.2、§8.5）。"""
     m = parse_manifest(
-        mf(id="data", builtin=True, blocks=[{
+        mf(id="data", builtin=True, palette=[{
             "opcode": "go", "type": "command", "text": "設定 %(name) 為 %(value)",
             "args": {"name": {"type": "variable"}, "value": {"type": "string"}},
         }]),
@@ -345,7 +359,7 @@ def test_variable_args_are_always_fields() -> None:
 
 
 def test_open_url_button_must_declare_a_url() -> None:
-    bad(mf(buttons=[{"id": "docs", "label": "說明", "action": "open_url"}]), "必須宣告 url")
+    bad(mf(palette=[{"button": "docs", "label": "說明", "action": "open_url"}]), "必須宣告 url")
 
 
 def test_open_url_rejects_non_http_schemes() -> None:
@@ -356,8 +370,8 @@ def test_open_url_rejects_non_http_schemes() -> None:
     擋在這裡而不是前端：宣告層擋得住的東西，不該指望每個消費端都記得擋。
     """
     bad(
-        mf(buttons=[{
-            "id": "x", "label": "點我", "action": "open_url",
+        mf(palette=[{
+            "button": "x", "label": "點我", "action": "open_url",
             "url": "javascript:alert(1)",
         }]),
         "只能是 http",
@@ -365,83 +379,61 @@ def test_open_url_rejects_non_http_schemes() -> None:
 
 
 def test_call_button_must_declare_a_handler() -> None:
-    bad(mf(buttons=[{"id": "t", "label": "測試", "action": "call"}]), "必須宣告 handler")
+    bad(mf(palette=[{"button": "t", "label": "測試", "action": "call"}]), "必須宣告 handler")
 
 
 def test_button_fields_belong_to_one_action_only() -> None:
     bad(
-        mf(buttons=[{"id": "t", "label": "測試", "action": "open_config", "url": "https://x"}]),
+        mf(palette=[{"button": "t", "label": "測試", "action": "open_config", "url": "https://x"}]),
         "只有 open_url",
     )
     bad(
-        mf(buttons=[{"id": "t", "label": "測試", "action": "open_config", "handler": "go"}]),
+        mf(palette=[{"button": "t", "label": "測試", "action": "open_config", "handler": "go"}]),
         "只有 call",
     )
 
 
 def test_duplicate_button_id() -> None:
-    b = {"id": "docs", "label": "說明", "action": "open_config"}
-    bad(mf(buttons=[b, dict(b)]), "按鈕 id 重複")
+    b = {"button": "docs", "label": "說明", "action": "open_config"}
+    bad(mf(palette=[b, dict(b)]), "按鈕 id 重複")
 
 
-# ---- 按鈕的位置（§7.2 的 before / after）----
-
-ONE_BLOCK = [{"opcode": "go", "type": "command", "text": "go"}]
+# ---- palette：一份清單、三種條目（§7.2）----
 
 
-def test_button_anchor_points_at_a_block() -> None:
+def test_palette_keeps_the_order_and_splits_into_views() -> None:
+    """寫的人只寫一次，讀的人各拿各的 view。"""
     m = parse_manifest(
-        mf(
-            blocks=ONE_BLOCK,
-            buttons=[{"id": "t", "label": "測試", "action": "open_config", "before": "go"}],
-        ),
+        mf(palette=[
+            {"opcode": "a", "type": "command", "text": "a"},
+            {"button": "docs", "label": "說明", "action": "open_config"},
+            {"button": "test", "label": "測試", "action": "open_config"},
+            {"section": "工具"},
+            {"opcode": "b", "type": "command", "text": "b"},
+        ]),
         where="test",
     )
-    assert m.buttons[0].anchor == ("before", "go")
+    # 順序是版面（工具箱照著畫）
+    assert [type(e).__name__ for e in m.palette] == [
+        "BlockSpec", "ButtonSpec", "ButtonSpec", "SectionSpec", "BlockSpec",
+    ]
+    # view 是宣告（直譯器、validator、題庫看這兩份）
+    assert [b.opcode for b in m.blocks] == ["a", "b"]
+    assert [b.id for b in m.buttons] == ["docs", "test"]
 
 
-def test_button_without_an_anchor_has_none() -> None:
-    """沒寫 = 分類最上面（這個欄位出現之前唯一的位置）。既有 manifest 不用改。"""
+def test_unknown_entry_kind_says_which_key_is_missing() -> None:
+    """沒有這句話的話，union 比對不中時會把三種條目的錯誤全部列出來。"""
+    bad(mf(palette=[{"label": "?", "action": "open_config"}]), "認不出種類")
+
+
+def test_button_key_is_also_its_id() -> None:
     m = parse_manifest(
-        mf(buttons=[{"id": "t", "label": "測試", "action": "open_config"}]),
+        mf(palette=[{"button": "docs", "label": "說明", "action": "open_config"}]),
         where="test",
     )
-    assert m.buttons[0].anchor is None
-
-
-def test_button_cannot_be_before_and_after() -> None:
-    bad(
-        mf(
-            blocks=ONE_BLOCK,
-            buttons=[{
-                "id": "t", "label": "測試", "action": "open_config",
-                "before": "go", "after": "go",
-            }],
-        ),
-        "只能寫一個",
-    )
-
-
-def test_button_anchor_must_exist() -> None:
-    """指到不存在的 opcode 是打錯字，而症狀是「按鈕跑回最上面」——很難查。"""
-    bad(
-        mf(
-            blocks=ONE_BLOCK,
-            buttons=[{"id": "t", "label": "測試", "action": "open_config", "before": "nope"}],
-        ),
-        "不存在的 opcode",
-    )
-
-
-def test_button_anchor_must_be_visible_in_the_toolbox() -> None:
-    """指到一顆不上架的積木：宣告寫得下去，但畫出來不是那樣（§7.2 的兩條規則）。"""
-    bad(
-        mf(
-            blocks=[{"opcode": "go", "type": "command", "text": "go", "deprecated": True}],
-            buttons=[{"id": "t", "label": "測試", "action": "open_config", "after": "go"}],
-        ),
-        "不會出現在工具箱裡",
-    )
+    assert m.buttons[0].button == "docs"
+    assert m.buttons[0].id == "docs"
 
 
 def test_packs_cannot_open_the_editors_own_dialogs() -> None:
@@ -451,6 +443,6 @@ def test_packs_cannot_open_the_editors_own_dialogs() -> None:
     一條載入期的權限線——而不是為內建另立一套 schema。
     """
     bad(
-        mf(buttons=[{"id": "create", "label": "創建積木", "action": "create_procedure"}]),
+        mf(palette=[{"button": "create", "label": "創建積木", "action": "create_procedure"}]),
         "只有內建能宣告",
     )

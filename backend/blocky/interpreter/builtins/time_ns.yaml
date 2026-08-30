@@ -11,7 +11,7 @@ version: 1.0.0
 color: "#4C97FF"
 description: 現在時間、解析、格式化與加減
 
-blocks:
+palette:
   - opcode: now
     type: reporter
     returns: object
@@ -26,8 +26,8 @@ blocks:
     args:
       time: { type: object }
 
+  - section: true
   - opcode: parse
-    section: true
     type: reporter
     returns: object
     text: "解析時間 %(text) %(timezone)"
@@ -53,8 +53,8 @@ blocks:
           - { value: time, label: "時間（HH:mm:ss）" }
           - { value: iso, label: "ISO 8601" }
 
+  - section: true
   - opcode: add
-    section: true
     type: reporter
     returns: object
     # 天與週走行事曆運算，才能正確跨越日光節約時間（time_ns.py）

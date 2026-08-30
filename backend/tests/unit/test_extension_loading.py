@@ -18,7 +18,7 @@ id: {id}
 name: 測試包
 version: 0.1.0
 permissions: [{permissions}]
-blocks:
+palette:
 {blocks}
 """
 
