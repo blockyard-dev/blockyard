@@ -14,6 +14,7 @@
  *   旁邊當一顆頂層積木並標上警告，而不是消失。
  */
 import * as Blockly from 'blockly/core';
+import { fillDefinitionParams } from './params';
 import { isDefinitionType, paramRefFromType, procIdFromType } from './procedures';
 import { paramsOf } from './signature';
 import type { ConversionContext } from '../ir/context';
@@ -37,16 +38,25 @@ export interface ReshapeResult {
 }
 
 /**
- * 把畫布上屬於這個函式的積木照新簽章重建一次。
+ * 把畫布上屬於這個函式的積木照新簽章重建一次，**並照新簽章把帽子的參數長回去**。
  *
  * 包在一個 Blockly event group 裡：改一次簽章在使用者眼裡是一個動作，undo
  * 也該是一次。
+ *
+ * 補孔（`fillDefinitionParams`）以前是呼叫端的第三步，靠 `App.tsx` 記得跑；
+ * 它在這裡是因為**重塑自己把帽子的孔清空了**（`rebuildDefinitionHat` 的
+ * `'discard'`），而清空的人有責任補回去——沒有任何一個呼叫端有理由跳過它，
+ * 而「要記得的順序」正是第七輪那個 bug 的形狀（PROGRESS §2.4）。
+ *
+ * `onTrash` 只為了補孔而存在：定義帽子被重建成一顆新的 `BlockSvg`，掛在舊那顆
+ * 上的拖曳策略（拖進垃圾桶 = 走右鍵刪除那條規則）跟著沒了，要重新掛。
  */
 export function reshapeProcedure(
   workspace: Blockly.WorkspaceSvg,
   procId: string,
   proc: Procedure,
   ctx: ConversionContext,
+  onTrash?: (procId: string) => void,
 ): ReshapeResult {
   const keep = new Set(paramsOf(proc).map((param) => param.id));
 
@@ -97,6 +107,11 @@ export function reshapeProcedure(
   } finally {
     Blockly.Events.setGroup(false);
   }
+
+  // 在 event group **之外**，與拆開時同一個行為：那時候這一步在 `App.tsx` 裡、
+  // 跑在 `reshapeProcedure` 回來之後。晶片不進 IR，所以它在不在同一次 undo 裡
+  // 都不改變存出來的東西——維持原樣就少一件要重新驗的事。
+  fillDefinitionParams(workspace, { [procId]: proc }, onTrash);
   return result;
 }
 

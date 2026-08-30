@@ -14,8 +14,8 @@ import { parse as parseYaml } from 'yaml';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { registerManifests } from './setup';
 import { definitionType, isParamType, paramType, registerProcedures } from './procedures';
+import { applyProcedure } from './apply';
 import { fillDefinitionParams } from './params';
-import { reshapeProcedure } from './reshape';
 import { buildContext } from '../ir/context';
 import { loadProject } from '../ir/deserialize';
 import { serializeWorkspace } from '../ir/serialize';
@@ -145,17 +145,21 @@ describe('帽子上的參數', () => {
 });
 
 describe('改簽章之後帽子上的參數還在（§4.6）', () => {
-  /** 對話框按下確定時 `App.tsx` 跑的那三步，順序一字不差。 */
+  /**
+   * 對話框按下確定時**真正跑的那一個函式**。
+   *
+   * 這裡曾經是一份抄過來的順序（註冊 → 重塑 → 補孔），而抄過來的順序會漂移：
+   * 第七輪那個 bug 就出在「App.tsx 把它們接起來」的那條縫上，兩邊的單元測試
+   * 卻全綠（PROGRESS §2.4）。現在順序只有一份，測試驗的就是它。
+   */
   function apply(workspace: Blockly.Workspace, proc: Procedure) {
-    const procedures = { p_jump: proc };
-    const blocks = registerProcedures(procedures);
-    reshapeProcedure(
-      workspace as Blockly.WorkspaceSvg,
-      'p_jump',
-      proc,
-      buildContext([...builtins, ...blocks]),
-    );
-    fillDefinitionParams(workspace, procedures);
+    applyProcedure({
+      workspace: workspace as Blockly.WorkspaceSvg,
+      procedures: { p_jump: JUMP },
+      procId: 'p_jump',
+      edited: proc,
+      blocks: builtins,
+    });
   }
 
   it('改一個參數的名字，兩顆都還在帽子上', () => {

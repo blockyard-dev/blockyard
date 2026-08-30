@@ -22,7 +22,7 @@
  * 拖曳（`getTargetBlock` 對影子的處理是回傳它的父積木）。
  */
 import * as Blockly from 'blockly/core';
-import { definitionType, isParamType, paramType } from './procedures';
+import { definitionType, isParamType, paramRefFromType, paramType } from './procedures';
 import { paramsOf } from './signature';
 import type { Procedure } from '../types/project';
 
@@ -131,8 +131,14 @@ export function fillDefinitionParams(
 ): void {
   // 被擠出來的那顆（使用者把別的積木丟進參數的孔）。它是 `deletable: false`
   // 的——不收掉的話畫布上就留下一顆刪不掉的孤兒，而下面的補孔又會再生一顆。
+  //
+  // **只收 `procedures` 裡那幾個函式的**：呼叫端傳一筆是合法的
+  // （`reshapeProcedure` 只重塑一個函式），而收掉一顆下面那圈迴圈不會補回去的
+  // 晶片，就是靜默刪掉畫布上的東西。
   for (const block of workspace.getAllBlocks(false)) {
-    if (isChip(block) && block.getParent() === null) block.dispose(false);
+    if (!isChip(block) || block.getParent() !== null) continue;
+    const ref = paramRefFromType(block.type);
+    if (ref && ref.procId in procedures) block.dispose(false);
   }
 
   for (const [procId, proc] of Object.entries(procedures)) {

@@ -27,7 +27,8 @@ import {
   registerProcedures,
 } from './blockly/procedures';
 import { displayName } from './blockly/signature';
-import { reshapeProcedure, watchOrphans } from './blockly/reshape';
+import { applyProcedure } from './blockly/apply';
+import { watchOrphans } from './blockly/reshape';
 import { fillDefinitionParams, watchDefinitionParams } from './blockly/params';
 import { buttonCallbackKey } from './blockly/toolbox';
 import { ProcedureModal, type ProcedureDialogTarget } from './components/ProcedureModal';
@@ -266,52 +267,30 @@ export function App() {
   }, [runId]);
 
   /**
-   * 對話框按下確定：建立或改一個函式（§8.5、D26）。
-   *
-   * 順序有講究——**先註冊型別，再動畫布**。`reshapeProcedure` 是「存下來、丟
-   * 掉、照新定義再建一次」，而「新定義」要在那之前就已經註冊好，不然重建出來
-   * 的還是舊形狀。
-   *
-   * 存檔不在這裡：`procedures` 進了 React state，下一次 `save()` 自然帶著走
-   * （`serializeWorkspace` 的 `procedures` passthrough）。按下確定就送 PUT 會
-   * 讓「改個名字」變成一次網路往返，而使用者可能只是在試。
+   * 對話框按下確定。畫布上的那幾步在 `blockly/apply.ts`（那裡才是順序的家，
+   * 理由見那份註解）；這裡只剩「關掉對話框」與「把結果放進 state」。
    */
-  const applyProcedure = useCallback(
+  const handleProcedureSubmit = useCallback(
     (target: ProcedureDialogTarget, edited: Pick<Procedure, 'name' | 'params' | 'returns'>) => {
       setDialog(null);
       if (state.status !== 'ready') return;
       const ws = workspaceRef.current;
       if (!ws) return;
 
-      const id = target.id ?? newProcId(state.project.procedures ?? {});
-      const previous = state.project.procedures?.[id];
-      const procedures: Record<string, Procedure> = {
-        ...(state.project.procedures ?? {}),
-        // `body` / `definitionBlock` 由 `serializeWorkspace` 從畫布重新算出來
-        // （§8.4），這裡只是把上一版的值帶著走，不是它們的真實來源。
-        [id]: {
-          ...edited,
-          body: previous?.body ?? null,
-          definitionBlock: previous?.definitionBlock ?? null,
-        },
-      };
-
-      const procedureBlocks = registerProcedures(procedures);
-      const ctx = buildContext([...state.registration.blocks, ...procedureBlocks]);
-
-      const proc = procedures[id]!;
-      if (target.id === null) placeDefinition(ws, id);
-      // `ctx` 要新的那一份：重塑要照**新簽章**補影子（新長出來的孔沒有影子就是
-      // 一個打不了字的洞），而那份資料在 `procedureBlocks` 裡。
-      else reshapeProcedure(ws, id, proc, ctx);
-      // 新的帽子、或重塑過的帽子，孔都是空的——照新簽章把參數長回去。
-      fillDefinitionParams(ws, procedures, (id) => deleteRef.current(id));
+      const applied = applyProcedure({
+        workspace: ws,
+        procedures: state.project.procedures ?? {},
+        procId: target.id,
+        edited,
+        blocks: state.registration.blocks,
+        onTrash: (id) => deleteRef.current(id),
+      });
 
       setState({
         ...state,
-        project: { ...state.project, procedures },
-        ctx,
-        toolbox: buildProjectToolbox(state.registration, procedureBlocks),
+        project: { ...state.project, procedures: applied.procedures },
+        ctx: applied.ctx,
+        toolbox: buildProjectToolbox(state.registration, applied.procedureBlocks),
       });
     },
     [state],
@@ -563,7 +542,7 @@ export function App() {
             <ProcedureModal
               target={dialog}
               onCancel={() => setDialog(null)}
-              onSubmit={(proc) => applyProcedure(dialog, proc)}
+              onSubmit={(proc) => handleProcedureSubmit(dialog, proc)}
             />
           )}
         </div>
@@ -599,35 +578,6 @@ function Notice({ children, tone }: { children: React.ReactNode; tone?: 'error' 
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/**
- * 新函式的 id。
- *
- * `genUid()` 的字元集裡有 `#` `|` `=` 這些東西，而函式 id 會出現在兩個看得見
- * 的地方：`project.json` 的 key（人會讀它）與 Blockly 的型別字串
- * （`procedure.call#p_x`）。留下英數字就好——它只需要唯一，不需要熵。
- */
-function newProcId(existing: Record<string, Procedure>): string {
-  for (;;) {
-    const id = `p_${Blockly.utils.idGenerator.genUid().replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`;
-    if (id.length >= 6 && !(id in existing)) return id;
-  }
-}
-
-/**
- * 新函式的定義帽子放上畫布。
- *
- * 放在**視野的左上角附近**而不是 (0,0)：使用者按下確定的當下正在看某個地方，
- * 而一顆出現在畫布外的積木等於沒有出現——他會以為按鈕壞了。
- */
-function placeDefinition(workspace: Blockly.WorkspaceSvg, procId: string): void {
-  const block = workspace.newBlock(definitionType(procId)) as Blockly.BlockSvg;
-  block.initSvg();
-  block.render();
-  const view = workspace.getMetricsManager().getViewMetrics(true);
-  block.moveTo(new Blockly.utils.Coordinate(view.left + 48, view.top + 48));
-  block.select();
 }
 
 /** 宣告式按鈕的動作（D25 的 (a) 層）。 */
