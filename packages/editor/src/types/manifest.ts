@@ -67,6 +67,8 @@ export type Label3 = string;
 export type Action = 'open_url' | 'open_config' | 'call' | 'create_procedure';
 export type Url = string | null;
 export type Handler = string | null;
+export type Before = string | null;
+export type After = string | null;
 export type Buttons = ButtonSpec[];
 export type Builtin = boolean;
 
@@ -159,10 +161,19 @@ export interface YieldSpec {
 /**
  * 工具箱裡的非積木條目（D25、§7.2）。
  *
- * 按鈕出現在該命名空間分類的最上面（Scratch 放「製作積木」的位置）。它**不是
- * 積木**：沒有輸入孔、沒有回傳值、不會出現在畫布上、不進 IR、不會被 Run
- * 執行——「開說明文件」「測一下 token 對不對」硬做成積木就是把它塞進一個不
- * 屬於它的形狀。
+ * 它**不是積木**：沒有輸入孔、沒有回傳值、不會出現在畫布上、不進 IR、不會被
+ * Run 執行——「開說明文件」「測一下 token 對不對」硬做成積木就是把它塞進一個
+ * 不屬於它的形狀。
+ *
+ * **位置由 `before` / `after` 指名**（沒寫就是分類最上面，Scratch 放「製作積木」
+ * 的位置）。它們指的是同一份 manifest 裡某顆積木的 opcode 短名——「這顆按鈕
+ * 屬於那顆積木旁邊」，而不是「第 3 個位置」：宣告的是關係，序號會在別人插一顆
+ * 積木時默默指到別的地方去。
+ *
+ * **刻意不做成一份 `toolbox:` 版面清單**，理由與 §7.2 對 `section` 的決定同一
+ * 條：那份清單要把每顆積木再列一次，於是加一顆積木要改兩個地方，漏了就不會出現
+ * 在工具箱裡——而「兩份會漂移」是這份文件反覆付過錢的東西。掛在按鈕上的一個
+ * 可選欄位不動任何人。
  */
 export interface ButtonSpec {
   id: Id1;
@@ -170,6 +181,8 @@ export interface ButtonSpec {
   action: Action;
   url?: Url;
   handler?: Handler;
+  before?: Before;
+  after?: After;
 }
 
 /** 這份檔案的入口型別。schema 的 `title` 決定了上面那個名字。 */

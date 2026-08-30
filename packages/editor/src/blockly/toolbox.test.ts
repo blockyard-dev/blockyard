@@ -83,6 +83,81 @@ describe('工具箱按鈕（D25）', () => {
   });
 });
 
+describe('按鈕的位置（§7.2 的 before / after）', () => {
+  /** 三顆積木 a b c，按鈕由 `place` 決定釘在哪。 */
+  function layout(place: Record<string, unknown>[], blocks?: Record<string, unknown>[]) {
+    const groups = groupByManifest(defineManifest({
+      manifestVersion: 1,
+      id: 'demo_anchor',
+      name: '錨點示範',
+      version: '0.1.0',
+      blocks: blocks ?? [
+        { opcode: 'a', type: 'command', text: 'a' },
+        { opcode: 'b', type: 'command', text: 'b' },
+        { opcode: 'c', type: 'command', text: 'c' },
+      ],
+      buttons: place,
+    } as unknown as Manifest));
+    return (buildToolbox(groups) as { contents: Category[] }).contents
+      .find((c) => c.name === '錨點示範')!.contents
+      .filter((entry) => entry.kind !== 'sep')
+      .map((entry) => (entry.kind === 'button' ? `[${String(entry.text)}]` : String(entry.type)));
+  }
+
+  const button = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    label: id,
+    action: 'open_url',
+    url: 'https://example.com',
+    ...extra,
+  });
+
+  it('沒寫錨點 = 分類最上面（這個欄位出現之前唯一的位置）', () => {
+    expect(layout([button('說明')])).toEqual([
+      '[說明]', 'demo_anchor.a', 'demo_anchor.b', 'demo_anchor.c',
+    ]);
+  });
+
+  it('before 指名的積木前面——積木、按鈕、按鈕、積木', () => {
+    // 使用者要的排版：兩顆按鈕夾在兩顆積木中間，順序照宣告。
+    expect(layout([button('測試', { before: 'b' }), button('說明', { before: 'b' })])).toEqual([
+      'demo_anchor.a', '[測試]', '[說明]', 'demo_anchor.b', 'demo_anchor.c',
+    ]);
+  });
+
+  it('after 指名的積木後面——最後一顆積木底下也放得了', () => {
+    expect(layout([button('說明', { after: 'c' })])).toEqual([
+      'demo_anchor.a', 'demo_anchor.b', 'demo_anchor.c', '[說明]',
+    ]);
+  });
+
+  it('錨點指到不上架的積木時退回最上面，不是消失', () => {
+    // 載入期已經擋掉這種宣告（`manifest.py`），這裡是防守：一顆畫不出來的按鈕
+    // 不該讓整個分類少一個條目。
+    const contents = layout([button('說明', { before: 'gone' })]);
+    expect(contents[0]).toBe('[說明]');
+  });
+
+  it('before 的按鈕在分段標題**底下**——它屬於這一段，不是上一段的尾巴', () => {
+    const groups = groupByManifest(defineManifest({
+      manifestVersion: 1,
+      id: 'demo_anchor_section',
+      name: '錨點分段',
+      version: '0.1.0',
+      blocks: [
+        { opcode: 'a', type: 'command', text: 'a' },
+        { opcode: 'b', type: 'command', text: 'b', section: '第二段' },
+      ],
+      buttons: [{ ...button('測試'), before: 'b' }],
+    } as unknown as Manifest));
+    const kinds = (buildToolbox(groups) as { contents: Category[] }).contents
+      .find((c) => c.name === '錨點分段')!.contents
+      .map((entry) => entry.kind);
+
+    expect(kinds).toEqual(['block', 'sep', 'label', 'sep', 'button', 'block']);
+  });
+});
+
 describe('分段與間隔（§8.1）', () => {
   it('每顆積木都帶同一個間隔', () => {
     const toolbox = buildProjectToolbox(registration, []);

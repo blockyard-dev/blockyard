@@ -11,6 +11,18 @@
 
 ## 0.0 變更摘要
 
+### v0.19
+
+**工具箱按鈕可以排在積木之間了**（`buttons[].before` / `after`）。原本按鈕一律在分類
+最上面，而「這顆按鈕屬於這一段積木」說不出口——`http` 的狀態碼說明該貼著完整版
+`request` 那顆積木，不是貼著分類標題。
+
+| 類別 | 變更 | 章節 |
+|---|---|---|
+| **新增** | `buttons[].before` / `after`：指名一顆積木的 opcode，按鈕就排在它前／後。兩個都不寫 = 分類最上面（既有 manifest 一份都不用改）。同一顆積木上釘兩顆按鈕依宣告順序，所以「積木、按鈕、按鈕、積木」寫得出來 | §7.2 |
+| **決定** | **不做 `toolbox:` 版面清單**：那份清單要把每顆積木再列一次，加一顆積木要改兩個地方、漏了就不見——與 §7.2 拒絕「`blocks` 裡的哨兵條目」同一條理由 | §7.2 |
+| **載入期** | 錨點必須指到一顆存在、而且會上架的積木（`deprecated` / `dynamic` 的擋掉）；`before` 與 `after` 只能寫一個 | §7.2 |
+
 ### v0.18
 
 **P1 開工：第一個手寫積木包 `http`，以及它逼出來的三件事。** 三個包裡它排第一，
@@ -1329,8 +1341,9 @@ buttons:                                # 工具箱裡的非積木條目（D25�
 設定。把它們做成積木是把它們塞進一個不屬於它們的形狀——它會出現在畫布上、會被
 存進 IR、會被 Run 執行，三件都不對。所以工具箱多一種條目。
 
-按鈕出現在**該命名空間分類的最上面**（Scratch 放「製作積木」的位置）。動作只有
-兩種，而且**這個字彙表要在開放的同時就封頂**（D25）：
+按鈕的**位置由 `before` / `after` 指名一顆積木**，沒寫就是分類最上面（Scratch 放
+「製作積木」的位置）——見下一節。動作只有四種，而且**這個字彙表要在開放的同時就
+封頂**（D25）：
 
 | `action` | 誰執行 | 宣告 | 說明 |
 |---|---|---|---|
@@ -1345,6 +1358,43 @@ buttons:                                # 工具箱裡的非積木條目（D25�
 
 按鈕**不需要 permission**：`open_url` 不執行任何東西，而 `call` 的 handler 受的是
 與積木同一套 `permissions` 約束（它就住在同一個 `main.py` 裡）。
+
+#### 按鈕的位置：`before` / `after`（v0.19）
+
+```yaml
+blocks:
+  - opcode: get
+  - opcode: post
+  - opcode: request
+  - opcode: url_encode
+    section: 工具
+
+buttons:
+  - id: status_codes
+    label: "方法與狀態碼說明"
+    action: open_url
+    url: "https://…"
+    before: request        # 釘在這顆積木前面
+```
+
+畫出來是 `GET` / `POST` / **[方法與狀態碼說明]** / `完整版 request` / ── 工具 ──
+/ `編成網址片段`。兩顆按鈕釘在同一顆積木上時依 `buttons` 的宣告順序，所以
+「積木、按鈕、按鈕、積木」寫得出來。
+
+三條規則：
+
+- **指的是關係，不是序號。** `before: request` 說的是「這顆按鈕屬於那顆積木旁邊」；
+  寫成「第 3 個位置」的話，別人插一顆積木它就默默指到別的地方去了。
+- **`before: X` 在 X 的分段標題之下**（緊貼 X）。分段的語意是「從這顆起是新的一段」，
+  而指名 X 的按鈕屬於那一段——排到標題上面等於把它掛在上一段的尾巴。
+- **錨點要指到一顆真的、而且會上架的積木**，載入期擋。指到不存在的 opcode 是打錯字，
+  指到 `deprecated` / `dynamic` 的積木則是「宣告寫得下去、但畫出來不是那樣」——與
+  §7.2 的 `section` 那兩條載入期規則同一族。前端另有一層防守（退回最上面），因為
+  一顆畫不出來的按鈕不該讓整個分類少一個條目。
+
+**刻意不做成一份 `toolbox:` 版面清單。** 那份清單要把每顆積木再列一次，於是加一顆
+積木要改兩個地方、漏了就不會出現在工具箱裡——與 §7.2 拒絕「`blocks` 裡的哨兵條目」
+同一條理由，而那一次的結論也是同一句：**掛在宣告上的一個可選欄位不動任何人**。
 
 `open_url` 的 URL **只收 `http(s)`，而且擋在載入期**。前端拿到那個字串是要交給
 瀏覽器開的，所以一個 `javascript:` 就是「積木包在編輯器裡執行任意程式碼」——正是
@@ -2076,7 +2126,7 @@ blocky/
 | 改了 | 要做什麼 | 不做的症狀 |
 |---|---|---|
 | 內建 manifest（`builtins/*.yaml`）、`blocky/__init__.py`、SDK | **重啟後端**。`declarations` 在 import 期讀 YAML，`_SDK` 也是 import 期的常數 | 「積木長得跟改之前一樣」；或積木包 `ImportError: cannot import name …` |
-| IR 的 pydantic 模型（`ir/schema.py`） | **重啟後端**，而且順序是 `schema.py` → `tools/export_schema.py` → `npm run gen:types` → 重啟 | 更兇：`Strict` 是 `extra="forbid"`，前端一送出新欄位就是 **422「Extra inputs are not permitted」**，存檔整個失敗 |
+| IR **或 manifest** 的 pydantic 模型（`ir/schema.py`、`extensions/manifest.py`） | **重啟後端**，而且順序是模型 → `tools/export_schema.py` → `npm run gen:types` → 重啟 | 更兇：`Strict` 是 `extra="forbid"`。IR 那邊是前端一送出新欄位就 **422「Extra inputs are not permitted」**，存檔整個失敗；manifest 那邊是 `GET /api/extensions` **500**，整個編輯器變成「連不上後端」 |
 | 註冊給 Blockly 的類別（`FieldText` 等） | **重新整理瀏覽器**。vite 的 Fast Refresh 收得下 `App.tsx`，但 Blockly 的 field 註冊表裡放的仍然是舊的那個類別 | 「CSS 生效了、行為沒變」 |
 
 第三方積木包的 `manifest.yaml` **不必**重啟——`discover()` 每次請求都重掃，重新整理

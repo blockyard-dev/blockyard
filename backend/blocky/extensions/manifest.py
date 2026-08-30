@@ -183,10 +183,19 @@ class ArgSpec(Strict):
 class ButtonSpec(Strict):
     """工具箱裡的非積木條目（D25、§7.2）。
 
-    按鈕出現在該命名空間分類的最上面（Scratch 放「製作積木」的位置）。它**不是
-    積木**：沒有輸入孔、沒有回傳值、不會出現在畫布上、不進 IR、不會被 Run
-    執行——「開說明文件」「測一下 token 對不對」硬做成積木就是把它塞進一個不
-    屬於它的形狀。
+    它**不是積木**：沒有輸入孔、沒有回傳值、不會出現在畫布上、不進 IR、不會被
+    Run 執行——「開說明文件」「測一下 token 對不對」硬做成積木就是把它塞進一個
+    不屬於它的形狀。
+
+    **位置由 `before` / `after` 指名**（沒寫就是分類最上面，Scratch 放「製作積木」
+    的位置）。它們指的是同一份 manifest 裡某顆積木的 opcode 短名——「這顆按鈕
+    屬於那顆積木旁邊」，而不是「第 3 個位置」：宣告的是關係，序號會在別人插一顆
+    積木時默默指到別的地方去。
+
+    **刻意不做成一份 `toolbox:` 版面清單**，理由與 §7.2 對 `section` 的決定同一
+    條：那份清單要把每顆積木再列一次，於是加一顆積木要改兩個地方，漏了就不會出現
+    在工具箱裡——而「兩份會漂移」是這份文件反覆付過錢的東西。掛在按鈕上的一個
+    可選欄位不動任何人。
     """
 
     id: str
@@ -194,6 +203,9 @@ class ButtonSpec(Strict):
     action: ButtonAction
     url: str | None = None      # open_url 專用
     handler: str | None = None  # call 專用：main.py 裡 @button 的名字
+    # 版面錨點（§7.2）。兩個都不寫 = 分類最上面。
+    before: str | None = None   # 排在這顆 opcode 的積木前面
+    after: str | None = None    # 排在這顆 opcode 的積木後面
 
     @field_validator("id")
     @classmethod
@@ -217,7 +229,19 @@ class ButtonSpec(Strict):
                 raise ValueError("call 按鈕必須宣告 handler（main.py 的 @button 名稱）")
         elif self.handler:
             raise ValueError(f"只有 call 按鈕能宣告 handler：{self.id}")
+
+        if self.before and self.after:
+            raise ValueError(f"按鈕 {self.id}：before 與 after 只能寫一個")
         return self
+
+    @property
+    def anchor(self) -> tuple[str, str] | None:
+        """(`before` | `after`, opcode 短名)，沒有錨點時回 None。"""
+        if self.before:
+            return ("before", self.before)
+        if self.after:
+            return ("after", self.after)
+        return None
 
 
 class YieldSpec(Strict):
@@ -384,6 +408,22 @@ class Manifest(Strict):
             if b.id in ids:
                 raise ValueError(f"按鈕 id 重複：{b.id}")
             ids.add(b.id)
+
+        # 錨點指到的積木要真的存在、而且**看得見**。指到一顆不上架的積木
+        # （`deprecated` / `dynamic`）不會壞掉，只會讓按鈕默默跑回最上面——
+        # 而「宣告寫得下去、但畫出來不是那樣」正是 §7.2 那兩條載入期規則要擋的。
+        for b in self.buttons:
+            anchor = b.anchor
+            if anchor is None:
+                continue
+            field, opcode = anchor
+            spec = next((x for x in self.blocks if x.opcode == opcode), None)
+            if spec is None:
+                raise ValueError(f"按鈕 {b.id} 的 {field} 指到不存在的 opcode：{opcode}")
+            if spec.deprecated or spec.dynamic:
+                raise ValueError(
+                    f"按鈕 {b.id} 的 {field} 指到 {opcode}，而它不會出現在工具箱裡"
+                )
 
         keys: set[str] = set()
         for c in self.config:

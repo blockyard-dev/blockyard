@@ -13,7 +13,7 @@ export interface ToolboxGroup {
   colour: string;
   builtin: boolean;
   blocks: RegisteredBlock[];
-  /** 分類最上面的非積木條目（D25）。 */
+  /** 非積木條目（D25）。位置由 `before` / `after` 指名，見 `categoryEntries`。 */
   buttons: ButtonSpec[];
 }
 
@@ -86,20 +86,7 @@ export function buildToolbox(groups: ToolboxGroup[]): Record<string, unknown> {
         name: group.name,
         colour: group.colour,
         cssConfig: { container: 'blocky-category' },
-        contents: [
-          // 按鈕在分類**最上面**（Scratch 放「製作積木」的位置）。它不是積木：
-          // 沒有輸入孔、沒有回傳值、不會出現在畫布上（D25）。
-          ...group.buttons.map((button) => ({
-            kind: 'button',
-            text: button.label,
-            callbackKey: buttonCallbackKey(group.id, button.id),
-            // Blockly 把 `web-class` 原封不動放到那個 `<g>` 上
-            // （`FlyoutButton` 的 `this.cssClass`）。這是**唯一**能對按鈕下
-            // 樣式的掛勾——它畫的三個 SVG 元素都沒有我們認得的 class。
-            'web-class': 'blocky-flyout-button',
-          })),
-          ...blockEntries(group.blocks.filter((block) => !block.spec.deprecated)),
-        ],
+        contents: categoryEntries(group),
       }))
       .filter((category) => category.contents.length > 0),
   };
@@ -125,6 +112,59 @@ const SECTION_GAP = 40;
 const LABEL_GAP = 8;
 
 /**
+ * 一個分類的全部條目：積木與按鈕交錯（§7.2、D25）。
+ *
+ * 按鈕的位置由 manifest 的 `before` / `after` 指名一顆積木，沒寫的排在最上面
+ * （Scratch 放「製作積木」的位置，也是這個欄位出現之前唯一的位置）。
+ *
+ * **`before: X` 是「緊貼在 X 上面」，在 X 的分段標題之下**：分段是「從這顆起是
+ * 新的一段」，而指名 X 的按鈕屬於那一段——排到標題上面等於把它掛在上一段的尾巴。
+ *
+ * 錨點指到一顆不上架的積木（`deprecated` / `dynamic`）時退回最上面。載入期已經
+ * 擋掉這種宣告（`manifest.py`），這裡是防守：畫不出來的宣告不該讓整個分類消失。
+ */
+function categoryEntries(group: ToolboxGroup): Record<string, unknown>[] {
+  const blocks = group.blocks.filter((block) => !block.spec.deprecated);
+  const visible = new Set(blocks.map((block) => block.spec.opcode));
+
+  const before = new Map<string, ButtonSpec[]>();
+  const after = new Map<string, ButtonSpec[]>();
+  const top: ButtonSpec[] = [];
+  for (const button of group.buttons) {
+    const anchor = button.before ?? button.after;
+    if (!anchor || !visible.has(anchor)) {
+      top.push(button);
+      continue;
+    }
+    // 同一顆積木上釘兩顆按鈕：依 manifest 的宣告順序。
+    const bucket = button.before ? before : after;
+    bucket.set(anchor, [...(bucket.get(anchor) ?? []), button]);
+  }
+
+  const asEntry = (button: ButtonSpec) => ({
+    kind: 'button',
+    text: button.label,
+    callbackKey: buttonCallbackKey(group.id, button.id),
+    // Blockly 把 `web-class` 原封不動放到那個 `<g>` 上（`FlyoutButton` 的
+    // `this.cssClass`）。這是**唯一**能對按鈕下樣式的掛勾——它畫的三個 SVG
+    // 元素都沒有我們認得的 class。
+    'web-class': 'blocky-flyout-button',
+  });
+
+  return blockEntries(blocks, {
+    top: top.map(asEntry),
+    before: (opcode) => (before.get(opcode) ?? []).map(asEntry),
+    after: (opcode) => (after.get(opcode) ?? []).map(asEntry),
+  });
+}
+
+interface ButtonPlacement {
+  top: Record<string, unknown>[];
+  before(opcode: string): Record<string, unknown>[];
+  after(opcode: string): Record<string, unknown>[];
+}
+
+/**
  * 把 `section` 宣告展開成 Blockly 的條目（§8.1）。
  *
  * 相鄰的兩個 sep 由 Blockly 的 `normalizeSeparators` 收成一個，而它 `splice` 掉的
@@ -134,10 +174,13 @@ const LABEL_GAP = 8;
  *
  * 分類的第一顆不插 sep——分類標題本身已經是斷點。
  */
-function blockEntries(blocks: RegisteredBlock[]): Record<string, unknown>[] {
-  const entries: Record<string, unknown>[] = [];
+function blockEntries(
+  blocks: RegisteredBlock[],
+  buttons: ButtonPlacement,
+): Record<string, unknown>[] {
+  const entries: Record<string, unknown>[] = [...buttons.top];
   for (const block of blocks) {
-    const { section } = block.spec;
+    const { section, opcode } = block.spec;
     if (section && entries.length > 0) entries.push({ kind: 'sep', gap: SECTION_GAP });
     if (typeof section === 'string') {
       entries.push(
@@ -148,7 +191,7 @@ function blockEntries(blocks: RegisteredBlock[]): Record<string, unknown>[] {
         { kind: 'sep', gap: LABEL_GAP },
       );
     }
-    entries.push(toToolboxBlock(block));
+    entries.push(...buttons.before(opcode), toToolboxBlock(block), ...buttons.after(opcode));
   }
   return entries;
 }

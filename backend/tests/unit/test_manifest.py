@@ -384,6 +384,66 @@ def test_duplicate_button_id() -> None:
     bad(mf(buttons=[b, dict(b)]), "按鈕 id 重複")
 
 
+# ---- 按鈕的位置（§7.2 的 before / after）----
+
+ONE_BLOCK = [{"opcode": "go", "type": "command", "text": "go"}]
+
+
+def test_button_anchor_points_at_a_block() -> None:
+    m = parse_manifest(
+        mf(
+            blocks=ONE_BLOCK,
+            buttons=[{"id": "t", "label": "測試", "action": "open_config", "before": "go"}],
+        ),
+        where="test",
+    )
+    assert m.buttons[0].anchor == ("before", "go")
+
+
+def test_button_without_an_anchor_has_none() -> None:
+    """沒寫 = 分類最上面（這個欄位出現之前唯一的位置）。既有 manifest 不用改。"""
+    m = parse_manifest(
+        mf(buttons=[{"id": "t", "label": "測試", "action": "open_config"}]),
+        where="test",
+    )
+    assert m.buttons[0].anchor is None
+
+
+def test_button_cannot_be_before_and_after() -> None:
+    bad(
+        mf(
+            blocks=ONE_BLOCK,
+            buttons=[{
+                "id": "t", "label": "測試", "action": "open_config",
+                "before": "go", "after": "go",
+            }],
+        ),
+        "只能寫一個",
+    )
+
+
+def test_button_anchor_must_exist() -> None:
+    """指到不存在的 opcode 是打錯字，而症狀是「按鈕跑回最上面」——很難查。"""
+    bad(
+        mf(
+            blocks=ONE_BLOCK,
+            buttons=[{"id": "t", "label": "測試", "action": "open_config", "before": "nope"}],
+        ),
+        "不存在的 opcode",
+    )
+
+
+def test_button_anchor_must_be_visible_in_the_toolbox() -> None:
+    """指到一顆不上架的積木：宣告寫得下去，但畫出來不是那樣（§7.2 的兩條規則）。"""
+    bad(
+        mf(
+            blocks=[{"opcode": "go", "type": "command", "text": "go", "deprecated": True}],
+            buttons=[{"id": "t", "label": "測試", "action": "open_config", "after": "go"}],
+        ),
+        "不會出現在工具箱裡",
+    )
+
+
 def test_packs_cannot_open_the_editors_own_dialogs() -> None:
     """`create_procedure` 開的是編輯器自己的對話框（§8.5），不屬於任何積木包。
 

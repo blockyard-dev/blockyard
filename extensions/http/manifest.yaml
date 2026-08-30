@@ -56,7 +56,10 @@ blocks:
       text: { type: string, default: "你好 世界" }
 
 buttons:
+  # 釘在完整版那顆積木**前面**（§7.2 的 before）：要決定 method、要看懂
+  # `${r.status}` 的那一刻就在這裡，而不是在分類的最上面。
   - id: status_codes
-    label: "狀態碼說明"
+    label: "方法與狀態碼說明"
     action: open_url
     url: "https://developer.mozilla.org/zh-TW/docs/Web/HTTP/Status"
+    before: request

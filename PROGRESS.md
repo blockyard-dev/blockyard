@@ -57,6 +57,9 @@ cd packages/editor && npm run check           # 343 passed（13 檔）+ tsc 乾�
   會怎樣**沒有驗過**——後端已經會給 `unknown_block`，前端那一半是空的。
 - **積木包自帶的 `tests/` 靠 `testpaths = ["tests", "../extensions"]` 收**。包來自
   repo 外面時這條就不成立了。
+- **一個包的 manifest 壞掉，整個 `GET /api/extensions` 就 500**，編輯器變成「連不上
+  後端」。`discover()` 一份讀不過就整批拋——與 §13.3「不要因為一個包毀掉整份專案」
+  同一個形狀，但目前只有專案那一半有守。
 - **`reads` 宣告沒有消費者**（`toolbox.ts::findVariableReader` 與後端欄位都留著）。
   下次動那塊時重新決定留或刪。
 
