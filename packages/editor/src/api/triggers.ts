@@ -33,6 +33,18 @@ export interface WebhookUrl {
   path: string;
   /** `/hooks/{32位隨機}/{path}`。前面接上這台後端的來源就是完整網址。 */
   url: string;
+  /** 是哪一顆積木。簽章密鑰以它為 key（§16 Q22 決議 (a)）。 */
+  blockId: string;
+  /** `none` / `hmac_sha256` / `hmac_sha1`。 */
+  verify: string;
+  /**
+   * 密鑰設了沒有。**只有 `verify !== 'none'` 時才有這一欄**——密鑰本身永遠不
+   * 出來（D28），這裡只說有沒有。
+   *
+   * `false` 代表那顆積木現在**擋掉每一則請求**，不是退回不驗：宣告要驗卻驗不
+   * 了，正確答案不是放行（見 `runs/triggers.py` 的 `_signature_ok`）。
+   */
+  secretSet?: boolean;
 }
 
 /** 標記 active 並接上。已經 active 就重新同步一次，不是 409。 */
@@ -57,6 +69,37 @@ export async function fetchTriggerState(projectId: string): Promise<TriggerSumma
   const res = await fetch(`/api/triggers/${encodeURIComponent(projectId)}`);
   if (!res.ok) throw await toApiError(res, `GET /api/triggers/${projectId} → ${res.status}`);
   return (await res.json()) as TriggerSummary;
+}
+
+/**
+ * 設定一顆 webhook 積木的簽章密鑰（§9.3、§16 Q22 決議 (a)）。
+ *
+ * **明文只往這個方向走**，讀不回來——同 D28 的金鑰面板。而且它不進 IR，所以
+ * 分享出去的專案在對方機器上會驗不過：那是對的，但要在畫面上說出來。
+ */
+export async function setWebhookSecret(
+  projectId: string,
+  blockId: string,
+  secret: string,
+): Promise<void> {
+  const res = await fetch(
+    `/api/triggers/${encodeURIComponent(projectId)}/secret/${encodeURIComponent(blockId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret }),
+    },
+  );
+  if (!res.ok) throw await toApiError(res, `PUT webhook secret → ${res.status}`);
+}
+
+/** 拿掉密鑰。**拿掉之後那顆積木會擋掉每一則請求**，不是回歸「不驗」。 */
+export async function clearWebhookSecret(projectId: string, blockId: string): Promise<void> {
+  const res = await fetch(
+    `/api/triggers/${encodeURIComponent(projectId)}/secret/${encodeURIComponent(blockId)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) throw await toApiError(res, `DELETE webhook secret → ${res.status}`);
 }
 
 export async function listActiveProjects(): Promise<TriggerSummary[]> {

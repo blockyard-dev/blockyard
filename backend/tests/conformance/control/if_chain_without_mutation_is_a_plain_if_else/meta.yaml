@@ -1,0 +1,9 @@
+title: 沒有 mutation 的 if_else 行為完全不變（向下相容）
+spec: §16 Q19 可重複參數群組
+tags:
+- if_chain
+- repeat
+expect:
+  status: ok
+  logs:
+  - 走到 else

@@ -1,0 +1,13 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3", "value": false}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5", "value": false}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "走到 else", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

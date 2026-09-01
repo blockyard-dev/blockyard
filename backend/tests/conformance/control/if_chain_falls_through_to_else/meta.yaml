@@ -1,0 +1,9 @@
+title: 所有 elif 都不成立時走 else
+spec: §16 Q19 可重複參數群組
+tags:
+- if_chain
+- repeat
+expect:
+  status: ok
+  logs:
+  - 走到 else

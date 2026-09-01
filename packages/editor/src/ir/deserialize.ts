@@ -11,6 +11,7 @@
  * `blockId` 要標紅哪一顆，都是同一個 id，不需要一張對照表。
  */
 import * as Blockly from 'blockly/core';
+import { REPEAT_KEY, argSpecOf } from '../blockly/repeat';
 import {
   BOOLEAN_FALSE,
   BOOLEAN_TRUE,
@@ -105,6 +106,12 @@ function buildBlockState(id: string, project: ProjectIR, ctx: ConversionContext)
   const type = blocklyTypeOf(block);
   const state: BlockState = { type, id };
 
+  // §16 Q19：**份數要在孔之前**。`loadExtraState` 會把那些孔建出來，而
+  // Blockly 的 `append` 對一個不存在的孔會拋「missing a(n) X connection」——
+  // 順序反過來的話，一份存得好好的專案會打不開。
+  const repeat = block.mutation?.[REPEAT_KEY];
+  if (typeof repeat === 'number' && repeat > 0) state.extraState = { [REPEAT_KEY]: repeat };
+
   const fields = buildFields(block, type, ctx);
   if (fields) state.fields = fields;
 
@@ -182,7 +189,7 @@ function buildFields(
   for (const key of Object.keys(raw)) {
     if (isProcBlock && key === 'proc') continue;
     const value = raw[key];
-    const argType = registered?.spec.args?.[key]?.type;
+    const argType = argSpecOf(registered?.spec, key)?.type;
     out[key] = argType === 'boolean' ? (value ? 'TRUE' : 'FALSE') : value;
   }
 

@@ -14,11 +14,16 @@
  * 單專案模式（`PROJECT_ID` 固定）：專案列表、切換專案是之後的事。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Ear, Pause, Play, Square } from 'lucide-react';
+import { Ear, History, Link2, Pause, Play, Square } from 'lucide-react';
 import * as Blockly from 'blockly/core';
 import { ApiError, fetchExtensions, fetchProject, saveProject } from './api/client';
 import { RunSocket, listRuns, startRun, stopRun } from './api/runs';
-import { activateProject, deactivateProject } from './api/triggers';
+import {
+  activateProject,
+  deactivateProject,
+  fetchTriggerState,
+  type WebhookUrl,
+} from './api/triggers';
 import type { RunSummary } from './api/runs';
 import { buildProjectToolbox, registerManifests, type Registration } from './blockly/setup';
 import {
@@ -44,6 +49,8 @@ import { ExtensionsEntry } from './components/ExtensionsEntry';
 import { KeysEntry } from './components/KeysPanel';
 import { RunBubbles } from './components/RunBubbles';
 import { FlyoutResizer } from './components/FlyoutResizer';
+import { WebhookPanel } from './components/WebhookPanel';
+import { HistoryPanel } from './components/HistoryPanel';
 import { RunPanel } from './components/RunPanel';
 import { WorkspaceView } from './components/WorkspaceView';
 import type { ButtonSpec } from './types/manifest';
@@ -236,7 +243,11 @@ export function App() {
     on: boolean;
     hats: string[];
     message?: string;
-  }>({ on: false, hats: [] });
+    /** §9.3：掛上去之後才存在的網址。沒在跑就沒有位址可以給。 */
+    webhooks: WebhookUrl[];
+  }>({ on: false, hats: [], webhooks: [] });
+  const [hooksOpen, setHooksOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   /**
    * 接上一個 Run 的事件流。
@@ -265,7 +276,7 @@ export function App() {
     // 不先存的話，使用者剛拉出來的那顆 hat 後端根本看不到，而症狀是「按了監聽
     // 但它說沒有 hat」。
     if (!(await save())) {
-      setListening({ on: false, hats: [], message: '存檔沒過，沒有東西可以聽' });
+      setListening({ on: false, hats: [], webhooks: [], message: '存檔沒過，沒有東西可以聽' });
       return;
     }
     try {
@@ -273,16 +284,24 @@ export function App() {
       setListening({
         on: true,
         hats: state.hats,
+        webhooks: state.webhooks ?? [],
         message: state.hats.length === 0 ? '畫布上沒有事件積木' : undefined,
       });
     } catch (error: unknown) {
-      setListening({ on: false, hats: [], message: describe(error) });
+      setListening({ on: false, hats: [], webhooks: [], message: describe(error) });
     }
   }, [save]);
 
   const endListening = useCallback(async () => {
-    setListening({ on: false, hats: [] });
+    setListening({ on: false, hats: [], webhooks: [] });
+    setHooksOpen(false);
     await deactivateProject(PROJECT_ID).catch(() => {});
+  }, []);
+
+  /** 設完密鑰之後重讀狀態——`secretSet` 是後端算的，前端猜不得。 */
+  const refreshHooks = useCallback(async () => {
+    const state = await fetchTriggerState(PROJECT_ID).catch(() => null);
+    if (state) setListening((prev) => ({ ...prev, webhooks: state.webhooks ?? [] }));
   }, []);
 
   /**
@@ -628,10 +647,37 @@ export function App() {
                 聽著 {listening.hats.length} 顆事件積木
               </span>
             )}
+            {listening.on && listening.webhooks.length > 0 && (
+              // 網址不直接攤在工具列上：它是一串 32 位亂碼加路徑，擺出來只會
+              // 把整條工具列撐開，而使用者要的是「複製它」而不是「讀它」。
+              <button type="button" className="button" onClick={() => setHooksOpen(true)}>
+                <Link2 size={13} strokeWidth={2.5} /> Webhook 網址
+                <span className="keys-count">{listening.webhooks.length}</span>
+              </button>
+            )}
             {listening.message && (
               <span className="listen-status listen-status-idle">{listening.message}</span>
             )}
+
+            {/* 執行紀錄跟「執行／監聽」分開：那兩顆是「讓它跑」，這顆是
+                「回頭看它跑過什麼」——而後者在沒有東西在跑的時候也要進得去
+                （§6.3 的整個用意就是跨 Run、跨重啟）。 */}
+            <span className="actions-divider" aria-hidden="true" />
+            <button type="button" className="button" onClick={() => setHistoryOpen(true)}>
+              <History size={13} strokeWidth={2.5} /> 執行紀錄
+            </button>
           </div>
+        )}
+        {historyOpen && (
+          <HistoryPanel projectId={PROJECT_ID} onClose={() => setHistoryOpen(false)} />
+        )}
+        {hooksOpen && (
+          <WebhookPanel
+            projectId={PROJECT_ID}
+            webhooks={listening.webhooks}
+            onClose={() => setHooksOpen(false)}
+            onChanged={() => void refreshHooks()}
+          />
         )}
         {/* 右上角的全域入口（D28）：不綁定某個專案，載入中／出錯時也該進得去。 */}
         <KeysEntry />

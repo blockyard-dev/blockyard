@@ -19,6 +19,7 @@
  * 每一步，錯誤卻指著積木。
  */
 import * as Blockly from 'blockly/core';
+import { REPEAT_KEY, argSpecOf } from '../blockly/repeat';
 import { BOOLEAN_TRUE, SHADOW_FIELD, shadowKindOf, type RegisteredBlock } from '../blockly/define';
 import { FieldText } from '../blockly/fields/FieldText';
 import {
@@ -210,14 +211,29 @@ function flattenBlock(
     fields,
     // 參數以 **id** 記，不是名字：改一次參數名不該讓函式體裡那幾顆積木失聯
     // （`procedures[].params` 是名字的唯一來源）。
+    // §16 Q19：可重複群組的份數。`saveExtraState` 在 0 份時回 null，所以
+    // **沒按過 `+` 的積木存出來與以前一模一樣**——round-trip 等價（§4.1）沒有
+    // 因為這次改版而破掉。
     mutation:
       paramRef != null
         ? { proc: paramRef.procId, param: paramRef.paramId }
         : procId != null && isCallType(state.type)
           ? { proc: procId }
-          : null,
+          : repeatMutationOf(state),
     ui: readUi(workspace, id),
   };
+}
+
+/**
+ * Blockly 的 `extraState` → IR 的 `mutation`（§16 Q19）。
+ *
+ * 只認得份數那一個 key。`extraState` 是 Blockly 的通用出口，將來有別的東西也
+ * 走那裡；這裡**明確只挑出來一個**，而不是整包倒進 `mutation`——後者會讓
+ * Blockly 內部的欄位悄悄變成 IR 的一部分，而 IR 是要能手寫的（D1）。
+ */
+function repeatMutationOf(state: BlockState): Record<string, unknown> | null {
+  const raw = (state.extraState as Record<string, unknown> | undefined)?.[REPEAT_KEY];
+  return typeof raw === 'number' && raw > 0 ? { [REPEAT_KEY]: raw } : null;
 }
 
 /**
@@ -263,7 +279,7 @@ function readFields(state: BlockState, registered: RegisteredBlock | undefined):
   const raw = state.fields ?? {};
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {
-    const argType = registered?.spec.args?.[key]?.type;
+    const argType = argSpecOf(registered?.spec, key)?.type;
     out[key] = argType === 'boolean' ? value === 'TRUE' || value === true : value;
   }
   return out;
@@ -282,7 +298,7 @@ function readInputs(
 
   for (const [name, conn] of Object.entries(raw)) {
     if (conn.block) {
-      const isStack = registered?.spec.args?.[name]?.type === 'stack';
+      const isStack = argSpecOf(registered?.spec, name)?.type === 'stack';
       result[name] = isStack
         ? { kind: 'stack', id: conn.block.id! }
         : { kind: 'block', id: conn.block.id! };
@@ -322,7 +338,7 @@ function readShadowValue(
   }
 
   const text = String(raw ?? '');
-  const arg = registered?.spec.args?.[name];
+  const arg = argSpecOf(registered?.spec, name);
   const interpolate = arg ? (arg.interpolate ?? arg.type !== 'code') : true;
 
   if (interpolate && hasInterpolation(text)) {

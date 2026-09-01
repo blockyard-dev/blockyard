@@ -62,8 +62,12 @@ export type Name1 = string;
 export type Type3 = string;
 export type Yields = YieldSpec[];
 export type Concurrency = ('drop' | 'queue' | 'restart' | 'parallel') | null;
-export type Button = string;
 export type Label3 = string;
+export type Min1 = number;
+export type Max1 = number;
+export type Before = string | null;
+export type Button = string;
+export type Label4 = string;
 export type Action = 'open_url' | 'open_config' | 'call' | 'create_procedure';
 export type Url = string | null;
 export type Handler = string | null;
@@ -115,6 +119,7 @@ export interface BlockSpec {
   terminal?: Terminal;
   yields?: Yields;
   concurrency?: Concurrency;
+  repeat?: RepeatSpec | null;
 }
 export interface Args {
   [k: string]: ArgSpec;
@@ -158,6 +163,33 @@ export interface YieldSpec {
   type?: Type3;
 }
 /**
+ * 一組**可以重複**的參數（§16 Q19）。
+ *
+ * 在這個宣告出現之前，一顆積木的形狀完全由 manifest 決定，而 manifest 是靜態
+ * 的——`args` 是一個固定的 dict（D21：內建與積木包同一條路）。可重複群組是這
+ * 條規則的第一個例外，所以它刻意收得很窄：
+ *
+ * - **一顆積木最多一個 `repeat`。** 兩組可重複的東西要兩排 `+` `−`，而「這顆
+ *   `+` 加的是哪一組」在畫面上沒有便宜的答案。真的需要的話那是下一次的題目。
+ * - **群組裡不能再有群組。** 同上，而且巢狀的計數要進 IR 兩層。
+ * - **形狀不變。** 重複的是參數，不是積木的類型：一顆 command 按幾次 `+` 還是
+ *   command。所以 D20 的形狀驗證一行都不用改。
+ *
+ * 展開後的參數名是 `<參數名>_<n>`，n 從 1 開始（見 `BlockSpec.repeat_arg_name`）。
+ * 份數存在 IR 的 `mutation` 裡（`{"repeat": n}`），**不動頂層形狀**——那是
+ * `procedure.call` 已經在用的地方。
+ */
+export interface RepeatSpec {
+  args: Args1;
+  label: Label3;
+  min?: Min1;
+  max?: Max1;
+  before?: Before;
+}
+export interface Args1 {
+  [k: string]: ArgSpec;
+}
+/**
  * 工具箱裡的非積木條目（D25、§7.2）。
  *
  * 它**不是積木**：沒有輸入孔、沒有回傳值、不會出現在畫布上、不進 IR、不會被
@@ -169,7 +201,7 @@ export interface YieldSpec {
  */
 export interface ButtonSpec {
   button: Button;
-  label: Label3;
+  label: Label4;
   action: Action;
   url?: Url;
   handler?: Handler;

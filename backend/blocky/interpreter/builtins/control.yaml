@@ -28,6 +28,18 @@ palette:
       condition: { type: boolean, default: false }
       then: { type: stack }
       else: { type: stack }
+    # §16 Q19 的第一個消費者：積木右下角的 `+` `−` 長出「否則如果」。
+    #
+    # 沒有它，`如果⋯否則如果⋯否則` 只能靠巢狀——而三層之後那個縮排在
+    # Scratch 的視覺文法裡就已經讀不動了（這是 Scratch 本身最常被抱怨的一點）。
+    repeat:
+      label: "否則如果 %(condition) 那麼"
+      # 新增的那幾份落在 `否則` 之前——宣告的順序說不出這件事，因為 `else`
+      # 是最後一格而重複的東西也在最後。
+      before: else
+      args:
+        condition: { type: boolean, default: false }
+        body: { type: stack }
 
   - section: true
   - opcode: repeat

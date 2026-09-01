@@ -114,10 +114,51 @@ export async function startRun(
  * 那個 runId，不問就不知道它存在——症狀會是「Discord 有訊息進來、後端真的跑了、
  * 而編輯器一片安靜」。
  */
-export async function listRuns(): Promise<RunSummary[]> {
-  const res = await fetch('/api/runs');
+export async function listRuns(options: {
+  projectId?: string;
+  limit?: number;
+} = {}): Promise<RunSummary[]> {
+  const q = new URLSearchParams();
+  if (options.projectId) q.set('projectId', options.projectId);
+  if (options.limit) q.set('limit', String(options.limit));
+  const res = await fetch(`/api/runs${q.toString() ? `?${q}` : ''}`);
   if (!res.ok) throw await toApiError(res, `GET /api/runs → ${res.status}`);
   return (await res.json()) as RunSummary[];
+}
+
+/** 一筆執行歷史的事件（§6.3）。`seq` 只保證遞增，**不保證連續**。 */
+export interface StoredEvent {
+  seq: number;
+  op: string;
+  [k: string]: unknown;
+}
+
+export interface RunEventsPage {
+  runId: string;
+  events: StoredEvent[];
+  /** 下一頁從哪裡開始。`null` = 沒有更多了（由後端算，前端猜不得）。 */
+  nextAfter: number | null;
+}
+
+/**
+ * 一次執行留下來的事件（§6.3 的落地，跨後端重啟存活）。
+ *
+ * **回來的是落地過的那些，不是 WebSocket 上那一串。** `block.enter/exit` 查不
+ * 到是規格不是缺陷——它們是除錯用的即時訊號，一個掛著跑三天的迴圈會寫進幾億
+ * 列。所以歷史看得到的是骨架、`log` 與 `block.error`。
+ */
+export async function fetchRunEvents(
+  runId: string,
+  options: { after?: number; limit?: number } = {},
+): Promise<RunEventsPage> {
+  const q = new URLSearchParams();
+  if (options.after) q.set('after', String(options.after));
+  if (options.limit) q.set('limit', String(options.limit));
+  const res = await fetch(
+    `/api/runs/${encodeURIComponent(runId)}/events${q.toString() ? `?${q}` : ''}`,
+  );
+  if (!res.ok) throw await toApiError(res, `GET /api/runs/${runId}/events → ${res.status}`);
+  return (await res.json()) as RunEventsPage;
 }
 
 /** §5.5 的外部停止。202 是「收到了」，不是「已經停了」——見後端那段註解。 */

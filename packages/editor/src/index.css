@@ -1388,3 +1388,218 @@ body,
 .log-action:hover {
   background: rgb(0 0 0 / 6%);
 }
+
+/* ---------------------------------------------------------------- */
+/* Webhook 網址面板（§9.3、§16 Q22）                                   */
+/* ---------------------------------------------------------------- */
+
+.hook-list {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+  max-height: 18rem;
+  overflow: auto;
+}
+
+.hook-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* 網址與狀態疊成一欄，讓它們一起被右邊的按鈕推開（同 .keys-row-main）。 */
+.hook-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1;
+}
+
+/* 網址是 32 位亂碼加路徑——**不截斷**：使用者可能要手動選取它（剪貼簿在
+   非 https 的來源上不一定給），而一個看不到全部的網址選不起來。 */
+.hook-url {
+  font-size: 0.75rem;
+  word-break: break-all;
+  color: var(--fg);
+}
+
+.hook-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex: none;
+  align-items: center;
+}
+
+.hook-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.hook-tag-ok {
+  color: var(--ok, #2e7d32);
+}
+
+/* 「宣告要驗但沒設密鑰」＝ 現在什麼都收不到。這一條必須看起來像警告，
+   否則使用者只會看到「webhook 壞了」而不知道少了什麼。 */
+.hook-tag-warn {
+  color: var(--warn, #b26a00);
+}
+
+.hook-error {
+  color: var(--danger, #c62828);
+}
+
+.hook-secret-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.hook-secret-form input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.hook-secret-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+}
+
+/* ---------------------------------------------------------------- */
+/* 執行紀錄（§6.3）                                                    */
+/* ---------------------------------------------------------------- */
+
+.history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 22rem;
+  overflow: auto;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0.35rem;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-row:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.08));
+}
+
+.history-status {
+  flex: none;
+  min-width: 3.5rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.history-status-ok {
+  color: var(--ok, #2e7d32);
+}
+
+.history-status-error {
+  color: var(--danger, #c62828);
+}
+
+/* 「中斷」是後端被砍掉時還在跑的那些——**不是使用者按的停止**，所以顏色
+   跟 cancelled 分開：一個是意外，一個是決定。 */
+.history-status-interrupted {
+  color: var(--warn, #b26a00);
+}
+
+.history-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.history-trigger {
+  font-size: 0.82rem;
+}
+
+.history-time {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.history-truncated {
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--warn, #b26a00);
+}
+
+.history-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.history-events {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  max-height: 20rem;
+  overflow: auto;
+  font-size: 0.8rem;
+}
+
+.history-event {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.history-event-op {
+  flex: none;
+  min-width: 4.5rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.history-event-body {
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.history-event-error .history-event-body {
+  color: var(--danger, #c62828);
+}
+
+.history-event-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* 骨架事件是歷史的支架，不是使用者要讀的內容。壓低但不隱藏——它是
+   「這條 thread 到底有沒有跑完」唯一的證據。 */
+.history-event-frame {
+  opacity: 0.55;
+  font-size: 0.72rem;
+}
+
+.history-log-error .history-event-body {
+  color: var(--danger, #c62828);
+}

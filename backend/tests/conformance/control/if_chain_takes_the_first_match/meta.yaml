@@ -1,0 +1,9 @@
+title: 如果⋯否則如果⋯否則：由上往下，第一個成立的就停（§16 Q19）
+spec: §16 Q19 可重複參數群組
+tags:
+- if_chain
+- repeat
+expect:
+  status: ok
+  logs:
+  - 第一個 elif

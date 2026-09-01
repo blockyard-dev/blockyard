@@ -670,6 +670,79 @@ case(
 )
 
 case(
+    "control/if_chain_takes_the_first_match",
+    "如果⋯否則如果⋯否則：由上往下，第一個成立的就停（§16 Q19）",
+    "§16 Q19 可重複參數群組",
+    one(
+        blk("control.if_else",
+            mutation={"repeat": 2},
+            condition=blk("operator.false"),
+            then=Stack([log("不該走到 then")]),
+            condition_1=blk("operator.true"),
+            body_1=Stack([log("第一個 elif")]),
+            condition_2=blk("operator.true"),
+            body_2=Stack([log("不該走到第二個 elif")]),
+            **{"else": Stack([log("不該走到 else")])}),
+    ),
+    {"status": "ok", "logs": ["第一個 elif"]},
+    tags=["if_chain", "repeat"],
+)
+
+case(
+    "control/if_chain_falls_through_to_else",
+    "所有 elif 都不成立時走 else",
+    "§16 Q19 可重複參數群組",
+    one(
+        blk("control.if_else",
+            mutation={"repeat": 1},
+            condition=blk("operator.false"),
+            then=Stack([log("不該走到 then")]),
+            condition_1=blk("operator.false"),
+            body_1=Stack([log("不該走到 elif")]),
+            **{"else": Stack([log("走到 else")])}),
+    ),
+    {"status": "ok", "logs": ["走到 else"]},
+    tags=["if_chain", "repeat"],
+)
+
+case(
+    "control/if_chain_does_not_evaluate_later_conditions",
+    "命中之後**不再求值**後面的條件——分支的 reporter 可以帶副作用",
+    "§16 Q19 可重複參數群組",
+    one(
+        blk("control.if_else",
+            mutation={"repeat": 2},
+            condition=blk("operator.false"),
+            then=Stack([log("不該走到 then")]),
+            condition_1=blk("operator.true"),
+            body_1=Stack([log("命中")]),
+            # 這一格如果被求值，`debug.inspect` 會留下一筆 log——而下面的
+            # 期望裡只有「命中」一行。**用副作用當證人**，不是用結果：一個
+            # 「多算了一次但答案一樣」的實作，只看結果是抓不到的。
+            condition_2=blk("operator.eq",
+                            a=blk("debug.inspect", value="偷偷算了"), b="偷偷算了"),
+            body_2=Stack([log("不該走到")]),
+            **{"else": Stack([log("不該走到 else")])}),
+    ),
+    {"status": "ok", "logs": ["命中"]},
+    tags=["if_chain", "repeat", "side_effects"],
+)
+
+case(
+    "control/if_chain_without_mutation_is_a_plain_if_else",
+    "沒有 mutation 的 if_else 行為完全不變（向下相容）",
+    "§16 Q19 可重複參數群組",
+    one(
+        blk("control.if_else",
+            condition=blk("operator.false"),
+            then=Stack([log("不該走到 then")]),
+            **{"else": Stack([log("走到 else")])}),
+    ),
+    {"status": "ok", "logs": ["走到 else"]},
+    tags=["if_chain", "repeat"],
+)
+
+case(
     "control/throw_is_caught_by_try",
     "丟出錯誤 被 try_catch 接住，code 是 thrown",
     "§5.6 錯誤處理",

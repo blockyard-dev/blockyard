@@ -23,6 +23,7 @@ from blocky.interpreter.declarations import expression_fields
 from blocky.interpreter.events import EventSink
 from blocky.interpreter.registry import resolve_shape, resolve_terminal
 from blocky.ir.schema import LoadedProject, load
+from blocky.repeat import validate_blocks as validate_repeat_blocks
 from blocky.webhook import validate_blocks as validate_webhook_blocks
 
 if TYPE_CHECKING:
@@ -94,6 +95,9 @@ async def open_project(
         # §9.3：webhook 路徑同理，外加「同路徑兩顆」——那是一個看不出來的錯：
         # 兩顆都存得進去、都掛得上，但請求只會餵到其中一顆。
         validate_webhook_blocks(data.get("blocks") or {})
+        # §16 Q19：份數與孔的數量對不對得起來。少的那一格在執行期是「沒填」，
+        # 而 `如果` 少了條件會安靜地走 false 那一邊——一個看不出來的錯。
+        validate_repeat_blocks(data.get("blocks") or {}, _spec_resolver(registry))
         return loaded, registry
     except PydanticError as e:
         if registry is not None:
@@ -111,6 +115,25 @@ async def validate_project(data: Any, *, extensions_root: Path) -> LoadedProject
     if registry is not None:
         await registry.unload_all()
     return project
+
+
+def _spec_resolver(registry: ExtensionRegistry | None) -> Any:
+    """`opcode` → 宣告。內建走 `declarations`，積木包走 registry。
+
+    合成在這裡而不是在 `repeat.py`：那個模組不該知道「宣告有兩個來源」這件事，
+    同 `load()` 的 `shapes` / `terminals` 是注進去的而不是它自己去查（D21）。
+    """
+    from blocky.interpreter import declarations
+
+    def resolve(opcode: str) -> Any:
+        if (builtin := declarations.block(opcode)) is not None:
+            return builtin
+        if registry is None:
+            return None
+        found = registry.lookup(opcode)
+        return getattr(found, "spec", None)
+
+    return resolve
 
 
 def _first_error(e: PydanticError) -> str:

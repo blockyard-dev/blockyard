@@ -1,0 +1,10 @@
+title: 命中之後**不再求值**後面的條件——分支的 reporter 可以帶副作用
+spec: §16 Q19 可重複參數群組
+tags:
+- if_chain
+- repeat
+- side_effects
+expect:
+  status: ok
+  logs:
+  - 命中

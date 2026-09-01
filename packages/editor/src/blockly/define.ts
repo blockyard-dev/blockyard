@@ -21,6 +21,7 @@ import type {
 export type PaletteEntry = Palette[number];
 import { FIELD_TEXT_TYPE, type FieldTextOptions } from './fields/FieldText';
 import { FIELD_DYNAMIC_DROPDOWN_TYPE } from './fields/FieldDynamicDropdown';
+import { registerRepeatExtension } from './repeat';
 
 /** Blockly 的積木型別名稱 = IR 的 opcode，一字不差。 */
 export type BlockType = string;
@@ -362,6 +363,19 @@ export function buildBlock(manifest: Manifest, spec: BlockSpec): BuiltBlock {
   }
 
   applyShape(definition, spec);
+
+  // §16 Q19：有 `repeat` 宣告的積木掛上它的 mutator（`+` `−` 兩顆按鈕）。
+  // 掛在 `extensions` 上而不是把孔寫進 JSON 定義裡，因為那份定義是**一個 type
+  // 一份、所有實例共用**的——而可重複群組的整個重點就是同 type 的兩顆積木可以
+  // 有不同數量的孔。
+  // **`mutator:` 不是 `extensions:`。** Blockly 對 `registerMutator` 註冊的
+  // 東西會檢查「有沒有改到 mutation 相關的屬性」，而從 `extensions` 掛進去
+  // 一律被當成非 mutator——錯誤訊息是「mutation properties changed when
+  // applying a non-mutator extension」，而它出現的時機是**載入專案**，不是
+  // 註冊積木。
+  const repeatMutator = registerRepeatExtension(manifest, spec);
+  if (repeatMutator) definition.mutator = repeatMutator;
+
   return {
     definition,
     shadowDefinitions,

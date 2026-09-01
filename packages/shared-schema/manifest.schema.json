@@ -265,6 +265,17 @@
           ],
           "default": null,
           "title": "Concurrency"
+        },
+        "repeat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepeatSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -421,6 +432,51 @@
         "value"
       ],
       "title": "OptionSpec",
+      "type": "object"
+    },
+    "RepeatSpec": {
+      "additionalProperties": false,
+      "description": "一組**可以重複**的參數（§16 Q19）。\n\n在這個宣告出現之前，一顆積木的形狀完全由 manifest 決定，而 manifest 是靜態\n的——`args` 是一個固定的 dict（D21：內建與積木包同一條路）。可重複群組是這\n條規則的第一個例外，所以它刻意收得很窄：\n\n- **一顆積木最多一個 `repeat`。** 兩組可重複的東西要兩排 `+` `−`，而「這顆\n  `+` 加的是哪一組」在畫面上沒有便宜的答案。真的需要的話那是下一次的題目。\n- **群組裡不能再有群組。** 同上，而且巢狀的計數要進 IR 兩層。\n- **形狀不變。** 重複的是參數，不是積木的類型：一顆 command 按幾次 `+` 還是\n  command。所以 D20 的形狀驗證一行都不用改。\n\n展開後的參數名是 `<參數名>_<n>`，n 從 1 開始（見 `BlockSpec.repeat_arg_name`）。\n份數存在 IR 的 `mutation` 裡（`{\"repeat\": n}`），**不動頂層形狀**——那是\n`procedure.call` 已經在用的地方。",
+      "properties": {
+        "args": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ArgSpec"
+          },
+          "title": "Args",
+          "type": "object"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "min": {
+          "default": 0,
+          "title": "Min",
+          "type": "integer"
+        },
+        "max": {
+          "default": 20,
+          "title": "Max",
+          "type": "integer"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Before"
+        }
+      },
+      "required": [
+        "args",
+        "label"
+      ],
+      "title": "RepeatSpec",
       "type": "object"
     },
     "SectionSpec": {

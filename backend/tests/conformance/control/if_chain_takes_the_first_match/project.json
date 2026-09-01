@@ -1,0 +1,152 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "control.if_else",
+      "parent": "blk_1",
+      "next": null,
+      "inputs": {
+        "condition": {
+          "kind": "block",
+          "id": "blk_3"
+        },
+        "then": {
+          "kind": "stack",
+          "id": "blk_4"
+        },
+        "condition_1": {
+          "kind": "block",
+          "id": "blk_5"
+        },
+        "body_1": {
+          "kind": "stack",
+          "id": "blk_6"
+        },
+        "condition_2": {
+          "kind": "block",
+          "id": "blk_7"
+        },
+        "body_2": {
+          "kind": "stack",
+          "id": "blk_8"
+        },
+        "else": {
+          "kind": "stack",
+          "id": "blk_9"
+        }
+      },
+      "fields": {},
+      "mutation": {
+        "repeat": 2
+      },
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "operator.false",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "不該走到 then"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "operator.true",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "第一個 elif"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "operator.true",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "不該走到第二個 elif"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_9": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "不該走到 else"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

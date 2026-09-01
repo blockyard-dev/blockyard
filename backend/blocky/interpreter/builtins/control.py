@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 
 from blocky.errors import BlockyError, StopSignal, ThrownError
+from blocky.interpreter import declarations
+from blocky.repeat import count_of
 from blocky.interpreter.registry import command
 from blocky.ir.schema import Block
 from blocky.ir.values import TYPE_LABELS_ZH, TYPE_LIST, to_number, type_of
@@ -23,9 +25,25 @@ async def _if(t: Thread, b: Block) -> None:
 
 @command("control.if_else")
 async def _if_else(t: Thread, b: Block) -> None:
-    # 只求值成立的那一邊——分支的 reporter 可以帶副作用（§4.6）
-    branch = "then" if await t.boolean(b, "condition") else "else"
-    await t.exec_stack(t.stack(b, branch))
+    """`如果⋯否則如果⋯否則`（§16 Q19 的第一個消費者）。
+
+    **由上往下，第一個成立的就停。** 這是 if/elif 在每個語言裡的意思，而它同時
+    是「只求值成立的那一邊」（§4.6）的直接延伸：一個不成立的分支，它的條件之後
+    的條件仍然要算，但**它之後的分支條件不必算**——分支的 reporter 可以帶副作
+    用，多算一次就是多做一次事。
+    """
+    if await t.boolean(b, "condition"):
+        await t.exec_stack(t.stack(b, "then"))
+        return
+
+    spec = declarations.block(b.opcode)
+    for i in range(count_of(b.mutation, spec)):
+        assert spec is not None
+        if await t.boolean(b, spec.repeat_arg_name("condition", i)):
+            await t.exec_stack(t.stack(b, spec.repeat_arg_name("body", i)))
+            return
+
+    await t.exec_stack(t.stack(b, "else"))
 
 
 @command("control.repeat")

@@ -129,8 +129,11 @@ def test_corpus_input_names_are_declared(opcode: str) -> None:
     assert spec is not None, f"題庫用到了沒有宣告的積木 {opcode}"
 
     used = CORPUS_USAGE[opcode]
-    inputs = set(spec.args) - {n for n, a in spec.args.items() if a.is_field}
-    fields = {n for n, a in spec.args.items() if a.is_field}
+    # §16 Q19：有 `repeat` 宣告的積木，展開後的 `<名字>_<n>` 也是合法的參數名。
+    # 用宣告的 `max` 展開——題庫用得到第幾份，只有題庫知道。
+    args = spec.repeat_args(spec.repeat.max if spec.repeat else 0)
+    inputs = set(args) - {n for n, a in args.items() if a.is_field}
+    fields = {n for n, a in args.items() if a.is_field}
 
     if spec.dynamic:
         # §4.6：`procedure.call` 的參數是函式的參數，來自 project.procedures

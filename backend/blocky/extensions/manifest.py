@@ -338,6 +338,8 @@ class BlockSpec(Strict):
     terminal: bool = False
     yields: list[YieldSpec] = Field(default_factory=list)
     concurrency: Concurrency | None = None
+    # §16 Q19：可重複的參數群組。見 `RepeatSpec`。
+    repeat: RepeatSpec | None = None
 
     @field_validator("opcode")
     @classmethod
@@ -382,7 +384,46 @@ class BlockSpec(Strict):
                     raise ValueError(f"參數 {name} 的 depends 指到自己")
                 if name in (self.args[dep].depends or ()):
                     raise ValueError(f"參數 {name} 與 {dep} 的 depends 互相指來指去")
+
+        if self.repeat is not None:
+            if self.type not in ("command", "reporter", "boolean"):
+                raise ValueError("repeat 不適用於 hat：一顆事件積木沒有「多來一份」的意思")
+            # 撞名的話，展開之後 `條件_1` 到底是群組的第 1 份還是作者自己寫的
+            # 那一格，只有作者知道——而 IR 讀不出來。擋在宣告期最便宜。
+            for i in range(self.repeat.max):
+                for name in self.repeat.args:
+                    expanded = self.repeat_arg_name(name, i)
+                    if expanded in self.args:
+                        raise ValueError(
+                            f"repeat 展開後的參數名 {expanded} 與既有參數撞名"
+                        )
+            if self.repeat.before is not None and self.repeat.before not in self.args:
+                raise ValueError(f"repeat.before 指到不存在的參數 {self.repeat.before}")
         return self
+
+    def repeat_arg_name(self, arg: str, index: int) -> str:
+        """第 `index` 份重複群組裡那個參數在 IR 裡叫什麼（0-based）。
+
+        `條件_1`、`主體_1`、`條件_2`⋯——**基底那一份不編號**，因為它本來就在
+        `args` 裡、而且是這顆積木沒有按過任何一次 `+` 時的樣子。編號從 1 開始
+        因此不是選擇，是「第 0 份就是原本那一份」的直接後果。
+        """
+        return f"{arg}_{index + 1}"
+
+    def repeat_args(self, count: int) -> dict[str, ArgSpec]:
+        """展開 `count` 份之後，這顆積木實際有哪些參數。
+
+        `args` 的那些永遠在（基底那一份），後面接上編號過的。回傳新的 dict，
+        **不改 `self.args`**：宣告是共用的，一顆積木按了 `+` 不能改變別顆積木
+        長什麼樣。
+        """
+        out = dict(self.args)
+        if self.repeat is None:
+            return out
+        for i in range(count):
+            for name, arg in self.repeat.args.items():
+                out[self.repeat_arg_name(name, i)] = arg
+        return out
 
     @property
     def declared_return(self) -> ReturnType | None:
@@ -393,6 +434,71 @@ class BlockSpec(Strict):
         if self.type == "boolean":
             return "boolean"
         return self.returns
+
+
+class RepeatSpec(Strict):
+    """一組**可以重複**的參數（§16 Q19）。
+
+    在這個宣告出現之前，一顆積木的形狀完全由 manifest 決定，而 manifest 是靜態
+    的——`args` 是一個固定的 dict（D21：內建與積木包同一條路）。可重複群組是這
+    條規則的第一個例外，所以它刻意收得很窄：
+
+    - **一顆積木最多一個 `repeat`。** 兩組可重複的東西要兩排 `+` `−`，而「這顆
+      `+` 加的是哪一組」在畫面上沒有便宜的答案。真的需要的話那是下一次的題目。
+    - **群組裡不能再有群組。** 同上，而且巢狀的計數要進 IR 兩層。
+    - **形狀不變。** 重複的是參數，不是積木的類型：一顆 command 按幾次 `+` 還是
+      command。所以 D20 的形狀驗證一行都不用改。
+
+    展開後的參數名是 `<參數名>_<n>`，n 從 1 開始（見 `BlockSpec.repeat_arg_name`）。
+    份數存在 IR 的 `mutation` 裡（`{"repeat": n}`），**不動頂層形狀**——那是
+    `procedure.call` 已經在用的地方。
+    """
+
+    #: 每一份長什麼樣。`%(名字)` 在 `label` 裡引用。
+    args: dict[str, ArgSpec]
+    #: 每一份前面那段文字，例如 `否則如果 %(condition) 那麼`。
+    label: str
+    #: 最少幾份。0 代表「這顆積木可以完全沒有額外的份」。
+    min: int = 0
+    #: 最多幾份。上限存在是因為每一份都是真的輸入孔——沒有上限的話，一次誤觸
+    #: 的鍵盤重複可以生出幾千個孔，而畫面在那之前就已經沒有用了。
+    max: int = 20
+    #: 每一份插在**哪一個基底參數前面**。
+    #:
+    #: `如果⋯否則如果⋯否則` 需要它：新增的那幾份要落在 `else` 之前，而宣告的
+    #: 順序（condition、then、else）說不出這件事——`else` 是最後一格，而重複的
+    #: 東西也在最後。不寫就是接在最後面（HTTP 的多個 header 就是那樣）。
+    #:
+    #: **由宣告說，不由編輯器猜。** 猜法是「插在最後一個 stack 前面」之類的
+    #: 規則，而它對 `try_catch` 的多個 catch 立刻就錯了。
+    before: str | None = None
+
+    @field_validator("args")
+    @classmethod
+    def _arg_names(cls, v: dict[str, ArgSpec]) -> dict[str, ArgSpec]:
+        if not v:
+            raise ValueError("repeat.args 不能是空的——沒有東西要重複")
+        for name in v:
+            if not _IDENT.match(name):
+                raise ValueError(f"參數名必須是小寫識別字：{name}")
+        return v
+
+    @model_validator(mode="after")
+    def _check(self) -> RepeatSpec:
+        if self.min < 0:
+            raise ValueError("repeat.min 不能是負的")
+        if self.max < max(self.min, 1):
+            raise ValueError("repeat.max 必須大於等於 min，且至少是 1")
+        placeholders = set(_PLACEHOLDER.findall(self.label))
+        if missing := placeholders - set(self.args):
+            raise ValueError(
+                f"repeat.label 裡的 %({'), %('.join(sorted(missing))}) 沒有對應的參數"
+            )
+        if self.before is not None and self.before in self.args:
+            raise ValueError(
+                f"repeat.before 要指向**基底**的參數，而 {self.before} 是重複群組裡的"
+            )
+        return self
 
 
 def _entry_kind(v: Any) -> str | None:
