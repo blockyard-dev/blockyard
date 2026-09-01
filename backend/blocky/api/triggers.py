@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from blocky.api.errors import invalid_ir
@@ -31,7 +31,8 @@ class ActivateRequest(BaseModel):
 
 
 class SecretRequest(BaseModel):
-    #: 明文只往這個方向走。讀不回來（同 D28：清單只給末四碼）。
+    #: 哪一顆積木。**在 body 裡而不是網址路徑上**，見下面那段註解。
+    blockId: str
     secret: str
 
 
@@ -92,12 +93,24 @@ async def deactivate(project_id: str, request: Request) -> None:
 # 見 D28）；這個是一顆積木一把，範圍是專案。兩者存在同一個 keyring，但「哪些
 # 東西存在」的問法完全不同——積木包的金鑰列得出來（manifest 說有哪幾把），
 # webhook 的密鑰只有畫布知道。
+#
+# ## blockId 不能進網址路徑
+#
+# Blockly 產生的 id 是從一鍋含 `!#$%()*+,-./:;=?@[]^_`{|}~` 的字元裡抽出來的
+# ——**大約五分之一含有 `/`**。而 ASGI 伺服器會在路由**之前**就把 `%2F` 解碼回
+# `/`，於是 `{block_id}` 那一格看到的是多出來的一段路徑，比對不上 → 404。
+#
+# 症狀特別難查：使用者按了「設定密鑰」，畫面回到清單，而那一列仍然寫著「還沒
+# 設密鑰」——看起來像「存了但沒生效」，其實是根本沒存進去。而且它**只有五分之
+# 一的積木會發生**，所以換一顆積木試就好了，於是更像是隨機的鬼。
+#
+# 所以 blockId 走 body（PUT）與 query（DELETE）。不是為了對稱，是各自對：
+# 密鑰本來就只能在 body，而 DELETE 沒有 body。
 
 
-@router.put("/{project_id}/secret/{block_id}", status_code=204)
+@router.put("/{project_id}/secret", status_code=204)
 async def set_webhook_secret(
     project_id: str,
-    block_id: str,
     body: SecretRequest = Body(...),  # noqa: B008
 ) -> None:
     """設定一顆 webhook 積木的簽章密鑰。
@@ -110,17 +123,41 @@ async def set_webhook_secret(
         raise HTTPException(
             status_code=422, detail={"message": "密鑰是空的。要拿掉請用 DELETE"}
         )
-    secret_store.set(secret_store.webhook_owner(project_id), block_id, body.secret)
+    secret_store.set(secret_store.webhook_owner(project_id), body.blockId, body.secret)
 
 
-@router.delete("/{project_id}/secret/{block_id}", status_code=204)
-async def clear_webhook_secret(project_id: str, block_id: str) -> None:
+@router.get("/{project_id}/secret/reveal")
+async def reveal_webhook_secret(
+    project_id: str, blockId: str, response: Response  # noqa: N803
+) -> dict[str, str]:
+    """把**一顆積木**的簽章密鑰明文交出來，給前端的複製按鈕用。
+
+    與 `/api/keys/…/reveal` 同一條 D28 的理由：「不顯示明文」擋的是**畫面上一直
+    躺著一串密鑰**（肩後偷看、截圖、螢幕分享），而複製按鈕不違反它——值只進剪貼
+    簿，不進 DOM、不進列表回應，而且要打一個**指名到這一顆**的端點才拿得到。
+    從自己的機器把自己的密鑰複製到自己的剪貼簿，跟「分享專案等於分享金鑰」是
+    兩回事。
+
+    刻意是獨立端點而不是 `GET /api/triggers/{id}` 上的一個欄位：那條路每開一次
+    面板就打一次，把明文掛在上面等於讓它跟著每一次輪詢多走一趟。
+
+    `no-store` 不是形式：GET 回應預設可被快取，而這一份不該留在任何一層快取裡。
+    """
+    value = secret_store.get(secret_store.webhook_owner(project_id), blockId)
+    if not value:
+        raise HTTPException(status_code=404, detail={"message": "這一顆還沒有設定密鑰"})
+    response.headers["Cache-Control"] = "no-store"
+    return {"value": value}
+
+
+@router.delete("/{project_id}/secret", status_code=204)
+async def clear_webhook_secret(project_id: str, blockId: str) -> None:  # noqa: N803
     """拿掉密鑰。**沒設過也是 204**：要的結果是「現在沒有」，而那已經成立。
 
     拿掉之後那顆積木會擋掉每一則請求（宣告說要驗但驗不了）——那不是回歸「不
     驗」，見 `runs/triggers.py` 的 `_signature_ok`。
     """
-    secret_store.delete(secret_store.webhook_owner(project_id), block_id)
+    secret_store.delete(secret_store.webhook_owner(project_id), blockId)
 
 
 __all__ = ["router"]

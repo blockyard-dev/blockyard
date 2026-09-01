@@ -110,23 +110,37 @@ export async function setWebhookSecret(
   blockId: string,
   secret: string,
 ): Promise<void> {
-  const res = await fetch(
-    `/api/triggers/${encodeURIComponent(projectId)}/secret/${encodeURIComponent(blockId)}`,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret }),
-    },
-  );
+  const res = await fetch(`/api/triggers/${encodeURIComponent(projectId)}/secret`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    // **blockId 在 body，不在路徑上。** Blockly 的 id 大約五分之一含 `/`，而
+    // 伺服器會在路由之前就把 `%2F` 解回 `/`——那一格於是比對不上，回 404。
+    // 症狀是「按了設定密鑰，回到清單卻還是說沒設」，而且只有五分之一的積木
+    // 會發生，看起來像隨機的鬼。
+    body: JSON.stringify({ blockId, secret }),
+  });
   if (!res.ok) throw await toApiError(res, `PUT webhook secret → ${res.status}`);
+}
+
+/**
+ * 把密鑰明文拿回來，**只給剪貼簿用**（D28）。
+ *
+ * 呼叫端不可以把它放進 state 或 DOM：「不顯示明文」擋的是畫面上一直躺著一串
+ * 密鑰，而複製按鈕不違反它——值只進剪貼簿。
+ */
+export async function revealWebhookSecret(projectId: string, blockId: string): Promise<string> {
+  const q = new URLSearchParams({ blockId });
+  const res = await fetch(`/api/triggers/${encodeURIComponent(projectId)}/secret/reveal?${q}`);
+  if (!res.ok) throw await toApiError(res, `GET webhook secret → ${res.status}`);
+  return ((await res.json()) as { value: string }).value;
 }
 
 /** 拿掉密鑰。**拿掉之後那顆積木會擋掉每一則請求**，不是回歸「不驗」。 */
 export async function clearWebhookSecret(projectId: string, blockId: string): Promise<void> {
-  const res = await fetch(
-    `/api/triggers/${encodeURIComponent(projectId)}/secret/${encodeURIComponent(blockId)}`,
-    { method: 'DELETE' },
-  );
+  const q = new URLSearchParams({ blockId });
+  const res = await fetch(`/api/triggers/${encodeURIComponent(projectId)}/secret?${q}`, {
+    method: 'DELETE',
+  });
   if (!res.ok) throw await toApiError(res, `DELETE webhook secret → ${res.status}`);
 }
 

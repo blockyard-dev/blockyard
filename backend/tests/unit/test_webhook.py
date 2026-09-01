@@ -350,6 +350,15 @@ def signed_project(
     return p
 
 
+def set_secret(client: TestClient, block_id: str, secret: str) -> Any:
+    """**blockId 走 body，不走網址路徑。** Blockly 的 id 大約五分之一含 `/`，
+    而伺服器在路由之前就把 `%2F` 解回 `/`——路徑參數因此比對不上，回 404。"""
+    return client.put(
+        "/api/triggers/p_hook/secret",
+        json={"blockId": block_id, "secret": secret},
+    )
+
+
 def sign(secret: str, body: bytes, algorithm: str = "sha256") -> str:
     import hmac
 
@@ -360,7 +369,7 @@ def test_the_secret_never_appears_in_the_ir(client: TestClient) -> None:
     """D28：Key 不能存進專案檔——分享專案會變成分享明文金鑰。積木上只有三格
     **不是秘密**的東西：要不要驗、簽章在哪個 header、用哪個雜湊。"""
     save(client, signed_project())
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    set_secret(client, "hat", "s3cret")
 
     stored = client.get("/api/projects/p_hook").json()
     assert "s3cret" not in str(stored)
@@ -368,7 +377,7 @@ def test_the_secret_never_appears_in_the_ir(client: TestClient) -> None:
 
 def test_a_correct_signature_is_accepted(client: TestClient) -> None:
     save(client, signed_project())
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    set_secret(client, "hat", "s3cret")
     url = activate(client)["webhooks"][0]["url"]
 
     body = b'{"who": "GitHub"}'
@@ -387,7 +396,7 @@ def test_a_correct_signature_is_accepted(client: TestClient) -> None:
 def test_a_bare_hex_signature_also_works(client: TestClient) -> None:
     """`sha256=<hex>` 是 GitHub 的格式，裸 hex 是自己寫 webhook 的人最常送的。"""
     save(client, signed_project())
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    set_secret(client, "hat", "s3cret")
     url = activate(client)["webhooks"][0]["url"]
 
     body = b"{}"
@@ -404,7 +413,7 @@ def test_a_wrong_signature_is_401_and_starts_no_run(client: TestClient) -> None:
     """401 而不是 404：對方已經知道網址了，而「你少了什麼」正是設定 webhook
     的人需要看到的。"""
     save(client, signed_project())
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    set_secret(client, "hat", "s3cret")
     url = activate(client)["webhooks"][0]["url"]
 
     res = client.post(url, content=b"{}", headers={"X-Hub-Signature-256": "sha256=deadbeef"})
@@ -415,7 +424,7 @@ def test_a_wrong_signature_is_401_and_starts_no_run(client: TestClient) -> None:
 
 def test_a_missing_signature_header_is_401(client: TestClient) -> None:
     save(client, signed_project())
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    set_secret(client, "hat", "s3cret")
     url = activate(client)["webhooks"][0]["url"]
 
     assert client.post(url, content=b"{}").status_code == 401
@@ -447,7 +456,7 @@ def test_the_state_says_whether_the_secret_is_set(client: TestClient) -> None:
     assert before["verify"] == "hmac_sha256"
     assert before["secretSet"] is False
 
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    set_secret(client, "hat", "s3cret")
     assert activate(client)["webhooks"][0]["secretSet"] is True
 
 
@@ -461,10 +470,11 @@ def test_an_unverified_hook_has_no_secret_flag(client: TestClient) -> None:
 
 def test_clearing_the_secret_goes_back_to_blocking(client: TestClient) -> None:
     save(client, signed_project())
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    set_secret(client, "hat", "s3cret")
     url = activate(client)["webhooks"][0]["url"]
 
-    assert client.delete("/api/triggers/p_hook/secret/hat").status_code == 204
+    res = client.delete("/api/triggers/p_hook/secret", params={"blockId": "hat"})
+    assert res.status_code == 204
 
     body = b"{}"
     res = client.post(url, content=body, headers={"X-Hub-Signature-256": sign("s3cret", body)})
@@ -473,7 +483,7 @@ def test_clearing_the_secret_goes_back_to_blocking(client: TestClient) -> None:
 
 def test_an_empty_secret_is_422_not_a_silent_clear(client: TestClient) -> None:
     save(client, signed_project())
-    res = client.put("/api/triggers/p_hook/secret/hat", json={"secret": "  "})
+    res = set_secret(client, "hat", "  ")
 
     assert res.status_code == 422
 
@@ -491,7 +501,7 @@ def test_an_unknown_verify_mode_is_rejected(client: TestClient) -> None:
 
 def test_sha1_works_too(client: TestClient) -> None:
     save(client, signed_project(verify="hmac_sha1", header="X-Signature"))
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    set_secret(client, "hat", "s3cret")
     url = activate(client)["webhooks"][0]["url"]
 
     body = b"{}"
@@ -506,7 +516,7 @@ def test_the_signature_covers_the_raw_body_not_the_parsed_one(client: TestClient
     """簽的是原始位元組。解析過再簽的話，一個多空白或不同 key 順序的 JSON 就
     會算出不同的簽章——而對面簽的是它送出去的那串。"""
     save(client, signed_project())
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    set_secret(client, "hat", "s3cret")
     url = activate(client)["webhooks"][0]["url"]
 
     body = b'{"a":  1}'  # 刻意多一個空白
@@ -525,10 +535,10 @@ def test_the_signature_covers_the_raw_body_not_the_parsed_one(client: TestClient
 def test_changing_the_secret_does_not_remount_the_route(client: TestClient) -> None:
     """密鑰不在 §9.2 的 spec 裡——驗證是每次請求進來時才做的事，路由沒有變。"""
     save(client, signed_project())
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "one"})
+    set_secret(client, "hat", "one")
     url = activate(client)["webhooks"][0]["url"]
 
-    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "two"})
+    set_secret(client, "hat", "two")
 
     body = b"{}"
     assert (
@@ -537,3 +547,66 @@ def test_changing_the_secret_does_not_remount_the_route(client: TestClient) -> N
         ).status_code
         == 202
     )
+
+
+def test_a_block_id_with_a_slash_still_works(client: TestClient) -> None:
+    """**這一題釘的是一個實測抓到的 bug。**
+
+    Blockly 產生的 id 是從一鍋含 `!#$%()*+,-./:;=?@[]^_` 的字元裡抽出來的，
+    **大約五分之一含有 `/`**。它原本在網址路徑上（`/secret/{block_id}`），而
+    ASGI 伺服器會在路由**之前**就把 `%2F` 解碼回 `/`——那一格於是看到多出來的
+    一段路徑，比對不上，回 404。
+
+    症狀特別難查：使用者按了「設定密鑰」、畫面回到清單，而那一列仍然寫著
+    「還沒設密鑰」——看起來像「存了但沒生效」，其實根本沒存進去。而且它**只有
+    五分之一的積木會發生**，換一顆試就好了，於是更像是隨機的鬼。
+    """
+    tricky = ".@`7$@{)sHdd-l+HOP2/"
+    project = signed_project()
+    project["blocks"][tricky] = project["blocks"].pop("hat")
+    project["blocks"]["say"]["parent"] = tricky
+    project["scripts"][0]["top"] = tricky
+    save(client, project)
+
+    assert set_secret(client, tricky, "s3cret").status_code == 204
+
+    entry = activate(client)["webhooks"][0]
+    assert entry["blockId"] == tricky
+    assert entry["secretSet"] is True
+
+    body = b"{}"
+    res = client.post(
+        entry["url"],
+        content=body,
+        headers={"X-Hub-Signature-256": "sha256=" + sign("s3cret", body)},
+    )
+    assert res.status_code == 202
+
+
+def test_reveal_hands_the_secret_back_for_the_clipboard(client: TestClient) -> None:
+    """D28：「不顯示明文」擋的是**畫面上一直躺著一串密鑰**，而複製按鈕不違反
+    它——值只進剪貼簿，而且要打一個**指名到這一顆**的端點才拿得到。"""
+    save(client, signed_project())
+    set_secret(client, "hat", "s3cret")
+
+    res = client.get("/api/triggers/p_hook/secret/reveal", params={"blockId": "hat"})
+
+    assert res.status_code == 200
+    assert res.json()["value"] == "s3cret"
+    # GET 預設可被快取，而這一份不該留在任何一層快取裡。
+    assert res.headers["cache-control"] == "no-store"
+
+
+def test_reveal_of_an_unset_secret_is_404(client: TestClient) -> None:
+    save(client, signed_project())
+    res = client.get("/api/triggers/p_hook/secret/reveal", params={"blockId": "hat"})
+    assert res.status_code == 404
+
+
+def test_the_secret_is_not_in_the_list_response(client: TestClient) -> None:
+    """列表每開一次面板就打一次。把明文掛在上面等於讓它跟著每一次輪詢多走
+    一趟，而 99% 的呼叫根本不需要它。"""
+    save(client, signed_project())
+    set_secret(client, "hat", "s3cret")
+
+    assert "s3cret" not in str(activate(client))

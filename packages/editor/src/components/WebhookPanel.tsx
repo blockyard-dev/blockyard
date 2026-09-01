@@ -19,7 +19,12 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Check, Copy, KeyRound, Link2, Trash2, X } from 'lucide-react';
-import { clearWebhookSecret, setWebhookSecret, type WebhookUrl } from '../api/triggers';
+import {
+  clearWebhookSecret,
+  revealWebhookSecret,
+  setWebhookSecret,
+  type WebhookUrl,
+} from '../api/triggers';
 import { focusableIn, modalKeyAction, nextFocusIndex } from './modalKeys';
 
 /** 幾秒後把「已複製」收回去。夠久到看得見，短到不會擋住下一次操作。 */
@@ -80,6 +85,22 @@ export function WebhookPanel({
       setCopied(hook.url);
     } catch {
       setError('複製失敗——請手動選取網址');
+    }
+  };
+
+  /**
+   * 密鑰 → 剪貼簿（D28）。
+   *
+   * 明文**不經過 React state**：拿到就寫進剪貼簿，函式一結束那個字串就沒有引用
+   * 了。存進 state 的話它會活到下一次 render，而且會出現在 devtools 的元件樹
+   * 裡——那正是「畫面上一直躺著一串密鑰」的另一種樣子。
+   */
+  const copySecret = async (hook: WebhookUrl) => {
+    try {
+      await navigator.clipboard.writeText(await revealWebhookSecret(projectId, hook.blockId));
+      setCopied(hook.blockId);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '複製密鑰失敗');
     }
   };
 
@@ -144,6 +165,27 @@ export function WebhookPanel({
                       <button type="button" className="button" onClick={() => setEditing(hook)}>
                         <KeyRound size={13} strokeWidth={2.5} />
                         {hook.secretSet ? '更換密鑰' : '設定密鑰'}
+                      </button>
+                    )}
+                    {hook.verify !== 'none' && hook.secretSet && (
+                      // D28：「不顯示明文」擋的是畫面上一直躺著一串密鑰，而複製
+                      // 按鈕不違反它——值只進剪貼簿，不進 state、不進 DOM。所以
+                      // 這裡不預先抓，按下去才去要那一把。
+                      <button
+                        type="button"
+                        className="button"
+                        title="複製密鑰到剪貼簿"
+                        onClick={() => void copySecret(hook)}
+                      >
+                        {copied === hook.blockId ? (
+                          <>
+                            <Check size={13} strokeWidth={2.5} /> 已複製
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={13} strokeWidth={2.5} /> 密鑰
+                          </>
+                        )}
                       </button>
                     )}
                   </div>
