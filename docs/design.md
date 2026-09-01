@@ -2,14 +2,28 @@
 
 | 項目 | 內容 |
 |---|---|
-| 版本 | Draft v0.24 |
+| 版本 | Draft v0.25 |
 | 日期 | 2026-09-01 |
-| 狀態 | 已審閱，**P0 與 P1 全部完成**，**P2 第 1 步（§6.3 落地）完成**——執行歷史與持久值進了 SQLite，跨後端重啟存活。下一步是 P2 第 2 步（Trigger Manager） |
+| 狀態 | 已審閱，**P0 與 P1 全部完成**。**P2 第 1 步（§6.3 落地）完成**；**第 2 步（Trigger Manager）的骨架完成**——active 狀態寫在 SQLite、重啟自動恢復、hat 集合會 diff。接下來是內建的 cron 與 webhook trigger |
 | 代號 | `blocky`（暫定，套件名 `blocky-runtime`） |
 
 ---
 
 ## 0.0 變更摘要
+
+### v0.25
+
+**P2 第 2 步的骨架：Trigger Manager。** P1 的 `/api/listeners` 檔頭有一張「§9.2
+要的 / 這裡有嗎」的表，四格全是叉。這一輪補上前三格；第四格（內建的 cron 與
+webhook）是接下來的 2b、2c。
+
+| 類別 | 變更 | 章節 |
+|---|---|---|
+| **新增** | **active 是一張表，不是 IR 的一個欄位**。塞進 IR 的話，匯出再匯入到別人的機器上會連同「開著」一起搬過去——而那台機器並沒有同意跑任何東西 | §9.2 |
+| **新增** | §9.2 的 diff 要先回答「什麼算同一顆 trigger」：**key**（它是誰）+ **spec**（它靠什麼活著）。積木包的 hat 用 opcode（一條連線服務所有同 opcode 的腳本），cron / webhook 用 `opcode#blockId`（兩顆積木是兩份排程） | §9.2 |
+| **新增** | 三條「一顆壞掉不能拖垮其他」：啟動恢復、同一專案的多顆 hat、一次 yield 起 Run 失敗。第一條最要緊——把例外往上拋等於讓一顆過期的 Discord token 擋住整個後端起不來 | §9.2 |
+| **修訂** | `/api/listeners` → **`/api/triggers`**。兩條同時留著就是同一件事兩個入口，而其中一個還會給出過期的答案。`GET /api/triggers/{id}` 對沒在跑的專案回 `active: false` 而不是 404——「它是不是 active」對任何存在的專案都有答案 | 附錄 A、§9 |
+| **修訂** | 重複啟用**重新同步一次**而不是原樣回去：使用者按下去的意思是「照現在這份畫布跑」，中間存過檔的話，原樣回去等於讓那顆按鈕在最需要它做事的時候什麼都不做。`activatedAt` 不刷新 | §9.2 |
 
 ### v0.24
 
@@ -2141,6 +2155,44 @@ object / list **不新增積木形狀**。理由是形狀會說謊：`data.get (
 - 專案編輯後：diff 新舊 IR 的 hat 集合，只重啟有變動的 trigger（避免長連線無謂斷開）。
 - 後端重啟時從 SQLite 恢復所有 active 專案的 trigger。
 
+#### active 是一張表，不是 IR 的一個欄位（v0.25）
+
+`projects.data` 存的是 PUT 進來的那份 JSON 原文，而 active **不是專案內容的一
+部分**——它是「這台後端現在有沒有在跑它」。塞進 IR 的話，匯出一份專案再匯入到
+別人的機器上會連同「開著」一起搬過去，而那台機器並沒有同意跑任何東西。
+
+#### diff 要先回答「什麼算同一顆 trigger」（v0.25）
+
+每一顆 trigger 有兩個東西：**key**（它是誰，相同的 key 在兩次同步之間就是同一
+顆）與 **spec**（它靠什麼活著，spec 變了就得重接）。
+
+| trigger | key | spec |
+|---|---|---|
+| 積木包的 hat | `opcode` | 空的 |
+| `when_cron` | `opcode#blockId` | 那顆積木的 cron 運算式與時區 |
+| `when_webhook` | `opcode#blockId` | 那顆積木的 path |
+
+積木包的 hat 是 opcode 而不是 blockId，因為**一條連線服務畫布上所有同 opcode
+的腳本**（§5.1 的 `_triggered()` 會把它們全部選中）——同一顆 hat 放兩次不該開
+兩條 gateway。cron 與 webhook 相反：兩顆積木是兩份排程，改了時間就得重排。
+
+**這個分法的用處全在「不要無謂斷開」上。** 使用者改一句 log 的文字然後存檔，
+Discord 的 gateway 不該斷線重連——那會掉訊息，而且要花好幾秒。
+
+例外是**積木包的集合變了**：registry 是一次載入一整組子行程（§7.6），沒有「只
+換掉其中一個」這種操作，所以那時整組重來。它比 trigger 層的 diff 粗，但只在使
+用者真的加減了積木包時才發生，而那本來就是一次大改。
+
+#### 三條「一顆壞掉不能拖垮其他」（v0.25）
+
+- **啟動恢復**：一個專案接不上不能讓其他的跟著不接。積木包壞掉、token 過期、專案
+  被手動刪掉都是正常的事——把例外往上拋等於讓一顆過期的 Discord token 擋住整個
+  後端起不來。
+- **同一個專案的多顆 hat**：一個專案可以同時聽 Discord 與 Slack，Discord 的 token
+  過期不該讓 Slack 也停掉。
+- **一次 yield 起 Run 失敗**：那條連線還好好的，下一則訊息仍然應該有機會跑起來。
+  錯誤記在專案上讓使用者看得到「有事件進來但跑不動」，而不是安靜地少掉幾則。
+
 ### 9.3 Webhook 安全
 路徑含隨機 token（`/hooks/{32位隨機}/{使用者路徑}`），避免被掃描。可選 HMAC 簽章驗證（在 hat 積木參數中設定 secret）。
 
@@ -2419,7 +2471,9 @@ blocky/
 | P1 第 1 步（`http` 包） | **完成**。`ctx.http` 落地、`permissions: [net]` 有了檢查、`extensions` 宣告改成算出來的 |
 | P1 第 2 步（SubprocessHost） | **完成**。`rpc.py`（雙向 JSON-RPC）、`subprocess_host.py`／`subprocess_worker.py`、反向通道與取消推播；`open_registry()` 預設換成 subprocess；合約測試 `HOSTS = ["inprocess", "subprocess"]` |
 | P1 第 3 步（`openai` 包） | **完成**。keyring 與 §12.2 的值遮蔽、`uv venv` 依賴隔離（第一個真消費者）、動態下拉接上、D28 的金鑰面板。拿真金鑰在瀏覽器裡打過真 API |
-| P1 第 4 步（`discord` 包） | **完成**。第一顆積木包宣告的 hat 與它的長連線 trigger、`depends`（吃同積木其他已填參數的下拉）、`/api/listeners`。拿真 token 在真伺服器上收發過訊息 ← **現在在這裡，下一步是 P2** |
+| P1 第 4 步（`discord` 包） | **完成**。第一顆積木包宣告的 hat 與它的長連線 trigger、`depends`（吃同積木其他已填參數的下拉）、`/api/listeners`（P2 第 2 步已由 `/api/triggers` 取代）。拿真 token 在真伺服器上收發過訊息 |
+| P2 第 1 步（§6.3 落地） | **完成**。執行歷史與持久值進 SQLite、跨後端重啟存活；`GET /api/runs/{id}/events`；保留策略每個專案 200 次 |
+| P2 第 2 步（Trigger Manager） | **進行中**。active 狀態、重啟恢復、hat 的 diff、`/api/triggers` 完成 ← **現在在這裡**。cron 與 webhook 是接下來的 2b、2c |
 
 **為什麼 Host 邊界提前、其餘 P1 延後**：介面不能晚做，實作可以。`ExtensionHost` / `HostChannel` 兩個方向的介面與 `boundary.py` 都已經定案，合約測試也已經對 host 實作參數化——SubprocessHost 之後接上去只要在 `HOSTS` 加一行，題目一題都不用改。反過來，P1 剩下的「手寫三個包」原本卡在 Q10，而 **Q10 已經決議（開發者路線）**——三個包的選擇與順序不變，因為它們本來就是開發者取向。
 
@@ -2711,6 +2765,11 @@ tags: [procedure, control, unwind]
 | §6.3 | 執行歷史跨後端重啟存活；Run id 不重號 |
 | §6.3 | 上次沒收尾的 Run 啟動後是 `interrupted`，不是 `cancelled` |
 | §6.3 | 剪枝：配額算所有 Run，只刪跑完的；刪 Run 一併刪事件；刪專案一併刪歷史與持久值 |
+| §9.2 | active 跨後端重啟存活，且重啟後 trigger **真的在跑**（不只是列得出來） |
+| §9.2 | 停掉之後重啟不再跑；刪掉專案一併停掉它的 trigger |
+| §9.2 | 存檔會重新對齊 active 專案；但**不會**把關著的專案打開 |
+| §9.2 | 改一顆與 hat 無關的積木存檔 → 那條連線**沒有**重接（diff 的全部用處） |
+| §9.2 | active 紀錄指向一份已被刪除的專案 → 啟動不炸，順手清掉那筆 |
 | §4.5 | hat 的 `yields` 與全域變數同名 → 那顆 hat 標 info，讀取積木**不**標；執行時讀到的是 thread-local |
 | §5.5 | `CancelledError` 穿透 `try_catch`；`finally` 清理有 5 秒上限 |
 | §5.6 | 一個 thread 出錯，其餘 thread **繼續執行** |
@@ -2760,6 +2819,7 @@ tags: [procedure, control, unwind]
 | GET/PUT | `/api/projects/{id}` | 讀取 / 儲存 IR ✅。PUT 在寫入前跑 §4 的載入期驗證，不通過回 **422 + `blockId`**，且不進資料庫。存的是 body 原文，round-trip 不掉欄位 |
 | DELETE | `/api/projects/{id}` | 刪除 ✅ |
 | POST | `/api/projects/{id}/active` | 啟用/停用 trigger |
+| GET/POST/DELETE | `/api/triggers` | 專案的 active 狀態與它接上的 hat（§9.2）✅。**取代 P1 的 `/api/listeners`**——那條管的是「這個 process 有沒有在聽」，重啟就沒了。`GET /api/triggers/{id}` 對沒在跑的專案回 `active: false`，不是 404 |
 | POST | `/api/runs` | 手動執行，回傳 runId ✅。跑的是**已存檔**的那一份專案。收 `trigger`（綠旗）或 `blockId`（§5.1 的「點一下就跑」）✅ |
 | GET | `/api/runs`、`/api/runs/{id}` | 執行清單與狀態 ✅。**跨後端重啟存活**（§6.3 落地之後）。`?projectId=` 過濾、`?limit=` 分頁 |
 | DELETE | `/api/runs/{id}` | 停止 ✅。回 **202**：停止是請求不是完成（§5.2 要等到下一個讓出點） |

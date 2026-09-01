@@ -65,6 +65,9 @@ async def put_project(
 
     existed = _store(request).get(project_id) is not None
     stored = _store(request).put(project_id, data)
+    # §9.2「專案編輯後：diff 新舊 IR 的 hat 集合，只重啟有變動的 trigger」。
+    # 不是 active 就什麼都不做——存檔不該把一個關著的專案打開。
+    await request.app.state.triggers.resync(project_id)
     response.status_code = 200 if existed else 201
     return stored.summary()
 
@@ -77,6 +80,7 @@ async def delete_project(project_id: str, request: Request) -> Response:
     # 一份不存在的專案——點進去看不到任何積木，而 `persist_values` 會在下一個
     # 剛好同名的專案身上復活。
     request.app.state.runs_store.delete_project_history(project_id)
+    await request.app.state.triggers.deactivate(project_id)
     return Response(status_code=204)
 
 

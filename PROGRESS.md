@@ -1,7 +1,7 @@
 # PROGRESS
 
 > 這份文件只做一件事：**交接**。它記「現在在哪裡、什麼還沒解決、下一步做什麼」。
-> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.24），實作經過在 `git log`。
+> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.25），實作經過在 `git log`。
 > 兩邊已經有的東西，這裡不重複。
 
 最後更新：2026-09-01
@@ -87,13 +87,15 @@ aiohttp 互不相見）在同一條堆疊上傳值——D13 那句「衝突不�
 （結束碼）、被信號砍掉，還是連線斷了而行程還在——三種的成因完全不同，而原本
 那句話三種都長一樣。
 
-**`/api/listeners`（§9 的前身，不是 Trigger Manager）**：把畫布上的 hat 接上
-事件來源，**一次 yield = 一個 Run**（走既有的
-`RunManager.start(trigger=opcode, payload=...)`，引擎的 `_triggered()` 與
-`ThreadScope(payload)` 本來就支援，什麼都不用新增）。前端多一列「監聽／暫停
-監聽」，跟「執行」分開——兩件事分成兩列是為了讓它們**停得開**，而按下「執行」
-會順手把監聽打開，使用者不必知道那是兩件事。差在哪列在
-`backend/blocky/runs/listeners.py` 檔頭的表裡。
+**`/api/listeners`（§9 的前身）**：把畫布上的 hat 接上事件來源，**一次 yield =
+一個 Run**（走既有的 `RunManager.start(trigger=opcode, payload=...)`，引擎的
+`_triggered()` 與 `ThreadScope(payload)` 本來就支援，什麼都不用新增）。前端多
+一列「監聽／暫停監聽」，跟「執行」分開——兩件事分成兩列是為了讓它們**停得開**，
+而按下「執行」會順手打開，使用者不必知道那是兩件事。
+
+> **P2 第 2 步已經把它換成 `/api/triggers`**（design v0.25）：那條管的是「這個
+> process 有沒有在聽」，重啟就沒了；新的管的是「這個專案是不是該跑」，寫在
+> SQLite 上。兩條同時留著就是同一件事兩個入口，而其中一個還會給出過期的答案。
 
 ## 2. 下一步
 
@@ -108,16 +110,21 @@ aiohttp 互不相見）在同一條堆疊上傳值——D13 那句「衝突不�
 「隔天檢查執行歷史有紀錄」直接依賴它、它在監聽開著時當下就在痛（50 筆很快滿）、
 而 Trigger Manager 的 active 狀態與重啟恢復也要 SQLite。
 
-**下一步是第 2 步：Trigger Manager。** 下面這三塊是 P1 已經鋪好的一半，接的
-時候要接在它上面而不是重寫：
+**第 2 步（Trigger Manager）的骨架完成**——`storage/triggers.py`（active 那張
+表）、`runs/triggers.py`（key + spec 的 diff、重啟恢復）、`/api/triggers`。P1
+那張「§9.2 要的 / 這裡有嗎」的表現在只剩最後一格是叉。
 
-1. **`runs/listeners.py` 就是 Trigger Manager 的形狀**（一個專案 → 一組 hat →
-   handle）。P2 要補的是那張表裡打叉的四件事：active 狀態、IR diff 只重啟有變動
-   的、重啟恢復、內建的 cron／webhook trigger。
-2. **`start_trigger` 的整條管線已經在生產路徑上跑過真的長連線了**（在這之前它
+**下一步是 2b（cron）與 2c（webhook）。** cron 先做，因為 P2 的驗收句就是它
+（「設定每天 09:00 的流程，關掉瀏覽器，隔天檢查」）。要注意兩件事：
+`event.when_cron` 的宣告**還沒有 timezone 參數**，而 §9.1 說它必填（§4.9：沒有
+它，同一份專案在不同機器上會在不同時刻觸發）；加參數會走到 Q21 的路（既有專案
+那一格是空的輸入孔），只是目前還沒有任何專案存過這顆積木。
+
+下面這兩塊是 P1 鋪好的，接的時候要接在它上面而不是重寫：
+1. **`start_trigger` 的整條管線已經在生產路徑上跑過真的長連線了**（在這之前它
    只有合約測試用 `demo` 包走過）。trigger 死掉會說話（`trigger_error_text`，
    兩個 host 共用一句）。
-3. **前端的「監聽」是輪詢 `GET /api/runs`**（1.5 秒）。落地之後那個端點已經
+2. **前端的「監聽」是輪詢 `GET /api/runs`**（1.5 秒）。落地之後那個端點已經
    吃得下 `?projectId=`，所以輪詢至少不再拿回全部——但**「有新的 Run 了」該怎麼
    推還沒決定**：那條通道要回答「屬於哪個專案」「斷線怎麼補」「backlog 留多久」。
    三題都還在，只是不再卡在「歷史存不存在」上。

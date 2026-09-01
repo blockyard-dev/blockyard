@@ -18,7 +18,7 @@ import { Ear, Pause, Play, Square } from 'lucide-react';
 import * as Blockly from 'blockly/core';
 import { ApiError, fetchExtensions, fetchProject, saveProject } from './api/client';
 import { RunSocket, listRuns, startRun, stopRun } from './api/runs';
-import { startListening, stopListening } from './api/listeners';
+import { activateProject, deactivateProject } from './api/triggers';
 import type { RunSummary } from './api/runs';
 import { buildProjectToolbox, registerManifests, type Registration } from './blockly/setup';
 import {
@@ -269,11 +269,11 @@ export function App() {
       return;
     }
     try {
-      const listener = await startListening(PROJECT_ID);
+      const state = await activateProject(PROJECT_ID);
       setListening({
         on: true,
-        hats: listener.hats,
-        message: listener.hats.length === 0 ? '畫布上沒有事件積木' : undefined,
+        hats: state.hats,
+        message: state.hats.length === 0 ? '畫布上沒有事件積木' : undefined,
       });
     } catch (error: unknown) {
       setListening({ on: false, hats: [], message: describe(error) });
@@ -282,7 +282,7 @@ export function App() {
 
   const endListening = useCallback(async () => {
     setListening({ on: false, hats: [] });
-    await stopListening(PROJECT_ID).catch(() => {});
+    await deactivateProject(PROJECT_ID).catch(() => {});
   }, []);
 
   /**

@@ -19,14 +19,14 @@ from fastapi.staticfiles import StaticFiles
 
 from blocky.api import extensions as extensions_routes
 from blocky.api import keys as keys_routes
-from blocky.api import listeners as listeners_routes
 from blocky.api import projects as projects_routes
 from blocky.api import runs as runs_routes
+from blocky.api import triggers as triggers_routes
 from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
 from blocky.runs import RunManager
-from blocky.runs.listeners import ListenerManager
 from blocky.runs.recorder import RunRecorder
-from blocky.storage import ProjectStore, RunStore, default_db_path
+from blocky.runs.triggers import TriggerManager
+from blocky.storage import ActiveStore, ProjectStore, RunStore, default_db_path
 
 # P0b 的前端跑在 Vite 的 dev server 上（另一個 port），所以本機開發一定跨源。
 # 打包後前端由同一個 process 提供，這串就用不到了——但留著不礙事，因為
@@ -54,10 +54,14 @@ def create_app(
         # 執行歷史上會有一排永遠停在「執行中」的紀錄，而那比沒有紀錄更難讀。
         app.state.runs_store.reconcile_interrupted()
         app.state.recorder.start()
+        # §9.2 最後一句：後端重啟時從 SQLite 恢復所有 active 專案的 trigger。
+        # 這就是「關掉瀏覽器仍會準時執行」（§1.3）在程式碼裡的樣子。
+        await app.state.triggers.restore()
         yield
-        # 監聽先收：它手上是長連線（discord 的 gateway），而且它會**起新的
+        # trigger 先收：它手上是長連線（discord 的 gateway），而且它會**起新的
         # Run**——反過來的話，收完 Run 之後還可能有一則訊息進來又起一個。
-        await app.state.listeners.shutdown()
+        # 只斷連線，不動 active 那張表——那正是重啟後要恢復的東西。
+        await app.state.triggers.shutdown()
         # 還在跑的 Run 是 asyncio.Task。不砍的話 uvicorn 會等它們，而
         # `forever` 迴圈永遠不會結束——Ctrl-C 之後 server 就掛在那裡。
         await app.state.runs.shutdown()
@@ -81,10 +85,12 @@ def create_app(
         recorder=app.state.recorder,
         broker_options=broker_options or {},
     )
-    app.state.listeners = ListenerManager(
+    app.state.active_store = ActiveStore(db_path or default_db_path())
+    app.state.triggers = TriggerManager(
         store=app.state.store,
         extensions_root=app.state.extensions_root,
         runs=app.state.runs,
+        active=app.state.active_store,
     )
 
     app.add_middleware(
@@ -99,7 +105,7 @@ def create_app(
     app.include_router(keys_routes.router)
     app.include_router(runs_routes.router)
     app.include_router(runs_routes.ws_router)
-    app.include_router(listeners_routes.router)
+    app.include_router(triggers_routes.router)
 
 
     @app.get("/api/health", tags=["meta"])
