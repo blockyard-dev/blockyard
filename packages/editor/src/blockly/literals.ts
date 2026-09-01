@@ -24,6 +24,7 @@ import * as Blockly from 'blockly/core';
 import {
   BOOLEAN_TRUE,
   SHADOW_FIELD,
+  isSwitchableShadow,
   shadowKindOf,
   type ShadowKind,
 } from './define';
@@ -113,7 +114,9 @@ function shadowAt(scope: { block?: Blockly.BlockSvg }, event: Event): Blockly.Bl
   const target = event.target;
   if (!block || !(target instanceof Element)) return null;
   for (const candidate of block.getDescendants(false)) {
-    if (!candidate.isShadow() || shadowKindOf(candidate.type) === null) continue;
+    // `isSwitchableShadow` 而不是 `shadowKindOf(...) !== null`：下拉是一顆
+    // 字面值影子（存出去是字串），但它的型別不該讓人改掉，見 define.ts。
+    if (!candidate.isShadow() || !isSwitchableShadow(candidate.type)) continue;
     if (candidate.getSvgRoot().contains(target)) return candidate;
   }
   return null;

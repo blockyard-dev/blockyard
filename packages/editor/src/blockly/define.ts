@@ -76,6 +76,8 @@ export const SHADOW_TEXT = 'blocky.shadow.text';
 export const SHADOW_NUMBER = 'blocky.shadow.number';
 export const SHADOW_BOOLEAN = 'blocky.shadow.boolean';
 export const SHADOW_NULL = 'blocky.shadow.null';
+/** 動態下拉的影子（D22）。永遠帶 `#${blockType}.${name}` 後綴，見 `shadowFor`。 */
+export const SHADOW_DROPDOWN = 'blocky.shadow.dropdown';
 
 /** 一顆字面值影子代表的 JSON 型別。 */
 export type ShadowKind = 'text' | 'number' | 'boolean' | 'null';
@@ -90,9 +92,27 @@ export type ShadowKind = 'text' | 'number' | 'boolean' | 'null';
 export function shadowKindOf(type: string): ShadowKind | null {
   if (type.startsWith(SHADOW_TEXT)) return 'text';
   if (type.startsWith(SHADOW_NUMBER)) return 'number';
+  // 下拉存出去的就是一個字串——widget 只是「這一格怎麼編輯」，不是它的型別。
+  // 漏掉這一行的後果是**存檔重新整理之後下拉變成文字框**：`buildShadowState`
+  // 拿 `kindOfValue(值)`（'text'）跟這裡回的 null 比，對不上就退回通用文字
+  // 影子。值會留著，所以只驗「值還在」是驗不出來的。
+  if (type.startsWith(SHADOW_DROPDOWN)) return 'text';
   if (type === SHADOW_BOOLEAN) return 'boolean';
   if (type === SHADOW_NULL) return 'null';
   return null;
+}
+
+/**
+ * 這一格的型別**可不可以被使用者改掉**（§16 Q16 的右鍵切換）。
+ *
+ * 跟 `shadowKindOf` 是兩個不同的問題，所以是兩個函式：前者問「它存出去是哪種
+ * JSON 型別」，這個問「換一種型別是不是一件合法的事」。下拉兩邊的答案相反——
+ * 它存出去是字串，但它的選項是**封閉的一組**（D22），把它換成一個自由的數字
+ * 框等於做出一顆再也選不回合法值的積木。那正是 D27「文字影子撞數字比較」那類
+ * 坑的形狀。
+ */
+export function isSwitchableShadow(type: string): boolean {
+  return shadowKindOf(type) !== null && !type.startsWith(SHADOW_DROPDOWN);
 }
 
 /** 一個 IR 字面值 → 它該用哪一種影子。**值說了算**，不是宣告。 */
@@ -608,7 +628,7 @@ function shadowFor(
   if (arg.type === 'dropdown' && arg.source) {
     const value = String(arg.default ?? '');
     const extId = blockType.split('.')[0];
-    const type = `blocky.shadow.dropdown#${blockType}.${name}`;
+    const type = `${SHADOW_DROPDOWN}#${blockType}.${name}`;
     definitions.push({
       type,
       message0: '%1',
