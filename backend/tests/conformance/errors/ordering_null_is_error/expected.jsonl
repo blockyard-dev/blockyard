@@ -1,0 +1,9 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4", "value": null}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_3", "error": {"type": "TypeCoercionError", "code": "type", "message": "不能比較空值的大小", "blockId": "blk_3", "hint": "清單的長度用「清單的長度」；沒有值的情況請先用「如果」擋掉"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

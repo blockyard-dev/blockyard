@@ -6,13 +6,15 @@
              即不相等，list / object 走深度比較，等同 JS 的 ===。不報錯，
              因為「這兩個東西一不一樣」對任何輸入都該有答案。
              選 `approx`（≈ / ≉，D24）時走 `_approx_eq` 的四條規則。
-  lt/gt/lte/gte  兩邊都是數字 → 數值比較；兩邊都是文字 → 字典序比較；
-             **型別混用 → 執行期錯誤**，訊息提示用「轉為數字」。
+  lt/gt/lte/gte  比較方式寫在積木上（D24 的同一招）：`fields.mode` 選 `number`
+             （預設）時兩邊 `to_number`，轉不動即錯；選 `text` 時兩邊
+             `to_string` 後比字典序。`null` / list / object 兩種模式都不能
+             比大小。
 
-最後一條刻意不學 Scratch 的「能轉數字就轉、否則比字串」。那個規則會讓
-`"10" < "9"` 的答案取決於使用者看不見的嗅探結果，正是 §4.3 想避免的混亂。
-`≈` 不是那條路的回歸：它做的轉換與 Scratch 一樣寬，但**寫在積木上**——選了
-`≈` 的人知道自己選了什麼，而嗅探沒有給任何人這個機會。
+轉換照做，但**是哪一種轉換寫在積木上**，這與 Scratch 的「能轉數字就轉、否則
+比字串」是兩件事：那個規則會讓 `"10" < "9"` 的答案取決於使用者看不見的嗅探
+結果，而 `mode` 存得進 IR、讀得出來、diff 得出來。`≈` 同理——選了 `≈` 的人
+知道自己選了什麼，而嗅探沒有給任何人這個機會。
 """
 
 from __future__ import annotations
@@ -28,7 +30,10 @@ from blocky.ir.schema import Block
 from blocky.ir.values import (
     TYPE_BOOLEAN,
     TYPE_LABELS_ZH,
+    TYPE_LIST,
+    TYPE_NULL,
     TYPE_NUMBER,
+    TYPE_OBJECT,
     TYPE_STRING,
     divide,
     modulo,
@@ -146,7 +151,7 @@ async def _neq(t: Thread, b: Block) -> bool:
     return not _compare(t.field(b, "op", _EXACT), a, c)
 
 
-#: `fields.op` 的兩個值（D24）。舊專案沒有這一格，fallback 是 `exact`。
+#: `fields.op` 的兩個值（D24）。**選填**：省略即 `exact`，理由同 `mode`（見 `_BY_NUMBER`）。
 _EXACT = "exact"
 _APPROX = "approx"
 
@@ -230,16 +235,42 @@ def _as_number(v: Any) -> int | float | None:
         return None
 
 
+#: `fields.mode` 的兩個值（D27）。**選填**：省略即 `number`。那不是給舊專案的
+#: 相容層——這個專案還在測試期，一份既有專案都沒有——而是 D5：IR 要手寫得
+#: 出來、AI 生成得出來，而那兩種來源多半只寫最少的欄位。
+_BY_NUMBER = "number"
+_BY_TEXT = "text"
+
+#: 兩種模式都不能比大小的型別。理由與 `≈` 的規則 1 是同一條：「有沒有值」不是
+#: 「誰比較大」。§4.3 的 `to_number(null)` 是 0，照它做的話「這個欄位 API 沒有
+#: 回」會變成「這個欄位不大於 0」——一個看起來成功的錯誤答案。容器同理，
+#: `to_string` 對 list / object 給的是 JSON 文字，比它的字典序沒有任何意義。
+_UNORDERABLE = {TYPE_NULL, TYPE_LIST, TYPE_OBJECT}
+
+
 async def _ordered(t: Thread, b: Block) -> tuple[Any, Any]:
     a = await t.value(b, "a")
     c = await t.value(b, "b")
-    ta, tc = type_of(a), type_of(c)
-    if ta == tc == TYPE_NUMBER or ta == tc == TYPE_STRING:
-        return a, c
-    raise TypeCoercionError(
-        f"不能比較{TYPE_LABELS_ZH[ta]}與{TYPE_LABELS_ZH[tc]}的大小",
-        hint="請先用「轉為數字」把兩邊變成同一種型別",
-    )
+    mode = t.field(b, "mode", _BY_NUMBER)
+    if mode not in (_BY_NUMBER, _BY_TEXT, None, ""):
+        raise BlockyError(f"未知的比較方式 {mode}")
+
+    bid = t.interp._bid(b)
+    for v in (a, c):
+        tv = type_of(v)
+        if tv in _UNORDERABLE:
+            raise TypeCoercionError(
+                f"不能比較{TYPE_LABELS_ZH[tv]}的大小",
+                block_id=bid,
+                hint="清單的長度用「清單的長度」；沒有值的情況請先用「如果」擋掉",
+            )
+
+    if mode == _BY_TEXT:
+        # `to_string` 是全函數（§4.3），所以文字模式沒有失敗模式——`真` 比得了
+        # 大小，值是 "true"。選了「照文字比」的人要的就是這個。
+        return to_string(a, block_id=bid), to_string(c, block_id=bid)
+    # 轉不動的文字在這裡報錯，訊息由 `to_number` 給（含「轉為數字，失敗時 ()」）。
+    return to_number(a, block_id=bid), to_number(c, block_id=bid)
 
 
 @value("operator.lt")

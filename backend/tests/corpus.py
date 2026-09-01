@@ -790,7 +790,7 @@ case(
 
 case(
     "values/approx_inequality_is_the_negation",
-    "≉ 就是 ≈ 的否定；沒有 op 欄位的舊專案仍然是嚴格比對（D24、§13.1）",
+    "≉ 就是 ≈ 的否定；省略 op 欄位的手寫 IR 仍然是嚴格比對（D24、D5）",
     "§4.4.1 比較語意",
     one(
         log(blk("operator.neq", fields={"op": "approx"}, a=" 5 ", b=5)),
@@ -804,12 +804,54 @@ case(
 )
 
 case(
-    "errors/ordering_across_types_is_error",
-    "大小比較不接受型別混用，訊息提示先轉型",
-    "§4.4 operator 比較語意",
-    one(log(blk("operator.lt", a="5", b=10))),
+    "operator/ordering_compares_as_numbers",
+    "大小比較預設照數字比，兩邊先 to_number（D27）",
+    "§4.4.1 比較語意",
+    one(
+        # 使用者打進文字影子的 "5"：這是 D27 要修的那條路
+        log(blk("operator.lt", a="5", b=10)),
+        log(blk("operator.gt", a=" 12 ", b=9)),
+        # 嗅探會在這題答錯——字典序說 "10" < "9"
+        log(blk("operator.gte", a="10", b="9")),
+        # 布林走 1 / 0，與 §4.3 的 to_number 同一張表
+        log(blk("operator.lte", a=True, b=1)),
+    ),
+    {"status": "ok", "logs": ["true", "true", "true", "true"]},
+    tags=["operator", "comparison", "D27"],
+)
+
+case(
+    "operator/ordering_text_mode_is_lexicographic",
+    "選了「照文字比」才走字典序；省略 mode 欄位的手寫 IR 是 number（D27、D5）",
+    "§4.4.1 比較語意",
+    one(
+        log(blk("operator.lt", fields={"mode": "text"}, a="10", b="9")),
+        log(blk("operator.gt", fields={"mode": "text"}, a="banana", b="apple")),
+        # to_string 是全函數，所以文字模式沒有失敗模式
+        log(blk("operator.lt", fields={"mode": "text"}, a=False, b="true")),
+        # 沒有 fields.mode：fallback 是 number
+        log(blk("operator.lt", a="10", b="9")),
+    ),
+    {"status": "ok", "logs": ["true", "true", "true", "false"]},
+    tags=["operator", "comparison", "D27"],
+)
+
+case(
+    "errors/ordering_non_numeric_text_is_error",
+    "照數字比但轉不成數字 → 執行期錯誤，訊息提示先轉型",
+    "§4.4.1 比較語意",
+    one(log(blk("operator.lt", a="abc", b=10))),
     {"status": "error", "error": {"code": "type", "hint_contains": "轉為數字"}},
-    tags=["operator", "comparison"],
+    tags=["operator", "comparison", "D27"],
+)
+
+case(
+    "errors/ordering_null_is_error",
+    "null 兩種模式都不能比大小——「有沒有值」不是「誰比較大」（D27）",
+    "§4.4.1 比較語意",
+    one(log(blk("operator.gt", a=blk("object.parse_json", text="null"), b=0))),
+    {"status": "error", "error": {"code": "type", "message_contains": "不能比較"}},
+    tags=["operator", "comparison", "D27"],
 )
 
 # ==========================================================================

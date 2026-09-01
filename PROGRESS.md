@@ -4,17 +4,20 @@
 > 規格與決議在 [`docs/design.md`](docs/design.md)（v0.18），實作經過在 `git log`。
 > 兩邊已經有的東西，這裡不重複。
 
-最後更新：2026-08-30
+最後更新：2026-08-31
 
 ## 1. 現況
 
-**P0 結案，P1 第 1 步完成。** P0b 的八步、九輪瀏覽器實測回饋、§15 的四條驗收全部
-通過；P1 的第一個手寫積木包 `http` 跑得起來——從工具箱拉一顆 `GET` 出來、點一下，
-值氣泡就展開回應物件（實測打的是 httpbin.org）。
+**P0 結案，P1 第 1 步完成，外加一條 D27（大小比較加 `mode` 下拉）已落地。**
+P0b 的八步、九輪瀏覽器實測回饋、§15 的四條驗收全部通過；P1 的第一個手寫積木包
+`http` 跑得起來——從工具箱拉一顆 `GET` 出來、點一下，值氣泡就展開回應物件
+（實測打的是 httpbin.org）。`<` `>` `≤` `≥` 現在長了一個 `mode` 下拉
+（`number`／`text`，design.md v0.20、D27）：`${金額} > 100` 一路打得完，不再因為
+兩個孔是文字影子就撞上「文字與數字不能比大小」。
 
 ```
-cd backend && .venv/bin/python -m pytest      # 668 passed, 5 skipped（含積木包自帶的 tests/）
-cd packages/editor && npm run check           # 343 passed（13 檔）+ tsc 乾淨
+cd backend && .venv/bin/python -m pytest      # 680 passed, 5 skipped（含積木包自帶的 tests/）
+cd packages/editor && npm run check           # 351 passed（13 檔）+ tsc 乾淨
 ```
 
 題庫覆蓋 43/88 顆內建積木（49%）。

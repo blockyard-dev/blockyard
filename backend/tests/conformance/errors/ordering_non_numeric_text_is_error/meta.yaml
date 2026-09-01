@@ -1,0 +1,11 @@
+title: 照數字比但轉不成數字 → 執行期錯誤，訊息提示先轉型
+spec: §4.4.1 比較語意
+tags:
+- operator
+- comparison
+- D27
+expect:
+  status: error
+  error:
+    code: type
+    hint_contains: 轉為數字

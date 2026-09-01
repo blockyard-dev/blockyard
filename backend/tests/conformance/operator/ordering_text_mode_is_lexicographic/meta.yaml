@@ -1,0 +1,13 @@
+title: 選了「照文字比」才走字典序；省略 mode 欄位的手寫 IR 是 number（D27、D5）
+spec: §4.4.1 比較語意
+tags:
+- operator
+- comparison
+- D27
+expect:
+  status: ok
+  logs:
+  - 'true'
+  - 'true'
+  - 'true'
+  - 'false'

@@ -1,0 +1,13 @@
+title: 大小比較預設照數字比，兩邊先 to_number（D27）
+spec: §4.4.1 比較語意
+tags:
+- operator
+- comparison
+- D27
+expect:
+  status: ok
+  logs:
+  - 'true'
+  - 'true'
+  - 'true'
+  - 'true'

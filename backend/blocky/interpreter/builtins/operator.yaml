@@ -92,15 +92,20 @@ palette:
           - { value: "10^", label: "10^" }
       value: { type: number, default: 0 }
 
-  # ---- 比較（§4.4.1）。eq / neq 不做型別轉換；大小比較型別混用是錯誤。----
+  # ---- 比較（§4.4.1）。eq / neq 不做型別轉換；大小比較先照 `mode` 統一型別。----
   #
-  # `op` 是下拉而不是兩顆新積木（D24）：`=` 與 `≈` 問的是同一個問題，差別只在
-  # 「要不要先把兩邊整理成同一種東西」。做成兩顆積木的話，工具箱裡會有四顆長得
-  # 幾乎一樣的比較積木，而使用者要先看懂四個符號才選得下去。
+  # `op` 與 `mode` 是下拉而不是新積木（D24、D27）：`=` 與 `≈` 問的是同一個問題，
+  # 差別只在「要不要先把兩邊整理成同一種東西」。做成兩顆積木的話，工具箱裡會有
+  # 四顆長得幾乎一樣的比較積木，而使用者要先看懂四個符號才選得下去。
   #
-  # 欄位值是 `exact` / `approx` 而不是 `=` / `≈`：符號會隨介面語言變（§16 Q5 的
-  # i18n 要換的正是 label），opcode 與欄位值不會（§13.1）。舊專案沒有這一格，
-  # handler 的 fallback 是 `exact`——`=` 的語意一個字都沒有改。
+  # 欄位值是 `exact` / `approx`、`number` / `text` 而不是符號本身：符號會隨介面
+  # 語言變（§16 Q5 的 i18n 要換的正是 label），opcode 與欄位值不會（§13.1）。
+  # 這兩格都是**選填**的（省略即 `exact` 與 `number`）。那不是舊專案的相容層——
+  # 現在一份既有專案都沒有——而是 D5：IR 要手寫得出來、AI 生成得出來。
+  #
+  # 大小比較的兩個孔**維持 `type: string`**（D27）：那句話說的是「這個孔用文字框
+  # 編輯」，不是「這裡只能是字串」（§16 Q16）。它換到的是 `${金額} > 100` 一路
+  # 打得完——數字影子是 `field_number`，打不進 `${}`。
 
   - section: true
   - opcode: eq
@@ -133,23 +138,59 @@ palette:
 
   - opcode: lt
     type: boolean
-    text: "%(a) < %(b)"
-    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+    text: "%(a) %(mode) %(b)"
+    args:
+      a: { type: string, default: "" }
+      mode:
+        type: dropdown
+        field: true
+        default: number
+        options:
+          - { value: number, label: "<" }
+          - { value: text, label: "<（字典序）" }
+      b: { type: string, default: "" }
 
   - opcode: gt
     type: boolean
-    text: "%(a) > %(b)"
-    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+    text: "%(a) %(mode) %(b)"
+    args:
+      a: { type: string, default: "" }
+      mode:
+        type: dropdown
+        field: true
+        default: number
+        options:
+          - { value: number, label: ">" }
+          - { value: text, label: ">（字典序）" }
+      b: { type: string, default: "" }
 
   - opcode: lte
     type: boolean
-    text: "%(a) ≤ %(b)"
-    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+    text: "%(a) %(mode) %(b)"
+    args:
+      a: { type: string, default: "" }
+      mode:
+        type: dropdown
+        field: true
+        default: number
+        options:
+          - { value: number, label: "≤" }
+          - { value: text, label: "≤（字典序）" }
+      b: { type: string, default: "" }
 
   - opcode: gte
     type: boolean
-    text: "%(a) ≥ %(b)"
-    args: { a: { type: string, default: "" }, b: { type: string, default: "" } }
+    text: "%(a) %(mode) %(b)"
+    args:
+      a: { type: string, default: "" }
+      mode:
+        type: dropdown
+        field: true
+        default: number
+        options:
+          - { value: number, label: "≥" }
+          - { value: text, label: "≥（字典序）" }
+      b: { type: string, default: "" }
 
   # ---- 邏輯。and / or 短路，右邊的 reporter 可以帶副作用，所以短路是語意。----
   #

@@ -40,17 +40,31 @@
       "ui": null
     },
     "blk_3": {
-      "opcode": "operator.lt",
+      "opcode": "operator.gt",
       "parent": "blk_2",
       "next": null,
       "inputs": {
         "a": {
-          "kind": "literal",
-          "value": "5"
+          "kind": "block",
+          "id": "blk_4"
         },
         "b": {
           "kind": "literal",
-          "value": 10
+          "value": 0
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "object.parse_json",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "null"
         }
       },
       "fields": {},

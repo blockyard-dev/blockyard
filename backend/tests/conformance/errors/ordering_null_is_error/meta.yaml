@@ -1,0 +1,11 @@
+title: null 兩種模式都不能比大小——「有沒有值」不是「誰比較大」（D27）
+spec: §4.4.1 比較語意
+tags:
+- operator
+- comparison
+- D27
+expect:
+  status: error
+  error:
+    code: type
+    message_contains: 不能比較
