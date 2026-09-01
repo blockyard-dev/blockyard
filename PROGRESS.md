@@ -1,7 +1,7 @@
 # PROGRESS
 
 > 這份文件只做一件事：**交接**。它記「現在在哪裡、什麼還沒解決、下一步做什麼」。
-> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.22），實作經過在 `git log`。
+> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.23），實作經過在 `git log`。
 > 兩邊已經有的東西，這裡不重複。
 
 最後更新：2026-09-01

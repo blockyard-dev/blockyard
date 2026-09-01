@@ -2,7 +2,7 @@
 
 Scratch 風格的積木編輯器，組出會做真事的自動化流程：HTTP、Discord、LLM、檔案。
 
-設計文件：[docs/design.md](docs/design.md)（v0.22）
+設計文件：[docs/design.md](docs/design.md)（v0.23）
 
 ---
 
