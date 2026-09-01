@@ -1,0 +1,88 @@
+# OpenAI 積木包（§15、P1 第 3 步）。
+#
+# 三個手寫包裡它排第二，因為它是**第一個需要使用者填一把真金鑰、也第一個真的
+# 帶依賴**的：§12.1 的金鑰庫、§12.2 的值遮蔽、§7.6 的 uv venv 隔離，都只有在
+# 這種包身上才試得出來。`http` 那一步證明的是「manifest → 積木 → 執行」這條路
+# 本身，這一步證明的是掛在它旁邊的那三件事。
+#
+# `requirements` 只有 `openai`。它相依的是 `httpx2`（2.x，跟 backend 的
+# `httpx` 0.28 是兩個不同的發行套件），所以這個包確實需要自己的 venv——這正是
+# D13 說「衝突不是風險而是必然」的那個情況第一次真的發生。
+manifestVersion: 1
+id: openai
+name: OpenAI
+version: 0.1.0
+author: blocky
+description: 問 GPT。chat 回一句文字，chat_full 回完整物件（含 usage）
+color: "#10A37F"
+permissions: [net]
+requirements: ["openai>=3.6,<4"]
+
+config:
+  # 存進 OS keyring，不進 project.json——分享專案不等於分享明文金鑰（§12.1）。
+  # `envVar` 讓 D28 的「金鑰」面板認得出貼進來的 .env 是哪一行（匹配靠宣告，
+  # 不靠嗅探大小寫／底線轉換）。
+  - key: api_key
+    type: secret
+    label: API 金鑰
+    envVar: OPENAI_API_KEY
+    help: 到 platform.openai.com 的 API keys 頁面產生，然後用右上角「金鑰」匯入
+
+  # 留空就打官方端點。它存在的第一個理由是測試（§7.1：不打真 API，本地假
+  # 伺服器扮演端點），第二個理由是自架的相容端點——兩者要的是同一個東西。
+  - key: base_url
+    type: string
+    default: ""
+    label: 端點網址
+    help: 留空就是官方端點。指到相容端點（自架、代理）時才需要填
+
+palette:
+  # 最短的一顆：拖出來就能按執行（§5.1 的「點一下就跑」）。刻意**不開**
+  # max_output_tokens——一顆會預設把答案砍斷的「最短路徑」不是最短路徑。
+  - opcode: chat
+    type: reporter
+    returns: string
+    text: "問 %(model)：%(prompt)"
+    args:
+      model: { type: dropdown, source: models, default: "gpt-5.6-luna" }
+      prompt:
+        type: string
+        default: "用一句話解釋什麼是視覺化程式設計"
+        multiline: true
+        rows: 3
+
+  - section: true
+
+  # 說明按鈕放在完整版前面：要決定 model、要看懂 ${r.usage.total_tokens} 的
+  # 那一刻就在這裡，而不是在分類的最上面（同 http 的作法）。
+  - button: api_docs
+    label: "模型與參數說明"
+    action: open_url
+    url: "https://platform.openai.com/docs/api-reference/responses"
+
+  # 完整版：回物件，所以 ${r.usage.total_tokens}、${r.status} 都取得到。
+  # 回物件而不是「一顆問答案、一顆問用量」——後者要嘛問兩次（花兩次錢），
+  # 要嘛在包裡藏一份「上一次的回應」，而那是隱藏狀態（§5.1、同 http 的理由）。
+  - opcode: chat_full
+    type: reporter
+    returns: object
+    text: "問 %(model)：%(prompt) 系統指示 %(instructions) 最多 %(max_output_tokens) tokens"
+    args:
+      model: { type: dropdown, source: models, default: "gpt-5.6-luna" }
+      prompt:
+        type: string
+        default: "用一句話解釋什麼是視覺化程式設計"
+        multiline: true
+        rows: 3
+      instructions:
+        type: string
+        default: ""
+        label: 系統指示
+        help: 給模型的角色設定。留空就不送
+        multiline: true
+        rows: 2
+      max_output_tokens:
+        type: number
+        default: 2048
+        min: 16
+        help: 砍到上限時 status 會是 incomplete，理由在 incomplete_reason

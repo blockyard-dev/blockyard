@@ -19,6 +19,15 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
+    # 積木包自帶的 tests/ 跟 backend 的測試跑在同一個 venv（`testpaths` 含
+    # `../extensions`），而 `extensions/openai/tests/` 是用 InProcessHost 直接
+    # 呼叫的，所以 `openai` 得裝在這裡。它**不是** runtime 的相依：真的執行時
+    # 這個包跑在 `~/.blocky/venvs/openai` 自己的直譯器下（§7.6）。
+    #
+    # 副作用要記著：`venv.py` 的 `.pth` 把這一份 site-packages 接進每一支積木
+    # 包 venv，所以 backend 裝了什麼，每個包都看得到。`openai` 自己宣告了
+    # `requirements`，它那支 venv 裡的版本優先，但沒宣告的包會吃到這一份。
+    "openai>=3.6,<4",
     "pytest-asyncio>=0.24",
     "hypothesis>=6.112",
     "ruff>=0.7",
@@ -39,6 +48,11 @@ asyncio_mode = "auto"
 # 積木包自帶 tests/（§7.1、§17.4），而它們住在 backend/ 外面。一句 pytest 要
 # 跑得完全部：包壞掉與 runtime 壞掉是同一個回歸網的兩半。
 testpaths = ["tests", "../extensions"]
+# 每個積木包自帶的 `tests/test_blocks.py` 基名都一樣，而預設的 prepend import
+# mode 靠「基名唯一」認模組——第二個包一加進來就是 `import file mismatch`。
+# importlib mode 不碰 sys.path，也不需要基名唯一，所以包的目錄結構可以一直長
+# 得一樣，不必第三個包開始各自取一個不撞的檔名。
+addopts = ["--import-mode=importlib"]
 
 [tool.ruff]
 line-length = 100
