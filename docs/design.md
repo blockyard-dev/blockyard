@@ -2192,8 +2192,9 @@ blocky/
 | P0a 語意核心 | **完成**。63 題題庫、214 個測試 |
 | P1 的 Host 邊界（§7.5） | **提前完成**。manifest schema、`ExtensionHost` / `HostChannel`、`InProcessHost`、邊界的正規化與驗證、24 題合約測試 |
 | P0b 編輯器 | **完成**。第 1～8 步、九輪實測回饋、四條驗收全部通過 |
-| P1 第 1 步（`http` 包） | **完成**。`ctx.http` 落地、`permissions: [net]` 有了檢查、`extensions` 宣告改成算出來的 ← 現在在這裡 |
-| P1 其餘（SubprocessHost、`openai`、`discord`） | 第 2～4 步，見下面的施工順序 |
+| P1 第 1 步（`http` 包） | **完成**。`ctx.http` 落地、`permissions: [net]` 有了檢查、`extensions` 宣告改成算出來的 |
+| P1 第 2 步（SubprocessHost） | **完成**。`rpc.py`（雙向 JSON-RPC）、`subprocess_host.py`／`subprocess_worker.py`、反向通道與取消推播；`open_registry()` 預設換成 subprocess；合約測試 `HOSTS = ["inprocess", "subprocess"]`。`uv venv` 依賴隔離留給第 3 步（`http` 還沒有東西要裝） ← 現在在這裡 |
+| P1 其餘（`openai`、`discord`） | 第 3～4 步，見下面的施工順序 |
 
 **為什麼 Host 邊界提前、其餘 P1 延後**：介面不能晚做，實作可以。`ExtensionHost` / `HostChannel` 兩個方向的介面與 `boundary.py` 都已經定案，合約測試也已經對 host 實作參數化——SubprocessHost 之後接上去只要在 `HOSTS` 加一行，題目一題都不用改。反過來，P1 剩下的「手寫三個包」原本卡在 Q10，而 **Q10 已經決議（開發者路線）**——三個包的選擇與順序不變，因為它們本來就是開發者取向。
 
@@ -2331,8 +2332,8 @@ P1 的一半在 P0b 期間已經提前做完（見「目前進度」）：manife
 | # | 步驟 | 估計 | 為什麼排這裡 |
 |---|---|---|---|
 | ~~1~~ | ~~**`http` 包跑在 `InProcessHost` 上**，配本地假伺服器~~ **完成** | 3～4 天 | 它是唯一一個**不需要外部帳號、也不需要 SDK 依賴**的包，所以這一步錯的一定是「manifest → 積木 → 執行」這條路本身。而那條路從來沒有人真的從頭走過一次——`demo` 包只走到 host，沒有走到工具箱與畫布 |
-| 2 | **SubprocessHost + 跨 process 反向通道**（§7.5、§7.6） | 1.5～2 週 | 合約測試已經對 host 參數化，`HOSTS` 加一行就跑得起來；而第 1 步的 `http` 包當場變成第二個實作的第一個真實用戶。**排在 `openai` 之前**：`openai` 是第一個帶 `requirements` 的包，而依賴隔離正是子 process 存在的理由——反過來做等於先讓一個假的隔離上線 |
-| 3 | **`openai` 包**：secret 管理（keyring）、§12.2 的值遮蔽、uv venv、長時間請求 | 1～1.5 週 | 第一個需要金鑰的包。三件新東西（金鑰庫、遮蔽、venv）都只有在真的有一個要金鑰、要裝東西的包時才試得出來 |
+| ~~2~~ | ~~**SubprocessHost + 跨 process 反向通道**（§7.5、§7.6）~~ **完成** | 1.5～2 週 | 合約測試已經對 host 參數化，`HOSTS` 加一行就跑得起來；而第 1 步的 `http` 包當場變成第二個實作的第一個真實用戶。**`uv venv` 依賴隔離順延到第 3 步**：子 process 目前跟 backend 同一個 venv，`http` 的 `requirements: []` 沒有東西需要隔離，`openai` 才是第一個真消費者 |
+| 3 | **`openai` 包**：secret 管理（keyring）、§12.2 的值遮蔽、`uv venv`、長時間請求 | 1～1.5 週 | 第一個需要金鑰的包。四件新東西（金鑰庫、遮蔽、venv、`subprocess_host.py` 換成用該包自己的 venv 直譯器）都只有在真的有一個要金鑰、要裝東西的包時才試得出來 |
 | 4 | **`discord` 包**：長連線 trigger（§7.3 的 async generator） | 1～1.5 週 | 最貴的留最後。它是唯一需要**常駐連線**的包，而 trigger 的生命週期與 P2 的 Trigger Manager 有交集——先做完 2、3，那時 host 邊界與 venv 都已經定下來 |
 
 **動態下拉（`source`）最晚要在第 3 步之前接上。** 端點是

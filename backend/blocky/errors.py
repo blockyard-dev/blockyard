@@ -34,6 +34,18 @@ class BlockyError(Exception):
             d["hint"] = self.hint
         return d
 
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "BlockyError":
+        """`to_dict()` 的反函式（§7.6：SubprocessHost 在 RPC 邊界重建例外）。
+
+        用 `code` 查表選子類別，不是 `type`——`code` 是 §7.5 錯誤事件裡本來就
+        對外承諾的欄位，`type` 只是除錯用的類別名。認不得的 `code` 退回基底
+        `BlockyError`，這樣子 process 端就算跑了個 unknown 的 BlockyError
+        子類別，parent 端也重建得出一個行為正確（雖然類別不精確）的例外。
+        """
+        target = _BY_CODE.get(d.get("code"), BlockyError)
+        return target(d.get("message", ""), block_id=d.get("blockId"), hint=d.get("hint"))
+
     def __str__(self) -> str:
         return f"{self.message}（{self.hint}）" if self.hint else self.message
 
@@ -102,6 +114,22 @@ class ExtensionError(BlockyError):
     """§7.5 Host 邊界的正規化／驗證失敗。"""
 
     code = "extension"
+
+
+_BY_CODE: dict[str, type[BlockyError]] = {
+    cls.code: cls
+    for cls in (
+        TypeCoercionError,
+        BadIndexError,
+        KeyMissingError,
+        UndefinedVariableError,
+        ParamOutOfScopeError,
+        TemplateError,
+        RecursionLimitError,
+        UnknownBlockError,
+        ExtensionError,
+    )
+}
 
 
 class ValidationError(Exception):

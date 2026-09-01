@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
 
 from blocky.extensions.host import (
     CallContexts,
@@ -23,6 +23,7 @@ from blocky.extensions.host import (
 )
 from blocky.extensions.inprocess import InProcessHost
 from blocky.extensions.manifest import BlockSpec, ExtensionSource, Manifest, discover
+from blocky.extensions.subprocess_host import SubprocessHost
 from blocky.interpreter.events import EventSink
 
 if TYPE_CHECKING:  # 只為型別；執行期沒有這條相依，因此與 engine 不成環
@@ -130,16 +131,29 @@ async def open_registry(
     channel: HostChannel | None = None,
     config: dict[str, dict[str, Any]] | None = None,
     only: list[str] | None = None,
+    host: Literal["inprocess", "subprocess"] = "subprocess",
 ) -> ExtensionRegistry:
-    """掃描目錄、建 InProcessHost、載入積木包。
+    """掃描目錄、建 Host、載入積木包。
 
     `only` 用來對應 §13.3：專案只宣告了它用到的包，沒宣告的不必付載入成本。
+
+    `host` 預設 `"subprocess"`（§7.6、D13）：這是實際跑第三方積木包的路徑
+    （`api/validation.py` 存檔與執行都經過這裡）。`InProcessHost` 保留給
+    合約測試自身要直接建構的場合；這裡留一個切換是給未來需要快速路徑
+    （例如不碰網路、不需要真隔離）的呼叫端用，不是常態。
     """
     contexts = CallContexts()
-    sources = discover(Path(root))
-    channel = channel or EventSinkChannel(sink or EventSink(), contexts)
-    host = InProcessHost(sources, channel, contexts, config=config)
-    registry = ExtensionRegistry(host, sources, contexts)
+    root_path = Path(root)
+    sources = discover(root_path)
+    event_channel = channel or EventSinkChannel(sink or EventSink(), contexts)
+    ext_host: ExtensionHost = (
+        InProcessHost(sources, event_channel, contexts, config=config)
+        if host == "inprocess"
+        else SubprocessHost(
+            sources, event_channel, contexts, extensions_root=root_path, config=config
+        )
+    )
+    registry = ExtensionRegistry(ext_host, sources, contexts)
 
     for ext_id in sources if only is None else only:
         if ext_id in sources:

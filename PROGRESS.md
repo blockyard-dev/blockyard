@@ -4,47 +4,78 @@
 > 規格與決議在 [`docs/design.md`](docs/design.md)（v0.18），實作經過在 `git log`。
 > 兩邊已經有的東西，這裡不重複。
 
-最後更新：2026-08-31
+最後更新：2026-09-01
 
 ## 1. 現況
 
-**P0 結案，P1 第 1 步完成，外加一條 D27（大小比較加 `mode` 下拉）已落地。**
-P0b 的八步、九輪瀏覽器實測回饋、§15 的四條驗收全部通過；P1 的第一個手寫積木包
-`http` 跑得起來——從工具箱拉一顆 `GET` 出來、點一下，值氣泡就展開回應物件
-（實測打的是 httpbin.org）。`<` `>` `≤` `≥` 現在長了一個 `mode` 下拉
-（`number`／`text`，design.md v0.20、D27）：`${金額} > 100` 一路打得完，不再因為
-兩個孔是文字影子就撞上「文字與數字不能比大小」。
+**P0 結案，P1 第 1、2 步完成，外加一條 D27（大小比較加 `mode` 下拉）已落地。**
+P0b 的八步、九輪瀏覽器實測回饋、§15 的四條驗收全部通過；`http` 包現在跑在真的
+子 process 上（`SubprocessHost`，§7.5、§7.6、D13）——從工具箱拉一顆 `GET`
+出來、點一下，值氣泡照樣展開回應物件，行為與 in-process 時一模一樣，差別在
+執行期間 `ps` 看得到一個獨立的 `subprocess_worker` process。`<` `>` `≤` `≥`
+現在長了一個 `mode` 下拉（`number`／`text`，design.md v0.20、D27）：
+`${金額} > 100` 一路打得完，不再因為兩個孔是文字影子就撞上
+「文字與數字不能比大小」。
 
 ```
-cd backend && .venv/bin/python -m pytest      # 680 passed, 5 skipped（含積木包自帶的 tests/）
+cd backend && .venv/bin/python -m pytest      # 711 passed, 5 skipped（含積木包自帶的 tests/）
 cd packages/editor && npm run check           # 351 passed（13 檔）+ tsc 乾淨
 ```
 
 題庫覆蓋 43/88 顆內建積木（49%）。
 
-**第 1 步做完的四件**（design.md v0.18）：`extensions/http/`（4 顆積木 + 一顆 D25
-按鈕 + 自帶 tests/）、`ctx.http` 落地（host 提供、逾時與連線重試的預設值只設一次）、
-`permissions: [net]` 有了第一個真的檢查、SDK 多一個 `BlockError`。
+**第 2 步做完的東西**（§7.5、§7.6）：`rpc.py`（雙向 JSON-RPC，換行分隔 JSON，
+parent/child 共用同一個類別）、`subprocess_host.py`（parent 端 `SubprocessHost`）、
+`subprocess_worker.py`（child 端進入點，`python -m
+blocky.extensions.subprocess_worker <ext_id> <root>`，跟 backend 同一個
+venv）、`loading.py`（把 `InProcessHost` 原本私有的載入/coverage 檢查抽成
+自由函式，兩個 host 共用）。`open_registry()` 預設換成 `"subprocess"`——
+`api/validation.py`（真正跑專案的路徑）與 `conformance.py` 都走這條路了。
+`CallContext` 加了 `on_cancelled` 掛勾：`cancel_thread()` 翻旗標的同時會推一個
+`cancel` notification 給對應的子 process，child 端 `ctx.cancelled` 讀的是
+本地快取（不是每次都跑一趟 RPC，符合 D18 對長迴圈檢查點的要求）。合約測試
+（`HOSTS = ["inprocess", "subprocess"]`）24 題 × 2 個實作全綠，另外 7 題
+subprocess 特有的行為（真的是不同 PID、併發呼叫不串線、`unload` 真的終止
+process、取消真的推得過去）在 `tests/contract/test_subprocess_host.py`。
 
-**它逼出來的那個 bug 值得記著**：`extensions` 宣告原本是存檔時的 passthrough，所以
-從工具箱拉一顆 `http.get` 出來按執行，後端說「這個版本不認得積木 http.get」——使用者
-每一步都做對了，錯誤卻指著積木。現在宣告由畫布算出來（§13.3）。**它是單元測試碰不到
-的那一類**：前後端各自都是對的，錯在兩者之間那句沒有人負責的話。
+**它逼出來的那個 bug 值得記著**：block handler 回傳一個不可 JSON 序列化的值
+（例如 `set`）時，child 端把結果算出來、寫回 RPC response 那一刻
+`json.dumps` 才炸——而那個 `TypeError` 發生在沒有人 catch 的地方
+（`asyncio.create_task` 建的那個 task 裡），於是那個 request 的回應永遠沒送
+出去，parent 端的 `await peer.call(...)` **卡死等一個不會來的 Future**。
+單元測試每一個都秒過，唯一露餡的方式是把 24 題合約測試連著跑——第 17 題卡住
+之後，前面 16 題全過的事實反而讓人以為前面沒問題。修法有兩層：child 端在
+回傳前就用 `boundary.ensure_transportable` 主動擋一次（訊息與 in-process
+一致），`rpc.py` 自己也補一層——寫入失敗絕對不能變成「回應沒送出」，退而
+求其次送一個 error 回應。**這是「兩邊都對，中間那句話沒人負責」的變體**：
+`boundary.py` 的檢查對，`rpc.py` 的寫入邏輯對，錯在「檢查沒接住的情況下，
+寫入層要不要有自己的防線」這件事沒有人明確決定過。
+
+**上一步（`http`）逼出來的那個 bug 值得記著**：`extensions` 宣告原本是存檔時的
+passthrough，所以從工具箱拉一顆 `http.get` 出來按執行，後端說「這個版本不認得
+積木 http.get」——使用者每一步都做對了，錯誤卻指著積木。現在宣告由畫布算出來
+（§13.3）。
 
 ## 2. 下一步
 
-**P1 第 2 步：SubprocessHost + 跨 process 反向通道**（§7.5、§7.6、design.md §15 的
-施工順序表）。合約測試已經對 host 參數化，`HOSTS` 加一行就跑得起來，而第 1 步的
-`http` 包當場變成第二個實作的第一個真實用戶。
+**P1 第 3 步：`openai` 包**（design.md §15 的施工順序表）。第一個需要金鑰的
+包——secret 管理（keyring）、§12.2 的值遮蔽、`uv venv` 依賴隔離、長時間請求。
 
 開工前要知道的三件：
 
-1. **`ctx.http` 要跟著進子 process。** `extensions/httpclient.py` 是共用的那份設定，
-   兩邊都呼叫它——與 `boundary.py` 同一個理由。
-2. **`permissions` 的檢查目前在 host 這一側**（`inprocess.py::_http_for`）。子 process
-   要嘛沿用同一段，要嘛在通道上再擋一次。
-3. **動態下拉最晚要在第 3 步（`openai`）之前接上**，`http` 的 `method` 是現成的第一個
-   測試對象（選項封閉、答案不會變）。
+1. **`uv venv` 這一步才第一次有真消費者。** 第 2 步的 SubprocessHost 子
+   process 目前跟 backend 用同一個 venv（`sys.executable`）——`http` 的
+   `requirements: []`，沒有東西需要獨立安裝。`openai` 帶 `requirements`
+   出現，才是「一個包一個 venv」真正要解決的問題（D13）；`subprocess_host.py`
+   的 `load()` 目前寫死 `sys.executable`，要換成「先確保這個包的 venv 存在
+   （`uv venv` + `uv pip install`），再用那個 venv 的直譯器路徑去 spawn」。
+2. **secret 怎麼進 `ctx.config` 還沒設計。** 現在 `config` 全部走
+   manifest 的 `config_defaults()` + 明文 override；金鑰要嘛是新的
+   `type: secret` 走 keyring 查詢再填進去，要嘛是別的機制——§12.2 的值遮蔽
+   （執行歷史裡不能出現明文）要在同一輪決定它存在哪一層。
+3. **動態下拉最晚要在這一步之前接上**，`http` 的 `method` 是現成的第一個
+   測試對象（選項封閉、答案不會變）；`openai` 的模型清單是它的第一個真實
+   消費者。
 
 ## 3. 未解決問題與已知限制
 

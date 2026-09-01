@@ -203,6 +203,20 @@ def validate_return(
 
 
 # --------------------------------------------------------------------------
+# dropdown 的回傳形狀（§7.3）
+# --------------------------------------------------------------------------
+
+
+def validate_dropdown_options(options: Any, source: str) -> list[dict[str, Any]]:
+    if not isinstance(options, list) or not all(
+        isinstance(o, dict) and isinstance(o.get("label"), str) and "value" in o
+        for o in options
+    ):
+        raise ExtensionError(f"下拉來源 {source} 必須回傳 [{{label, value}}, ...]")
+    return options
+
+
+# --------------------------------------------------------------------------
 # 隱含約束：可 JSON 序列化（§7.5、§12.3）
 # --------------------------------------------------------------------------
 
@@ -249,4 +263,9 @@ def ensure_transportable(
     walk(v, "", 0)
 
 
-__all__ = ["ensure_transportable", "normalize_args", "validate_return"]
+__all__ = [
+    "ensure_transportable",
+    "normalize_args",
+    "validate_dropdown_options",
+    "validate_return",
+]

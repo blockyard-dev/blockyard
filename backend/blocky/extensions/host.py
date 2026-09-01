@@ -45,6 +45,10 @@ class CallContext:
     cancelled: bool = False
     # §12.2：本次呼叫用到的 secret 明文。事件序列化前要據此遮蔽。
     secrets: set[str] = field(default_factory=set)
+    # §7.6：SubprocessHost 掛一個回呼在這裡，`cancel_thread` 翻旗標的同時
+    # 順便推一個通知給對應的子 process（child 端的 `is_cancelled` 讀的是
+    # 本地快取，不能每次都跑一趟 RPC）。in-process 不需要它，維持 None。
+    on_cancelled: Callable[[], None] | None = None
 
 
 class CallContexts:
@@ -77,6 +81,8 @@ class CallContexts:
         for ctx in self._by_token.values():
             if ctx.thread_id == thread_id:
                 ctx.cancelled = True
+                if ctx.on_cancelled is not None:
+                    ctx.on_cancelled()
 
 
 class TriggerHandle(Protocol):

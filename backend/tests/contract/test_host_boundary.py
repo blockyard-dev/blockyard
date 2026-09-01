@@ -25,12 +25,13 @@ from blocky.extensions import (
     EventSinkChannel,
     ExtensionHost,
     InProcessHost,
+    SubprocessHost,
     discover,
 )
 from blocky.interpreter.events import EventSink
 
-# §7.6：SubprocessHost 進來時加在這裡。題目一題都不用改。
-HOSTS = ["inprocess"]
+# §7.6：一行就跑得起來——這就是那一行。
+HOSTS = ["inprocess", "subprocess"]
 
 
 class Harness:
@@ -68,7 +69,11 @@ async def h(request: pytest.FixtureRequest):
 
     if request.param == "inprocess":
         host: ExtensionHost = InProcessHost(sources, channel, contexts)
-    else:  # pragma: no cover - §7.6 之後才有
+    elif request.param == "subprocess":
+        host = SubprocessHost(
+            sources, channel, contexts, extensions_root=DEFAULT_EXTENSIONS_ROOT
+        )
+    else:
         raise AssertionError(f"未知的 host 實作 {request.param}")
 
     await host.load("demo")

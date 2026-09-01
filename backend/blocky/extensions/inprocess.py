@@ -11,17 +11,22 @@ process 內 `import httpx` 第一次贏且永久生效，而首批要手寫的�
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import inspect
-import sys
 from typing import Any, Awaitable, Callable
 
 from blocky.errors import BlockyError, ExtensionError
-from blocky.extensions.boundary import normalize_args, validate_return
+from blocky.extensions.boundary import normalize_args, validate_dropdown_options, validate_return
 from blocky.extensions.host import CallContext, CallContexts, HostChannel
 from blocky.extensions.httpclient import new_client
+from blocky.extensions.loading import (
+    check_coverage,
+    check_net_permission,
+    collect_exports,
+    import_extension_module,
+    unimport_extension_module,
+)
 from blocky.extensions.manifest import BlockSpec, ExtensionSource, Manifest
-from blocky.extensions.sdk import Ctx, exports
+from blocky.extensions.sdk import Ctx
 
 
 class _Loaded:
@@ -87,23 +92,16 @@ class InProcessHost:
         if source is None:
             raise ExtensionError(f'找不到積木包「{ext_id}」')
 
-        module = self._import(source)
+        module = import_extension_module(source)
         loaded = _Loaded(source, module)
-        on_load = None
+        exp = collect_exports(module)
+        loaded.blocks = exp.blocks
+        loaded.dropdowns = exp.dropdowns
+        loaded.triggers = exp.triggers
+        loaded.unload = exp.on_unload
+        on_load = exp.on_load
 
-        for kind, name, fn in exports(module):
-            if kind == "block":
-                loaded.blocks[str(name)] = fn
-            elif kind == "dropdown":
-                loaded.dropdowns[str(name)] = fn
-            elif kind == "trigger":
-                loaded.triggers[str(name)] = fn
-            elif kind == "on_load":
-                on_load = fn
-            elif kind == "on_unload":
-                loaded.unload = fn
-
-        self._check_coverage(loaded)
+        check_coverage(source.manifest, exp)
 
         mf = source.manifest
         loaded.config = {**mf.config_defaults(), **self._config.get(ext_id, {})}
@@ -130,7 +128,7 @@ class InProcessHost:
         if loaded.http is not None:
             await loaded.http.aclose()
             loaded.http = None
-        sys.modules.pop(loaded.module.__name__, None)
+        unimport_extension_module(loaded.module)
 
     # ---- dispatch ----
 
@@ -169,7 +167,7 @@ class InProcessHost:
 
         ctx = self.contexts.get(ctx_token)
         options = await self._invoke(fn, self._ctx(loaded, ctx), {}, what=full)
-        return _check_options(options, full)
+        return validate_dropdown_options(options, full)
 
     async def start_trigger(
         self, opcode: str, sink: Callable[[dict[str, Any]], Awaitable[None]]
@@ -225,12 +223,10 @@ class InProcessHost:
 
         **權限在這裡才真的守得住**：`permissions: [net]` 在 §12.1 是安裝畫面上
         的一句話，而一句沒有人檢查的宣告，使用者讀了也不能信。沒宣告就拿不到
-        client——訊息指名是包的宣告漏了，不是使用者的流程錯了。
+        client——訊息指名是包的宣告漏了，不是使用者的流程錯了。跟 SubprocessHost
+        共用同一段檢查（`loading.check_net_permission`）。
         """
-        if "net" not in loaded.manifest.permissions:
-            raise ExtensionError(
-                f'積木包「{loaded.manifest.name}」沒有宣告 net 權限，不能使用 ctx.http'
-            )
+        check_net_permission(loaded.manifest)
         if loaded.http is None:
             loaded.http = new_client()
         return loaded.http
@@ -263,65 +259,6 @@ class InProcessHost:
             raise ExtensionError(
                 f"{what} 執行時發生錯誤：{type(e).__name__}: {e}", block_id=block_id
             ) from e
-
-    def _import(self, source: ExtensionSource) -> Any:
-        path = source.entrypoint
-        if not path.exists():
-            raise ExtensionError(f"積木包「{source.id}」缺少 main.py")
-        name = f"blocky_ext.{source.id}"
-        spec = importlib.util.spec_from_file_location(name, path)
-        if spec is None or spec.loader is None:
-            raise ExtensionError(f"無法載入 {path}")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        try:
-            spec.loader.exec_module(module)
-        except Exception as e:
-            sys.modules.pop(name, None)
-            raise ExtensionError(f"載入 {path} 失敗：{type(e).__name__}: {e}") from e
-        return module
-
-    def _check_coverage(self, loaded: _Loaded) -> None:
-        """manifest 與 main.py 必須完全對得起來。
-
-        兩邊漂移的症狀是「工具箱裡有一顆按了沒反應的積木」，而那要等到使用者
-        真的拖出來用才會發現。載入期就擋掉。
-        """
-        mf = loaded.manifest
-        declared = {mf.full_opcode(b.opcode) for b in mf.blocks if b.type != "hat"}
-        hats = {mf.full_opcode(b.opcode) for b in mf.blocks if b.type == "hat"}
-        implemented = set(loaded.blocks)
-
-        if missing := declared - implemented:
-            raise ExtensionError(
-                f"積木包「{mf.id}」的 manifest 宣告了 {'、'.join(sorted(missing))}，"
-                "但 main.py 沒有對應的 @block"
-            )
-        if extra := implemented - declared:
-            raise ExtensionError(
-                f"積木包「{mf.id}」的 main.py 實作了 {'、'.join(sorted(extra))}，"
-                "但 manifest 沒有宣告——它不會出現在工具箱裡"
-            )
-        if missing_triggers := hats - set(loaded.triggers):
-            raise ExtensionError(
-                f"積木包「{mf.id}」的 hat 積木 {'、'.join(sorted(missing_triggers))} "
-                "沒有對應的 @trigger"
-            )
-        for src in sorted(mf.dropdown_sources()):
-            if f"{mf.id}.{src}" not in loaded.dropdowns:
-                raise ExtensionError(
-                    f"積木包「{mf.id}」的參數指定了下拉來源 {src}，"
-                    "但 main.py 沒有對應的 @dropdown"
-                )
-
-
-def _check_options(options: Any, source: str) -> list[dict[str, Any]]:
-    if not isinstance(options, list) or not all(
-        isinstance(o, dict) and isinstance(o.get("label"), str) and "value" in o
-        for o in options
-    ):
-        raise ExtensionError(f"下拉來源 {source} 必須回傳 [{{label, value}}, ...]")
-    return options
 
 
 __all__ = ["InProcessHost"]
