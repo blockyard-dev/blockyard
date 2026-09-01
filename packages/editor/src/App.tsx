@@ -19,10 +19,12 @@ import * as Blockly from 'blockly/core';
 import { ApiError, fetchExtensions, fetchProject, saveProject } from './api/client';
 import { RunSocket, listRuns, startRun, stopRun } from './api/runs';
 import {
+  NOT_LISTENING,
   activateProject,
   deactivateProject,
   fetchTriggerState,
-  type WebhookUrl,
+  listeningStateOf,
+  type ListeningState,
 } from './api/triggers';
 import type { RunSummary } from './api/runs';
 import { buildProjectToolbox, registerManifests, type Registration } from './blockly/setup';
@@ -172,6 +174,31 @@ export function App() {
 
   useEffect(() => () => socketRef.current?.close(), []);
 
+  /**
+   * 開場先問後端「這個專案現在是不是 active」（§9.2）。
+   *
+   * **P2 之前這一段不需要存在。** 那時的「監聽」是後端 process 的記憶體，跟這個
+   * 分頁同生共死，所以用 `useState` 記著是誠實的。P2 把 active 搬進 SQLite 之後
+   * 那句話就不成立了：關掉瀏覽器它照樣跑、後端重啟它自己回來——而畫面卻從
+   * `{ on: false }` 開始，於是那顆按鈕會說「監聽」，而它其實**正在監聽**。
+   *
+   * 一顆說謊的按鈕比沒有按鈕糟：使用者會再按一次（那是無害的重新同步），但他
+   * 也可能以為排程沒開，然後去別的地方找為什麼沒跑。
+   */
+  useEffect(() => {
+    let alive = true;
+    fetchTriggerState(PROJECT_ID)
+      .then((state) => {
+        if (alive && state.active) setListening(listeningStateOf(state));
+      })
+      // 問不到就維持「沒在跑」。這不是要往使用者臉上丟一句錯誤的時機——
+      // 後端連不上的話，載入專案那條路已經會說話了。
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const handleWorkspaceReady = useCallback(
     (ws: Blockly.WorkspaceSvg) => {
       workspaceRef.current = ws;
@@ -239,13 +266,7 @@ export function App() {
    * `hats` 是後端接上了哪幾顆。空陣列代表**這份畫布上沒有 hat**，不是失敗；
    * 那句話要說出來，否則按下去什麼都沒發生會被當成壞掉。
    */
-  const [listening, setListening] = useState<{
-    on: boolean;
-    hats: string[];
-    message?: string;
-    /** §9.3：掛上去之後才存在的網址。沒在跑就沒有位址可以給。 */
-    webhooks: WebhookUrl[];
-  }>({ on: false, hats: [], webhooks: [] });
+  const [listening, setListening] = useState<ListeningState>(NOT_LISTENING);
   const [hooksOpen, setHooksOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -276,24 +297,18 @@ export function App() {
     // 不先存的話，使用者剛拉出來的那顆 hat 後端根本看不到，而症狀是「按了監聽
     // 但它說沒有 hat」。
     if (!(await save())) {
-      setListening({ on: false, hats: [], webhooks: [], message: '存檔沒過，沒有東西可以聽' });
+      setListening({ ...NOT_LISTENING, message: '存檔沒過，沒有東西可以聽' });
       return;
     }
     try {
-      const state = await activateProject(PROJECT_ID);
-      setListening({
-        on: true,
-        hats: state.hats,
-        webhooks: state.webhooks ?? [],
-        message: state.hats.length === 0 ? '畫布上沒有事件積木' : undefined,
-      });
+      setListening(listeningStateOf(await activateProject(PROJECT_ID)));
     } catch (error: unknown) {
-      setListening({ on: false, hats: [], webhooks: [], message: describe(error) });
+      setListening({ ...NOT_LISTENING, message: describe(error) });
     }
   }, [save]);
 
   const endListening = useCallback(async () => {
-    setListening({ on: false, hats: [], webhooks: [] });
+    setListening(NOT_LISTENING);
     setHooksOpen(false);
     await deactivateProject(PROJECT_ID).catch(() => {});
   }, []);

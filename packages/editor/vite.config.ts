@@ -21,6 +21,14 @@ export default defineConfig({
       // §6.1 的事件流。`ws: true` 少一個，執行按鈕就會安靜地連不上——
       // dev server 會把 upgrade 請求當成一般 HTTP 打回 404。
       '/ws': { target: backend.replace(/^http/, 'ws'), ws: true },
+      // §9.3 的 webhook 進入點。**不在 `/api` 底下**（它是給外面打的位址，
+      // 不是編輯器的 API），所以上面那條蓋不到它。
+      //
+      // 少了這一條的症狀很難查：webhook 面板給的網址是用**這個分頁的來源**
+      // 組出來的（打包後前後端同一個 process，那是對的），所以 dev 下複製到的
+      // 是 `http://localhost:5173/hooks/…`——而 5173 上根本沒有那條路徑，
+      // 打過去是 404。後端明明好好的，看起來卻像 webhook 壞了。
+      '/hooks': backend,
     },
   },
   build: { outDir: 'dist', sourcemap: true },

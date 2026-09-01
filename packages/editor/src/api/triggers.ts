@@ -47,6 +47,34 @@ export interface WebhookUrl {
   secretSet?: boolean;
 }
 
+/**
+ * 後端說的狀態 → 工具列那顆按鈕要顯示的東西。
+ *
+ * 抽出來是因為它有**三個呼叫端**：開場問一次（§9.2：active 是後端的持久狀態，
+ * 畫面必須去讀，不能自己記）、按下監聽之後、以及設完 webhook 密鑰之後。三份
+ * 各寫一次的話，「沒有 hat 時要說一句話」這種規則遲早只有其中兩份記得。
+ */
+export interface ListeningState {
+  on: boolean;
+  hats: string[];
+  webhooks: WebhookUrl[];
+  message?: string;
+}
+
+export function listeningStateOf(summary: TriggerSummary): ListeningState {
+  return {
+    on: summary.active,
+    hats: summary.hats,
+    webhooks: summary.webhooks ?? [],
+    // 空陣列代表**這份畫布上沒有 hat**，不是失敗；那句話要說出來，否則
+    // 按下去什麼都沒發生會被當成壞掉。
+    message: summary.active && summary.hats.length === 0 ? '畫布上沒有事件積木' : undefined,
+  };
+}
+
+/** 沒在跑的樣子。三個呼叫端的 catch 分支共用。 */
+export const NOT_LISTENING: ListeningState = { on: false, hats: [], webhooks: [] };
+
 /** 標記 active 並接上。已經 active 就重新同步一次，不是 409。 */
 export async function activateProject(projectId: string): Promise<TriggerSummary> {
   const res = await fetch('/api/triggers', {
