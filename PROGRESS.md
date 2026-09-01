@@ -1,136 +1,173 @@
 # PROGRESS
 
 > 這份文件只做一件事：**交接**。它記「現在在哪裡、什麼還沒解決、下一步做什麼」。
-> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.18），實作經過在 `git log`。
+> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.22），實作經過在 `git log`。
 > 兩邊已經有的東西，這裡不重複。
 
 最後更新：2026-09-01
 
 ## 1. 現況
 
-**P0 結案，P1 第 1～3 步完成。`openai` 積木包做完了，而且是用真金鑰在瀏覽器裡
-打過真的 API 的。連帶把「金鑰」面板從唯讀清單改成逐把管理（D28 因此改寫）。**
+**P0 與 P1 全部結案。** 三個手寫積木包（`http` / `openai` / `discord`）都寫完了，
+而 §11 要求的「manifest schema 先用至少 3 個手寫包磨到穩定」因此成立——schema
+現在可以當成對外的形狀了。
 
 ```
-cd backend && .venv/bin/python -m pytest      # 757 passed, 5 skipped
-cd packages/editor && npm run check           # 369 passed（16 檔）+ tsc 乾淨
+cd backend && .venv/bin/python -m pytest      # 793 passed, 5 skipped
+cd packages/editor && npm run check           # 382 passed（16 檔）+ tsc 乾淨
 ```
+
+> **改了 `extensions/` 就要跑不帶參數的 `pytest`**（`testpaths` 同時收
+> `tests` 與 `../extensions`）。只跑 `pytest tests` 會漏掉包自己的測試，而那些
+> 測試會 import `main.py`——一個語法錯誤要等到瀏覽器裡按下按鈕才會出現。
 
 題庫覆蓋 43/88 顆內建積木（49%，這一輪沒有新增內建積木，比例不變）。
 
-**`openai` 積木包**（`extensions/openai/`）：`chat`（最短路徑，回一句文字）、
-`chat_full`（回物件，含 `usage`／`status`／`incomplete_reason`）、
-`@dropdown("openai.models")` 回策展的三顆（`gpt-5.6-luna` 是宣告的 default）。
-`requirements: ["openai>=3.6,<4"]`——**它是 venv 隔離的第一個真消費者**，
-`SubprocessHost` 真的建了 `~/.blocky/venvs/openai`、在裡面裝了 openai 3.6.0、
-積木跑在那支直譯器下（手動驗過，不是只有 in-process 的測試）。
+### P1 的驗收（§15）
 
-動手前照規矩翻了裝下來的 SDK 原始碼而不是憑記憶，翻出兩件跟計畫不一樣的事：
+| 驗收句 | 狀態 |
+|---|---|
+| 新增一個資料夾、重啟後端，新積木自動出現在工具箱且可執行 | ✅ `discord` 就是這樣長出來的 |
+| §17.4 的 Host 合約測試在 InProcess 與 Subprocess 兩種實作下都綠 | ✅ |
+| 三個包能串成「抓 API → 丟給 LLM 摘要 → 發到 Discord」 | ✅ `http.get` 的 `.body` → `openai` 摘要 → `discord.send_message`，真憑證、真伺服器 |
 
-1. **`openai` 3.x 相依的是 `httpx2` 2.x，不是 `httpx`**——兩個不同的發行套件。
-   乍看之下 §12.1 的 `http_client=ctx.http` 檢查點要垮，但 SDK 有一層 first-class
-   的雙棧相容（`openai/_httpx2.py::is_legacy_httpx_async_client()`，靠
-   `sys.modules["httpx"]` 做 isinstance，timeout／response 型別／例外都各自
-   normalize 過），legacy client 是它明確支援的路徑。**檢查點保住了，版本鎖定
-   沒動。** 順帶：這件事讓 D13「衝突不是風險而是必然」第一次有了真實案例，
-   design.md 1718 行已改。
-2. **`tiktoken` 會自己連網**（第一次用去 `openaipublic.blob.core.windows.net`
-   抓 BPE，用 `requests`，快取在 tempdir），不經 `ctx.http`。**這一輪因此不做
-   `count_tokens`**，見第 2 節。
+**三條都成立，P1 名副其實地結案了。** 那條串起來的鏈是三個**各自跑在獨立子行程與
+獨立 venv** 的包（`~/.blocky/venvs/openai` 的 httpx2 與 `~/.blocky/venvs/discord` 的
+aiohttp 互不相見）在同一條堆疊上傳值——D13 那句「衝突不是風險而是必然」的反面，
+現在也有實例了。
 
-`max_retries=0`：SDK 預設替 429／5xx 退避重試兩次，而 §7.4 的規矩是「收到回應
-之後一律不重試」——這裡的代價比 `http` 那邊更直接，模型可能已經算完並且計費了。
+### 這一輪（P1 第 4 步，`discord`）做了什麼
 
-**「金鑰」面板改成逐把管理（D28 改寫，design.md §12.1 已重寫）**：
-`GET /api/keys` 多回**末四碼**、新增 `PUT`／`DELETE`／`GET …/reveal` 三個端點
-（三個都先查「這個包宣告過這一把嗎」才動 keyring——不然它們就是一組從瀏覽器
-往 OS 鑰匙圈塞／讀任意鍵值的通用端點）。前端 `KeysPanel.tsx` 重寫成清單 +
-新增／更換／刪除／複製，`.env` 匯入收到下面。**放寬的兩條線寫在 D28 裡，理由
-分開**：末四碼是因為換過金鑰之後分不出裝著哪一把；`/reveal` 不違反「不顯示
-明文」是因為值只進剪貼簿、不進 DOM、不進列表回應。**「匯出成 `.env`」仍然不做。**
+`discord.py 2.7.1`（design.md 宣告的 `>=2.3,<3` 不用動）。三顆積木
+（`send_message` / `get_channel_history` / `on_message`）、兩顆動態下拉
+（`servers` / `channels`），全部拿真 token 在真伺服器上收發過。
 
-**錯誤現在帶得動一個點得下去的動作**：`BlockyError` 多一個 `action` 欄位（跟著
-`to_dict()` 過 §7.6 的 RPC 邊界到 §6.1 的事件流），`Ctx.require_secret(key)` 在
-金鑰沒設時丟 `MissingSecretError`，payload 從 manifest 讀（所以積木包偽造不了，
-前端另外只認白名單 `kind`）。執行紀錄那一列因此長出一顆「去設定 API 金鑰」，
-點下去開到新增畫面、那一把已鎖定、焦點在值那一格。**每個未來要金鑰的包免費
-拿到同一顆按鈕**——不然每個包會各自寫一句「請到右上角……」。
+**照規矩先把 SDK 裝下來翻原始碼**（不是憑訓練資料裡的記憶），翻出三件跟計畫
+不一樣的事，每一件如果照猜的寫下去都會是「到執行期才炸、而且訊息指錯方向」：
 
-**踩到的兩個坑值得記著：**
+1. **`Client.login()` 是純 REST 的，不開 gateway**（`client.py:647`），
+   `start()` 才是 `login()` + `connect()`。所以這個包有**兩種 client**：發訊息
+   與讀歷史用 login-only 那一支（不必等 `on_ready`、不必 privileged intent、
+   不必養長連線），只有 `on_message` 開 WebSocket。一個 client 打天下的話，
+   「發一則訊息」要付一整條 gateway 連線，而那條連線還會因為少一個 intent 失敗。
+2. **`ctx.http` 在這個包身上守不住**：`HTTPClient.static_login()` 自己
+   `aiohttp.ClientSession(...)` 建下去（`http.py:831`），沒有
+   `AsyncOpenAI(http_client=...)` 那種注入點。**不硬塞**——改 SDK 的連線層換來
+   的是一份得跟著上游版本走的補丁。代價老實寫進 §7.4 與 §12.1 了。
+3. **`Message.jump_url` 在 REST 那條路上一律吐 `@me`**：它讀 `self.guild`，而
+   那是 gateway 的快取（`message.py:2233`），沒有連線就永遠是空的。那條連結指向
+   私訊，使用者點進去看不到訊息、會以為沒發成功——但訊息其實發出去了。自己組
+   （伺服器 ID 在使用者貼進來的那條頻道網址裡就有）。gateway 那條路不必，因為
+   它的快取是滿的。
 
-- **`pytest` 的 prepend import mode 靠「基名唯一」認模組**，所以第二個包一加
-  進來（`extensions/openai/tests/test_blocks.py` 撞 `http` 的同名檔）就是
-  `import file mismatch`。修在設定而不是改檔名：`addopts =
-  ["--import-mode=importlib"]`，這樣包的目錄結構可以一直長得一樣。
-- **剪貼簿在 `await fetch()` 之後寫不進去。** Chrome 的 `clipboard.writeText()`
-  要 transient user activation，而一次網路來回就把那個視窗耗掉了，症狀是
-  `NotAllowedError`、按鈕看起來只是沒反應。解法是 `ClipboardItem` 收 **promise**
-  ——在手勢還有效時就把還沒 resolve 的值交出去。順帶修掉一個自己造的坑：原本
-  `failed` 畫成跟 `idle` 一樣的圖示，失敗跟「什麼都沒發生」長得一模一樣。
+順帶多了三樣**不只 `discord` 用得到**的東西：
 
-**上一步（`http`）逼出來的那個 bug 值得記著**：`extensions` 宣告原本是存檔時的
-passthrough，所以從工具箱拉一顆 `http.get` 出來按執行，後端說「這個版本不認得
-積木 http.get」——使用者每一步都做對了，錯誤卻指著積木。現在宣告由畫布算出來
-（§13.3）。
+- **`depends`（§7.2）**：動態下拉吃同一顆積木上其他已填的參數。三條一致性規則
+  在載入期擋，值在 host 邊界依宣告過濾——沒有那份權威清單，那個端點就是一條
+  「任意 kwargs 進到積木包」的路。
+- **`Ctx.invalid_secret(key, msg)`（§12.1）**：`require_secret` 只管得到「還沒
+  填」，而「填了、對方說不對」（token 被 Reset 過）更常見。兩者共用同一顆
+  「去設定金鑰」按鈕，訊息由包供、payload 仍只從 manifest 來。
+- **空值下拉的提示字**：`default: ""` 的動態下拉原本畫出來是一個**完全空白的
+  深色膠囊**——沒文字、寬度縮到最小、連箭頭都跟著不見。文字從 `label` 導出，
+  每個包免費拿到。
+
+**交出去之後馬上被回報的兩個 bug**（PROGRESS 第 1 條每一輪都應驗）：
+
+1. **點一顆 reporter 也會去接事件來源。** 「執行順手打開監聽」寫成了對所有
+   `beginRun` 都成立，但 §5.1 的「點一下就跑」是**探索動作**（這顆積木現在會算
+   出什麼），跟「讓這份流程常駐起來」無關。畫布上有 hat 的話，每點一次積木就
+   開一條真的長連線。現在只有綠旗會。
+2. **`open_registry` 沒有清理路徑。** 它一個一個 `load()`，而在它回傳之前，
+   **握得到那些子行程的只有那個還沒交出去的 registry**——中途失敗（或整個請求
+   被取消）就沒有人收得了它們。實測看到 4 個 `subprocess_worker` 活過它們的 Run。
+   `except BaseException: await registry.unload_all(); raise`，測試拿掉修正會紅。
+
+順帶把「子行程意外結束」那句話加上死因（`_why_gone`）：現在會說是自己爆掉
+（結束碼）、被信號砍掉，還是連線斷了而行程還在——三種的成因完全不同，而原本
+那句話三種都長一樣。
+
+**`/api/listeners`（§9 的前身，不是 Trigger Manager）**：把畫布上的 hat 接上
+事件來源，**一次 yield = 一個 Run**（走既有的
+`RunManager.start(trigger=opcode, payload=...)`，引擎的 `_triggered()` 與
+`ThreadScope(payload)` 本來就支援，什麼都不用新增）。前端多一列「監聽／暫停
+監聽」，跟「執行」分開——兩件事分成兩列是為了讓它們**停得開**，而按下「執行」
+會順手把監聽打開，使用者不必知道那是兩件事。差在哪列在
+`backend/blocky/runs/listeners.py` 檔頭的表裡。
 
 ## 2. 下一步
 
-**P1 第 4 步：`discord` 積木包**（design.md §15）。三個手寫包的最後一個，也是
-manifest schema 定案前的最後一次打磨機會（§15 明寫 schema 要用至少 3 個手寫包
-磨到穩定）。
+**P2 — 自動化**（design.md §15）。範圍：Trigger Manager（cron / webhook / stream，
+含 §4.9 的 timezone）；專案 active 狀態與後端重啟恢復；§6.3 的事件落地策略；
+執行歷史與日誌檢視；`try_catch`；錯誤重試策略；**manifest 的可重複參數群組
+（§16 Q19）**。
 
-它會第一個逼出兩件現在還不存在的東西：
+**P2 有三塊這一輪已經先鋪好一半，接的時候要接在它上面而不是重寫**：
 
-1. **hat 積木／`@trigger`**（§5.4、§9）——前兩個包都只有 reporter。
-2. **動態下拉要吃「同一顆積木上其他已填的參數」**：先選 server 才列得出對應的
-   channel。`http.method` 與 `openai.models` 都不需要這個能力，所以它一直沒做。
-   `dropdown()` 加一個 `args: dict[str, Any] = {}` 是相容變更（見 3.4）。
+1. **`runs/listeners.py` 就是 Trigger Manager 的形狀**（一個專案 → 一組 hat →
+   handle）。P2 要補的是那張表裡打叉的四件事：active 狀態、IR diff 只重啟有變動
+   的、重啟恢復、內建的 cron／webhook trigger。
+2. **`start_trigger` 的整條管線已經在生產路徑上跑過真的長連線了**（在這之前它
+   只有合約測試用 `demo` 包走過）。trigger 死掉會說話（`trigger_error_text`，
+   兩個 host 共用一句）。
+3. **前端的「監聽」是輪詢 `GET /api/runs`**（1.5 秒）。P2 做 §6.3 的落地時要
+   一起決定「有新的 Run 了」該怎麼推——那條通道要回答「屬於哪個專案」「斷線
+   怎麼補」「backlog 留多久」，三題都是 §6.3 的題目。
 
-動手前照 `openai` 這一輪的規矩來：**先 `uv pip install discord.py`，翻裝下來的
-原始碼核對呼叫方式，不要用訓練資料裡的記憶去猜。** `openai` 這一輪就是靠這一步
-才發現 `httpx2` 那件事的——而那件事如果照猜的寫下去，會是一個到執行期才炸、
-且訊息完全指錯方向的 bug。
-
-`discord.py` 自己開 `aiohttp` 連線（gateway 是長連線 WebSocket，不是請求／回應），
-所以 §12.1 的 `permissions: [net]` 在這個包身上**守不住** `ctx.http` 那個落點——
-這件事要在 §12.1 的審閱文字上老實寫清楚，不要為了硬塞而去改 SDK 的連線層。
+**Q19（可重複參數群組）現在可以動了**：它等的就是「先讓 P1 的三個手寫包磨過一
+輪」，而那一輪結束了。`try_catch` 的多個 catch 與 HTTP 的多個 header 是同一個
+形狀。
 
 ## 3. 未解決問題與已知限制
 
 只列還會咬人的。長版理由在 `git log` 與程式碼註解裡。
 
-### 3.1 積木包與 Host（P1）
+### 3.1 積木包與 Host（P1 留下的）
 
-- **`http` 與 `openai` 都沒有 conformance 題目**：§17 的題庫跑不了本地伺服器，所以
-  那兩條路的回歸網是各自的 `tests/`（`http` 那份含一題走引擎的端到端）。
+- **`http` / `openai` / `discord` 都沒有 conformance 題目**：§17 的題庫跑不了本地
+  伺服器與外部帳號，所以那三條路的回歸網是各自的 `tests/`（`http` 那份含一題走
+  引擎的端到端）。
+- **`discord` 的測試靠蓋掉 `discord.http.Route.BASE`**。`openai` 有 `base_url`
+  這條乾淨的路（自架相容端點是真的存在的東西，測試搭順風車）；Discord 沒有相容
+  端點，所以一個 `base_url` 設定會是「為了測試而長在使用者面板上的一格」。代價是
+  那份測試綁著 SDK 的一個內部名字，**換大版本時要複驗**。
+- **`discord` 的 hat 沒有參數**：「只聽某個頻道」很有用，但 hat 的參數要一路穿過
+  `start_trigger` 才到得了 `@trigger` 函式，而 §9.2 的 trigger 生命週期本來就是
+  P2 的事。現在塞進去等於在生命週期還沒有主人的時候先決定它怎麼變。
+- **`discord.on_message` 寫死濾掉自己那隻 bot 的訊息**。別的 bot 不濾
+  （`${author.bot}` 交給畫布判斷）。這是全包唯一一條寫死的過濾，理由是「收到訊息
+  就回一句」是這顆 hat 最直覺的第一個用法，而它會讓 bot 對著自己講到被限流。
 - **`openai` 沒有 `count_tokens`**：`tiktoken` 第一次用會自己去
-  `openaipublic.blob.core.windows.net` 抓 BPE 檔（用 `requests`，不經 `ctx.http`，
-  快取在 tempdir），那是 §12.1 `permissions: [net]` 的一個洞，也代表測試不是離線
-  就能跑。要補回來就得先決定「包可以自己連網嗎」，並把 `TIKTOKEN_CACHE_DIR` 釘到
-  `~/.blocky` 底下。
+  `openaipublic.blob.core.windows.net` 抓 BPE 檔（用 `requests`，不經 `ctx.http`）。
+  要補回來就得先決定「包可以自己連網嗎」，並把 `TIKTOKEN_CACHE_DIR` 釘到
+  `~/.blocky` 底下。**注意這一題現在有前例了**：`discord` 就是一個合法地自己連網
+  的包（見 §7.4），所以答案已經不是「不行」，而是「守得住的是 venv 與審閱」。
 - **`openai` 的 `chat_full` 沒有 `temperature`**：新的 reasoning 模型會不會拒收這個
-  參數，在不打真 API 的前提下驗不出來，所以沒放進第一版。**要加就得先拿真金鑰打一次**。
-- **`openai` 的測試用 `InProcessHost`**，所以 `openai` 得裝在 backend 的 dev extras 裡。
-  副作用：`venv.py` 的 `.pth` 把 backend 的 site-packages 接進每一支積木包 venv，
-  所以**沒有自己宣告 `requirements` 的包會吃到 backend 這一份**。`openai` 自己宣告了，
-  它那支 venv 裡的版本優先，現在不咬人。
+  參數，不打真 API 驗不出來。**要加就得先拿真金鑰打一次**。
+- **`openai` 與 `discord` 的測試用 `InProcessHost`**，所以兩個包都得裝在 backend 的
+  dev extras 裡。副作用：`venv.py` 的 `.pth` 把 backend 的 site-packages 接進每一支
+  積木包 venv，所以**沒有自己宣告 `requirements` 的包會吃到 backend 這一份**。兩個
+  包都自己宣告了，現在不咬人。
 - **`venv.py::_link_backend_site_packages()` 只在建立 venv 時跑一次**（`pyvenv.cfg`
-  不存在才呼叫）。venv 在、`.pth` 卻不見了（手動刪、上次建到一半）就不會補回去，
-  症狀是子 process 連 `blocky` 都 import 不到。改成無條件寫就沒事（它是 idempotent）。
+  不存在才呼叫）。venv 在、`.pth` 卻不見了就不會補回去，症狀是子 process 連
+  `blocky` 都 import 不到。改成無條件寫就沒事（它是 idempotent）。
 - **逐次的 timeout 不能設**：只有 host 那份 30 秒預設值。要做就是 `request` 多一個
   `number` 參數。
 - **§13.3 的佔位符前端沒做**：專案用到未安裝的包時，`deserialize` 遇到認不得的 type
   會怎樣**沒有驗過**——後端已經會給 `unknown_block`，前端那一半是空的。
 - **積木包自帶的 `tests/` 靠 `testpaths = ["tests", "../extensions"]` 收**。包來自
   repo 外面時這條就不成立了。另外它靠 `addopts = ["--import-mode=importlib"]` 才容得下
-  每個包都叫 `tests/test_blocks.py`——換回預設的 prepend mode 會立刻 `import file mismatch`。
-- **manifest 是 `palette` 一份清單**（v0.19）：三種條目（`opcode` / `button` /
-  `section`），`blocks` 由模型導出。**加第四種條目時記得兩邊都要認**——後端
+  每個包都叫 `tests/test_blocks.py`。
+- **manifest 是 `palette` 一份清單**：三種條目（`opcode` / `button` / `section`），
+  `blocks` 由模型導出。**加第四種條目時記得兩邊都要認**——後端
   `manifest.py::_entry_kind`、前端 `define.ts` 的三個 narrowing 函式，共用的是「有沒有
   那個 key」這條規則，而它沒有被抽成一份東西。
 - **一個包的 manifest 壞掉，整個 `GET /api/extensions` 就 500**，編輯器變成「連不上
-  後端」。`discover()` 一份讀不過就整批拋——與 §13.3「不要因為一個包毀掉整份專案」
-  同一個形狀，但目前只有專案那一半有守。
+  後端」。`discover()` 一份讀不過就整批拋。**`main.py` 壞掉不會**（那條路只讀
+  manifest），而且錯誤訊息會指名檔案與行號——實測過。
+- **`@button`（D25 的 `action: call`）整條沒實作**：`blocky/__init__.py` 的白名單裡
+  沒有 `button`，也沒有 `POST /api/extensions/{id}/button/{name}`。`discord` 的
+  「測試連線」本來是它最自然的第一個消費者，這一輪用 `open_url` 的說明按鈕頂著。
 - **`reads` 宣告沒有消費者**（`toolbox.ts::findVariableReader` 與後端欄位都留著）。
   下次動那塊時重新決定留或刪。
 
@@ -144,6 +181,14 @@ manifest schema 定案前的最後一次打磨機會（§15 明寫 schema 要用
 
 ### 3.3 編輯器
 
+- **積木包新增一個參數之後，既有專案裡那一格是空的輸入孔**（§16 Q21）。填不了東西、
+  看不出該放什麼。**修在 `deserialize` 是錯的**——試過，會打破 3 題 roundtrip：
+  `object.get` 的 `default` 孔**刻意可以不存在**（不寫 = 找不到 key 就報錯），所以
+  「IR 裡沒這個孔」不等於「這參數是新加的」。IR 目前分不出這兩件事，而那正是 Q21
+  要先回答的。
+- **監聽中的 Run 靠輪詢**（1.5 秒），所以 hat 觸發之後畫面上的高亮最多晚一秒多。
+  壞掉的樣子是「慢了一秒」而不是「少了一則」——那是刻意選的。
+- **標頭在錯誤訊息很長時會擠成兩行**（按鈕跟著換行）。資訊都在，只是難看。
 - **`ui.multiline` 存不下「強制單行」**；`Shift+Enter 換行` 沒有提示；autocomplete 只補 root。
 - **字面值型別切換不進 undo 堆疊**（`literals.test.ts` 有一條測試釘住這個行為，
   **它變好的那天會紅**）；切完會失去 manifest 的 `min` / `max`（存檔重載會回來）。
@@ -155,8 +200,7 @@ manifest schema 定案前的最後一次打磨機會（§15 明寫 schema 要用
   例外漏出去。成因修好了，防護還沒加。
 - **帽子的參數孔擋不住別的積木**：靠 listener 收拾，而那一瞬間丟進去的積木會被存檔
   丟掉，目前沒有提示。
-- **鍵盤走不進浮動工具列與預覽積木**，所以分段的文字與順序只有滑鼠改得動（要先解決
-  「Blockly 的 SVG 節點進 focus 循環會讓焦點消失」，那是 focus manager 的事）。
+- **鍵盤走不進浮動工具列與預覽積木**，所以分段的文字與順序只有滑鼠改得動。
 - **三處依賴 Blockly 內部行為，換版時要複驗**：右鍵選單的 `preconditionFn` 快取、
   `WidgetDiv` 靠焦點活著（按鈕用 `pointerdown` + `preventDefault`）、keydown 必須
   capture 才問得到「編輯器開不開著」。加上兩個 CSS hack：`.injectionDiv
@@ -164,20 +208,27 @@ manifest schema 定案前的最後一次打磨機會（§15 明寫 schema 要用
 
 ### 3.4 執行期與後端
 
-- **點一下就跑 = 每次都先存檔**（PUT + POST），沒有節流。接遠端後端要重看。
+- **「子行程意外結束」那句話原本會指錯主詞。** 回報的現場是一個**不回應的網站**
+  （換一個網址就好了），而最可能的機制是：積木包卡在那個請求上 → 使用者按了停止
+  或再按一次執行 → 那個 Run 收尾時 `unload` → `_kill` 砍掉還在等回應的子行程 →
+  進行中的呼叫拿到 `PeerClosed`。**那不是積木包壞掉，是我們自己砍的**，而使用者
+  做的動作是「停止」。現在先問「這個 worker 還是目前那一個嗎」，不是就說「還沒
+  跑完，這次執行就結束了」。真正意外死掉的那條路也補了死因（`_why_gone`：結束碼
+  ／被第幾號信號終止／行程還在只是連線斷了）——三種成因完全不同，而原本那句話
+  三種長得一模一樣。**這條沒有測試**：它要的是「呼叫進行中把 worker 換掉」，
+  而那是時序，不是規則。
+- **監聽不跨後端重啟、也與瀏覽器綁在一起**（記憶體）。§9.2 要的「專案標記為
+  active、trigger 常駐、重啟從 SQLite 恢復」全部是 P2。
+- **點一下就跑 = 每次都先存檔**（PUT + POST），沒有節流。監聽也是（按下監聽會先存）。
 - **`block.enter` 沒帶展開後的字串**，所以「滑過欄位看到實際送出的內容」還不存在。
 - **錯誤紅框淡出之後 `error` 這個 phase 還在**：同一顆積木在同一次執行裡錯第二次不會
-  重新倒數（要有 `try_catch` 才做得出來，先記著）。
+  重新倒數（要有 `try_catch` 才做得出來）。
 - **`block.error` 沒有 traceback**，§8.3 的「點擊展開」目前只展得出 hint。
 - **運算積木不發子步驟事件**（§4.7b）；`var.set` 的窗口內收斂（§6.2）比文件寫的多。
 - **§6.3 的 SQLite 落地沒做**：執行歷史只在記憶體、上限 50 個 Run、重啟就沒了；
   `GET /api/runs/{id}/events` 因此不存在；**`persist_*` 不跨後端重啟**（D12 明講要有）。
+  **這一題現在更咬人**：監聽會持續產生 Run，50 筆很快就滿。
 - **§5.5 的「清理有 5 秒上限」沒實作**，停止時只是 `cancel()`。
-- **動態下拉不支援「附帶同積木其他已填參數」**（design.md 1737 行提到的
-  用法，例如 discord 要先選 server 再列出對應的 channel）。`http.method`
-  跟 `openai.models` 都不需要這個能力，真正需要它的是 P1 第 4 步的
-  `discord`；`dropdown()` 屆時加一個 `args: dict[str, Any] = {}` 是相容
-  變更，不必現在就背這個參數。
 - **遞迴 headroom 是估的**（`PYTHON_FRAMES_PER_BLOCKY_FRAME = 24`），靠 `RecursionError` 兜底。
 - **`blocky serve` 沒有正式打包測試**：只驗過 `python -m blocky.cli`。
 - **偏好存 localStorage**，§16 Q15（偏好放哪）未定案。
@@ -187,8 +238,10 @@ manifest schema 定案前的最後一次打磨機會（§15 明寫 schema 要用
 - **版面與時間只有瀏覽器實測守著**（jsdom 量不到 `getBoundingClientRect` /
   `getComputedTextLength`）：半形單字置中、值氣泡的 hover 凍結、淡出的時間、浮動工具列
   的位置、flyout 版面、focus trap「Tab 真的停在哪」。
-- **「建立一個新函式」那條路沒有單元測試**（`placeDefinition` 要畫面）。改簽章那條有——
-  `params.test.ts` 走真的 `blockly/apply.ts::applyProcedure`。
+- **動態下拉的「依賴那一格變了就重抓」那條 workspace listener 沒有單元測試**——它要
+  一個真的 workspace。`load()` 那一半有測（args 進 body、快取 key 含 args、值不會被
+  清掉），瀏覽器裡也實測過選伺服器 → 頻道清單跟著換。
+- **「建立一個新函式」那條路沒有單元測試**（`placeDefinition` 要畫面）。改簽章那條有。
 - **`data.list_insert` 用 `len+1` 正規化索引，無測試**，可疑。
 - **§17.2 有幾列還寫不出題目**：`concurrency` 的 drop/queue/restart、`CancelledError`
   穿透、§6.3 的落地——都要等 P2 的機制存在。
@@ -196,31 +249,38 @@ manifest schema 定案前的最後一次打磨機會（§15 明寫 schema 要用
 
 ## 4. 未決題
 
-design.md §16 的 Q1、Q3–Q9、Q11、Q12、Q14、Q15、Q17、Q19 仍未決。已決的：Q10（開發者
-路線，v0.17）、Q16（第 6 步）、Q18（第五輪）。
+design.md §16 的 Q1、Q3–Q9、Q11、Q12、Q14、Q15、Q17、Q19、Q20、Q21 仍未決。
+已決的：Q2（廣播訊息，不做，D14）、Q10（開發者路線，v0.17）、Q13（內建宣告放後端，
+D21）、Q16（字面值型別，第 6 步）、Q18（`control.stop` 是 cap block，第五輪）。
 
-**Q19 是排在 P2 的那一題**（`如果⋯否則如果⋯` 的 `+` `−`）：它真正要的是 manifest 的
-「可重複參數群組」，而 `try_catch` 的多個 catch、HTTP 的多個 header 是同一個形狀——
-要先讓 P1 的三個手寫包磨過一輪。
+三題現在到期了：
+
+- **Q19（可重複參數群組）** 等的是「先讓 P1 的三個手寫包磨過一輪」——到了，排 P2。
+- **Q20（`照字典序比` 要不要留）** 的判準寫的是「**P1 結束時**如果沒有任何一份真實
+  專案或題庫選過 `text`，就在那時拿掉」。P1 結束了，該去數。
+- **Q21（新增參數之後既有專案那一格）** 是這一輪新開的，見 3.3。
 
 ---
 
-### 六件從實測裡學到、值得帶到下一輪的事
+### 七件從實測裡學到、值得帶到下一輪的事
 
 1. **「規則對了，但少走了一條路。」** 每一輪幾乎都是這個形狀，而共同點是每次都省了
    一步「使用者真的會怎麼做」，**那一步只有把東西交出去才問得到**。
-2. **單元測試每一步都綠，串起來才炸。** `reshapeProcedure` 9 題、`fillDefinitionParams`
-   6 題，bug 出在「`App.tsx` 把它們接起來」的那條縫上。修法是讓那三步變成一個函式
-   （`blockly/apply.ts`），不是再抄一份順序去測。
+2. **單元測試每一步都綠，串起來才炸。** 修法是讓那幾步變成一個函式，不是再抄一份
+   順序去測。
 3. **規則對、時機錯。** 加檢查時要問的不只是「它說的對不對」，還有**「它會在哪一刻說」**。
+   這一輪的應用：動態下拉的依賴變了「只重抓、不清空這一格的值」——清空要判斷這次
+   變動是不是使用者造成的，而載入專案、undo、拖動走的是同一條事件路，代價是**默默
+   弄丟一個存過的值**。
 4. **測得到的是規則，測不到的是順序。** 凡是「我讀的狀態別人也在改」的判斷，都要問
-   一次「我跑在誰前面」（Esc 那個 bug）。
-5. **兩邊都對，中間那句話沒有人負責。** P1 第 1 步的 `extensions` 宣告就是這個形狀：
-   前端存的是真話、後端讀的也是真話，而「畫布上多了一顆積木要改宣告」不屬於任何一邊。
-   **把東西端到端跑一次是唯一問得出這種問題的方法**——而它花的時間比寫那兩份測試少。
-6. **驗收驗了值，bug 在樣子。** 動態下拉那個回歸就是這個形狀：第 3 步的驗收寫的是
-   「選 POST → 存檔 → 重新整理 → **值還在**」，而值一直都是對的——`shadowKindOf`
-   認不得下拉影子，重新載入時退回通用文字影子，那一格從下拉變成文字輸入框。
-   `dropdownShadow.test.ts` 現在把兩件事分開斷言，而且**拿掉修正時只有「樣子」那兩題
-   會紅，「值」那兩題照樣綠**——那正是當初漏掉它的原因，寫在測試檔的開頭。
-   下次寫驗收句子時要問的是：**這句話如果只有一半壞掉，我看得出來嗎。**
+   一次「我跑在誰前面」。
+5. **兩邊都對，中間那句話沒有人負責。** **把東西端到端跑一次是唯一問得出這種問題的
+   方法**——而它花的時間比寫那兩份測試少。
+6. **驗收驗了值，bug 在樣子。** 寫驗收句時要問：**這句話如果只有一半壞掉，我看得出來
+   嗎。** 這一輪又中兩次，而且兩次都只有瀏覽器看得到：`default: ""` 的下拉畫出來是
+   一個沒有文字、沒有箭頭、看起來不能點的空膠囊；新增參數之後既有專案那一格是一個
+   填不了東西的空孔。**兩件事的單元測試都是綠的，因為值一直都是對的。**
+7. **翻裝下來的原始碼，不要用訓練資料裡的記憶去猜。** 這一輪三件事都是這樣翻出來的
+   （`login()` 不開 gateway、`ctx.http` 注不進去、`jump_url` 吐 `@me`），三件如果照
+   猜的寫下去都會是「到執行期才炸、而且訊息指錯方向」。上一輪的 `httpx2` 也是。
+   **這條規矩到目前為止的命中率是 100%。**
