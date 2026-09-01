@@ -102,10 +102,10 @@ class Pack:
         finally:
             self.contexts.close(ctx.token)
 
-    async def dropdown(self, opcode: str, source: str) -> list[dict[str, Any]]:
-        ctx = self.contexts.open("http")
+    async def dropdown(self, ext_id: str, source: str) -> list[dict[str, Any]]:
+        ctx = self.contexts.open(ext_id)
         try:
-            return await self.host.dropdown(opcode, source, ctx.token)
+            return await self.host.dropdown(ext_id, source, ctx.token)
         finally:
             self.contexts.close(ctx.token)
 
@@ -233,7 +233,7 @@ async def test_url_encode(pack: Pack) -> None:
 
 async def test_方法的下拉是動態的(pack: Pack) -> None:
     # 積木包不能宣告靜態 options（D22），所以封閉的一組選項也走 @dropdown。
-    options = await pack.dropdown("http.request", "methods")
+    options = await pack.dropdown("http", "methods")
     assert [o["value"] for o in options] == ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]
 
 

@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from blocky.api import extensions as extensions_routes
+from blocky.api import keys as keys_routes
 from blocky.api import projects as projects_routes
 from blocky.api import runs as runs_routes
 from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
@@ -74,6 +75,7 @@ def create_app(
 
     app.include_router(projects_routes.router)
     app.include_router(extensions_routes.router)
+    app.include_router(keys_routes.router)
     app.include_router(runs_routes.router)
     app.include_router(runs_routes.ws_router)
 

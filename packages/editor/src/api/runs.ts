@@ -21,12 +21,31 @@ export interface RunSummary {
 }
 
 /** §5.6 的錯誤形狀（`backend/blocky/errors.py` 的 `BlockyError.to_dict`）。 */
+/**
+ * 錯誤附帶的**可點擊補救動作**（後端 `BlockyError.action`）。
+ *
+ * `hint` 是給人讀的一句話，這個是給 UI 讀的一個結構——「還沒設定金鑰」那句話
+ * 的正確結局是一顆把你送到設定畫面、而且欄位已經填好的按鈕。
+ *
+ * 刻意是**封閉的聯集**：payload 由 host 從 manifest 產生，但它一路經過積木包
+ * 的 process，所以前端這一側只認得出白名單裡的 `kind`，認不得的就當作沒有。
+ */
+export type BlockErrorAction = {
+  kind: 'configure_secret';
+  extId: string;
+  extName: string;
+  key: string;
+  label: string | null;
+  envVar: string | null;
+};
+
 export interface BlockError {
   type: string;
   code: string;
   message: string;
   blockId?: string;
   hint?: string;
+  action?: BlockErrorAction;
 }
 
 export type RunEvent =

@@ -20,6 +20,7 @@ import type {
 
 export type PaletteEntry = Palette[number];
 import { FIELD_TEXT_TYPE, type FieldTextOptions } from './fields/FieldText';
+import { FIELD_DYNAMIC_DROPDOWN_TYPE } from './fields/FieldDynamicDropdown';
 
 /** Blockly 的積木型別名稱 = IR 的 opcode，一字不差。 */
 export type BlockType = string;
@@ -601,9 +602,25 @@ function shadowFor(
   }
 
   // `dropdown` 走到這裡代表它是動態的（`source` 指向積木包的 `@dropdown`
-  // 函式，D22）。選項要打 `POST /api/extensions/{id}/dropdown/{source}` 才問得
-  // 到，而那個端點還不存在——先用文字影子頂著，形狀與 IR 表示（`inputs` 裡的
-  // 字面值）與接上之後完全相同，屆時換掉的只有影子的型別。
+  // 函式，D22）。選項要打 `POST /api/extensions/{extId}/dropdown/{source}` 才
+  // 問得到，`extId` 是 `blockType` 的第一段——`buildBlock` 把它組成
+  // `${manifest.id}.${opcode}`，跟後端 `opcode.split('.', 1)[0]` 是同一條規則。
+  if (arg.type === 'dropdown' && arg.source) {
+    const value = String(arg.default ?? '');
+    const extId = blockType.split('.')[0];
+    const type = `blocky.shadow.dropdown#${blockType}.${name}`;
+    definitions.push({
+      type,
+      message0: '%1',
+      args0: [
+        { type: FIELD_DYNAMIC_DROPDOWN_TYPE, name: SHADOW_FIELD, value, extId, source: arg.source },
+      ],
+      output: null,
+      colour: SHADOW_COLOUR,
+    });
+    return { type, fields: { [SHADOW_FIELD]: value } };
+  }
+
   const value = String(arg.default ?? '');
   const options = fieldTextOptions(arg);
   if (isDefaultTextOptions(options)) {

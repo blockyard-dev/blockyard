@@ -22,6 +22,7 @@ from blocky.extensions.boundary import normalize_args, validate_dropdown_options
 from blocky.extensions.host import CallContexts, HostChannel
 from blocky.extensions.manifest import BlockSpec, ExtensionSource, Manifest
 from blocky.extensions.rpc import JsonRpcPeer, PeerClosed, RpcError
+from blocky.extensions.venv import ensure_interpreter
 
 _UNLOAD_TIMEOUT = 5.0
 
@@ -78,8 +79,10 @@ class SubprocessHost:
         if source is None:
             raise ExtensionError(f'找不到積木包「{ext_id}」')
 
+        python_path = await ensure_interpreter(ext_id, source.manifest.requirements)
+
         process = await asyncio.create_subprocess_exec(
-            sys.executable,
+            str(python_path),
             "-m",
             "blocky.extensions.subprocess_worker",
             ext_id,
@@ -162,9 +165,11 @@ class SubprocessHost:
 
         return validate_return(manifest, spec, result, block_id=block_id)
 
-    async def dropdown(self, opcode: str, source: str, ctx_token: str) -> list[dict[str, Any]]:
-        manifest, _, worker = self._resolve(opcode)
-        full = f"{manifest.id}.{source}"
+    async def dropdown(self, ext_id: str, source: str, ctx_token: str) -> list[dict[str, Any]]:
+        worker = self._workers.get(ext_id)
+        if worker is None:
+            raise ExtensionError(f'積木包「{ext_id}」還沒載入')
+        full = f"{ext_id}.{source}"
         try:
             result = await worker.peer.call("dropdown", {"token": ctx_token, "source": source})
         except RpcError as e:

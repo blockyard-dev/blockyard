@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import ValidationError as PydanticError
 
 from blocky.errors import BlockyError, ValidationError
-from blocky.extensions import open_registry
+from blocky.extensions import discover, open_registry, secret_store
 from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
 from blocky.interpreter.declarations import expression_fields
 from blocky.interpreter.events import EventSink
@@ -57,8 +57,17 @@ async def open_project(
 
     registry: ExtensionRegistry | None = None
     if declared:
+        # 金鑰要在 open_registry() 之前就準備好：SubprocessHost.load() 的第一個
+        # RPC 就帶著 config，太晚給就沒用（§12.1、D28）。
+        sources = discover(extensions_root)
+        declared_manifests = {k: sources[k].manifest for k in declared if k in sources}
+        config = secret_store.resolve_config(declared_manifests)
+        if sink is not None:
+            # §12.2：這次 Run 用到的 secret 明文值進遮蔽名單，事件流從第一筆
+            # 開始就擋得住——不能等 Run 跑到一半才補。
+            sink.register_secrets(secret_store.secret_values(declared_manifests, config))
         try:
-            registry = await open_registry(extensions_root, sink=sink, only=declared)
+            registry = await open_registry(extensions_root, sink=sink, only=declared, config=config)
         except BlockyError as e:
             # 積木包自己壞掉（manifest 寫錯、main.py 匯入失敗）。這不是
             # 專案的錯，但專案在這個 runtime 上確實驗不完，得說清楚是誰壞的。

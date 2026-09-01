@@ -12,6 +12,8 @@ dependencies = [
     # runtime 的相依而不是某個積木包的。延遲 import——沒有包用到網路時它不會
     # 被載進 process（`extensions/httpclient.py`）。
     "httpx>=0.27,<1",
+    # secret 存進 OS keyring（§12.1），不是 project.json 或任何檔案。
+    "keyring>=25,<26",
 ]
 
 [project.optional-dependencies]

@@ -15,6 +15,87 @@ export async function fetchExtensions(signal?: AbortSignal): Promise<Manifest[]>
   return (await res.json()) as Manifest[];
 }
 
+/** D28：右上角「金鑰」面板的一列——只有已設定／未設定，沒有明文。 */
+export interface KeyEntry {
+  extId: string;
+  extName: string;
+  key: string;
+  label: string | null;
+  envVar: string | null;
+  configured: boolean;
+  /** 末四碼，用來分辨「現在裝著的是哪一把」。太短的金鑰後端整個不給（D28）。 */
+  suffix: string | null;
+}
+
+export async function fetchKeys(signal?: AbortSignal): Promise<KeyEntry[]> {
+  const res = await fetch('/api/keys', { signal });
+  if (!res.ok) throw await toApiError(res, `GET /api/keys → ${res.status} ${res.statusText}`);
+  return (await res.json()) as KeyEntry[];
+}
+
+/** 寫一把。已經有值就覆寫——「換一把」跟「第一次填」是同一個動作。 */
+export async function putKey(
+  extId: string,
+  key: string,
+  value: string,
+  signal?: AbortSignal,
+): Promise<KeyEntry> {
+  const path = `/api/keys/${encodeURIComponent(extId)}/${encodeURIComponent(key)}`;
+  const res = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value }),
+    signal,
+  });
+  if (!res.ok) throw await toApiError(res, `PUT ${path} → ${res.status} ${res.statusText}`);
+  return (await res.json()) as KeyEntry;
+}
+
+/**
+ * 讀回**一把**的完整明文，給複製按鈕用。
+ *
+ * 刻意不是 `KeyEntry` 上的一個欄位：列表每開一次面板就打一次，把明文掛在
+ * 上面等於讓它跟著每一次輪詢多走一趟。呼叫端拿到之後應該**直接送進剪貼簿**，
+ * 不要存進 state、不要畫進 DOM。
+ */
+export async function revealKey(
+  extId: string,
+  key: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const path = `/api/keys/${encodeURIComponent(extId)}/${encodeURIComponent(key)}/reveal`;
+  const res = await fetch(path, { signal });
+  if (!res.ok) throw await toApiError(res, `GET ${path} → ${res.status} ${res.statusText}`);
+  return ((await res.json()) as { value: string }).value;
+}
+
+/** 拿掉一把。本來就沒有也是成功——這個端點描述的是結束狀態。 */
+export async function deleteKey(extId: string, key: string, signal?: AbortSignal): Promise<void> {
+  const path = `/api/keys/${encodeURIComponent(extId)}/${encodeURIComponent(key)}`;
+  const res = await fetch(path, { method: 'DELETE', signal });
+  if (!res.ok) throw await toApiError(res, `DELETE ${path} → ${res.status} ${res.statusText}`);
+}
+
+export interface ImportEnvResult {
+  written: { extId: string; key: string; envVar: string }[];
+  unmatched: string[];
+}
+
+/** 匯入 `.env` 原文。對不上宣告的行**列出來但不寫入**（D28）——回應只帶
+ * 變數名稱，前端不該也拿不到它們的值。 */
+export async function importEnvKeys(text: string, signal?: AbortSignal): Promise<ImportEnvResult> {
+  const res = await fetch('/api/keys/import-env', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+    signal,
+  });
+  if (!res.ok) {
+    throw await toApiError(res, `POST /api/keys/import-env → ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as ImportEnvResult;
+}
+
 /**
  * `/api/projects/{id}` 的驗證錯誤形狀（`backend/blocky/api/errors.py`）。
  * `blockId` 有值時前端才知道要把哪一顆積木標紅（§8.4 第 4 步的驗收項）。

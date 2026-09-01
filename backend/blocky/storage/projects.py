@@ -21,6 +21,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from blocky.home import blocky_home
+
 LOCAL_OWNER = "local"
 
 _SCHEMA = """
@@ -56,11 +58,7 @@ class StoredProject:
 
 def default_db_path() -> Path:
     """`~/.blocky/blocky.db`，可用 `BLOCKY_HOME` 覆寫。"""
-    import os
-
-    home = os.environ.get("BLOCKY_HOME")
-    root = Path(home) if home else Path.home() / ".blocky"
-    return root / "blocky.db"
+    return blocky_home() / "blocky.db"
 
 
 class ProjectStore:

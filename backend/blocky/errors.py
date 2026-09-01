@@ -16,11 +16,26 @@ class BlockyError(Exception):
 
     code = "error"
 
-    def __init__(self, message: str, *, block_id: str | None = None, hint: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        block_id: str | None = None,
+        hint: str | None = None,
+        action: dict[str, Any] | None = None,
+    ):
         super().__init__(message)
         self.message = message
         self.block_id = block_id
         self.hint = hint
+        # 前端可以**點下去**的補救動作（§6.1）。`hint` 是給人讀的一句話，這個
+        # 是給 UI 讀的一個結構——「還沒設定金鑰」那句話的正確結局是一顆把你送
+        # 到設定畫面、而且欄位已經填好的按鈕，不是要使用者自己去記變數名。
+        #
+        # **只有 host 產得出來**（`Ctx.require_secret`），積木包沒有手刻的路徑：
+        # payload 裡的 extId／envVar 是從 manifest 讀的，不是包自己說的。前端
+        # 另外只認白名單內的 `kind`。
+        self.action = action
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -32,6 +47,8 @@ class BlockyError(Exception):
             d["blockId"] = self.block_id
         if self.hint is not None:
             d["hint"] = self.hint
+        if self.action is not None:
+            d["action"] = self.action
         return d
 
     @classmethod
@@ -44,7 +61,12 @@ class BlockyError(Exception):
         子類別，parent 端也重建得出一個行為正確（雖然類別不精確）的例外。
         """
         target = _BY_CODE.get(d.get("code"), BlockyError)
-        return target(d.get("message", ""), block_id=d.get("blockId"), hint=d.get("hint"))
+        return target(
+            d.get("message", ""),
+            block_id=d.get("blockId"),
+            hint=d.get("hint"),
+            action=d.get("action"),
+        )
 
     def __str__(self) -> str:
         return f"{self.message}（{self.hint}）" if self.hint else self.message
@@ -116,6 +138,18 @@ class ExtensionError(BlockyError):
     code = "extension"
 
 
+class MissingSecretError(ExtensionError):
+    """積木要用一把還沒設定的金鑰（§12.1、D28）。
+
+    自成一個 `code` 而不是一句普通的 `ExtensionError`，是為了讓前端認得出
+    「這一種失敗有一顆按鈕可以按」——訊息文字會因為包不同而不同，`code` 不會。
+    值本身**不在**這條路上：payload 只有「哪個包的哪一把、對應哪個環境變數
+    名」，這樣它才能安全地一路傳到瀏覽器。
+    """
+
+    code = "missing_secret"
+
+
 _BY_CODE: dict[str, type[BlockyError]] = {
     cls.code: cls
     for cls in (
@@ -128,6 +162,7 @@ _BY_CODE: dict[str, type[BlockyError]] = {
         RecursionLimitError,
         UnknownBlockError,
         ExtensionError,
+        MissingSecretError,
     )
 }
 

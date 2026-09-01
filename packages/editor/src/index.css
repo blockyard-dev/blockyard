@@ -1014,6 +1014,215 @@ body,
   padding: 0.8rem 1rem 1rem;
 }
 
+/* 「金鑰」面板（D28）。每一列是**一把金鑰**：名字 + 環境變數名的小方塊 +
+   靠右的狀態（末四碼或「未設定」）+ 動作按鈕。色點拿掉了——狀態那一欄本來
+   就是文字，再加一顆點是同一件事說兩次。 */
+.keys-body {
+  padding: 0.9rem 1rem;
+  font-size: 0.8rem;
+}
+
+.keys-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.keys-count {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.keys-toolbar .button {
+  margin-left: auto;
+}
+
+.keys-list {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.keys-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* 名字與環境變數名疊成一欄，讓它們一起被右邊的狀態推開。 */
+.keys-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.keys-row-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex: none;
+}
+
+.keys-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.keys-icon-button:hover:not(:disabled) {
+  background: #f3f5f9;
+  color: inherit;
+}
+
+.keys-icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 「已複製」的那一下。只有顏色會變，圖示自己換成勾。 */
+.keys-copied {
+  color: #2f855a;
+}
+
+/* 複製失敗。跟 idle 長得一樣的話，症狀就是「按了沒反應」。 */
+.keys-icon-failed {
+  border-color: #e5484d;
+  color: #e5484d;
+}
+
+.keys-icon-danger:hover:not(:disabled) {
+  border-color: #e5484d;
+  background: #fff1f1;
+  color: #e5484d;
+}
+
+.keys-empty {
+  color: var(--muted);
+}
+
+.keys-label {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 環境變數名。等寬 + 一格淺底，讓它讀起來是「一個要照抄的字串」而不是說明。 */
+.keys-env {
+  align-self: flex-start;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.25rem;
+  background: #eef1f6;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+}
+
+.keys-state {
+  margin-left: auto;
+  flex: none;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+}
+
+.keys-state-on {
+  color: #2f855a;
+}
+
+/* 新增／更換的表單。 */
+.keys-field {
+  display: block;
+  margin-bottom: 0.7rem;
+}
+
+.keys-field-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.keys-locked {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: #f7f8fb;
+}
+
+.keys-select,
+.keys-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  font: inherit;
+  font-size: 0.8rem;
+  background: #fff;
+}
+
+.keys-input {
+  font-family: ui-monospace, monospace;
+}
+
+.keys-field-hint {
+  padding: 0;
+}
+
+.keys-env-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  margin-bottom: 0.5rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.keys-import-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  font: inherit;
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  resize: vertical;
+}
+
+.keys-import-result {
+  margin-top: 0.6rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.keys-import-result p {
+  margin: 0.2rem 0;
+}
+
 /* 預覽積木上的說明文字：積木底色上的一格**深色矩形**（白字），不是一顆白色膠囊
    （`FieldText` 的 `bare`，見 blockly/declaration.ts）。白色膠囊在這套視覺
    文法裡一直都是「這一格的內容是資料」——說明文字不是，它會變成積木文字的
@@ -1114,4 +1323,21 @@ body,
   border-radius: 0.5rem;
   box-shadow: 0 4px 16px rgb(20 20 40 / 18%);
   cursor: pointer;
+}
+/* 執行紀錄裡錯誤那一列附帶的補救按鈕（`BlockError.action`）。跟在訊息後面而
+   不是自成一列：它是那句話的結局，不是另一則訊息。 */
+.log-action {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid currentcolor;
+  border-radius: 0.25rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.log-action:hover {
+  background: rgb(0 0 0 / 6%);
 }

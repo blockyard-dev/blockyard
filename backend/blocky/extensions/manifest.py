@@ -279,6 +279,10 @@ class ConfigSpec(Strict):
     label: str | None = None
     help: str | None = None
     default: Any = None
+    # `secret` 型才有意義：這個包認得哪個 `.env` 變數名（D28）。匯入 `.env`
+    # 時只認宣告過的名字，沒宣告就不會被匯入面板寫進去——匹配靠宣告、不靠
+    # 嗅探大小寫／底線轉換。
+    envVar: str | None = None
 
     @property
     def has_default(self) -> bool:
@@ -538,6 +542,24 @@ class Manifest(Strict):
     def field_args(self, opcode: str) -> dict[str, ArgSpec]:
         spec = self.block(opcode)
         return {} if spec is None else {n: a for n, a in spec.args.items() if a.is_field}
+
+    def secret_specs(self) -> dict[str, dict[str, Any]]:
+        """`secret` 型 config 的描述，key → 給 `Ctx.require_secret` 用的 payload。
+
+        **值不在這裡面**：這份東西會一路傳到瀏覽器（`MissingSecretError` 的
+        `action`），所以它只帶得動「哪個包的哪一把、對應哪個環境變數名」。
+        """
+        return {
+            spec.key: {
+                "extId": self.id,
+                "extName": self.name,
+                "key": spec.key,
+                "label": spec.label,
+                "envVar": spec.envVar,
+            }
+            for spec in self.config
+            if spec.type == "secret"
+        }
 
     def dropdown_sources(self) -> set[str]:
         return {a.source for b in self.blocks for a in b.args.values() if a.source}

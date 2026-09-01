@@ -39,6 +39,7 @@ import { serializeWorkspace } from './ir/serialize';
 import { RunDecorator } from './run/decorate';
 import { useRunStore } from './run/store';
 import { ExtensionsEntry } from './components/ExtensionsEntry';
+import { KeysEntry } from './components/KeysPanel';
 import { RunBubbles } from './components/RunBubbles';
 import { FlyoutResizer } from './components/FlyoutResizer';
 import { RunPanel } from './components/RunPanel';
@@ -505,6 +506,8 @@ export function App() {
             </button>
           </div>
         )}
+        {/* 右上角的全域入口（D28）：不綁定某個專案，載入中／出錯時也該進得去。 */}
+        <KeysEntry />
         <RunStatus />
         {saveState.status === 'error' && (
           <span className="save-status save-status-error">{saveState.message}</span>

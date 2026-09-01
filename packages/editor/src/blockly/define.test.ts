@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { buildDefinitions, SHADOW_NUMBER, SHADOW_TEXT } from './define';
 import { FIELD_TEXT_TYPE } from './fields/FieldText';
+import { FIELD_DYNAMIC_DROPDOWN_TYPE } from './fields/FieldDynamicDropdown';
 import type { BlockSpec, Manifest } from '../types/manifest';
 
 const BUILTINS = resolve(
@@ -297,6 +298,33 @@ describe('影子積木', () => {
     );
     const shadow = definitions.find((d) => d.type === blocks[0]!.shadows.src!.type)!;
     expect((shadow.args0 as any[])[0]).toMatchObject({ interpolate: false });
+  });
+
+  it('dropdown 參數（非 field，D22）拿到動態下拉的影子，帶著 extId／source', () => {
+    // `http.method` 的真實形狀：source 指向積木包的 @dropdown 函式，不是
+    // manifest 裡寫死的 options（那是 field: true 的內建下拉才有的路）。
+    const { definitions, blocks } = buildDefinitions(
+      manifestOf([
+        {
+          opcode: 'x',
+          type: 'reporter',
+          returns: 'string',
+          text: '%(method)',
+          args: { method: { type: 'dropdown', source: 'methods', default: 'GET' } },
+        },
+      ]),
+    );
+    const shadowType = blocks[0]!.shadows.method!.type;
+    expect(shadowType).not.toBe(SHADOW_TEXT);
+    const shadow = definitions.find((d) => d.type === shadowType)!;
+    expect((shadow.args0 as any[])[0]).toMatchObject({
+      type: FIELD_DYNAMIC_DROPDOWN_TYPE,
+      extId: 'test',
+      source: 'methods',
+      value: 'GET',
+    });
+    // IR 表示跟文字影子完全一樣：一顆字面值存在 fields.VALUE，換掉的只有影子的型別。
+    expect(blocks[0]!.shadows.method).toEqual({ type: shadowType, fields: { VALUE: 'GET' } });
   });
 });
 

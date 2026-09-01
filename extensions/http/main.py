@@ -18,7 +18,7 @@ from urllib.parse import quote
 
 import httpx
 
-from blocky import BlockError, block, dropdown
+from blocky import BlockError, block, dropdown, redact_url
 
 METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]
 
@@ -70,10 +70,11 @@ async def _send(ctx, method, url, headers, body):
     try:
         resp = await ctx.http.request(m, url, **kwargs)
     except httpx.TimeoutException as e:
-        raise BlockError(f"等 {url} 回應超過時間了（{e.__class__.__name__}）") from e
+        raise BlockError(f"等 {redact_url(url)} 回應超過時間了（{e.__class__.__name__}）") from e
     except httpx.HTTPError as e:
         # 連不上、DNS 查不到、憑證不對——主詞是這個網址，不是這個積木包。
-        raise BlockError(f"連不上 {url}：{e}") from e
+        # §12.2：query string 裡可能帶著呼叫端自己的 token，錯誤訊息先洗過。
+        raise BlockError(f"連不上 {redact_url(url)}：{e}") from e
 
     return {
         "status": resp.status_code,

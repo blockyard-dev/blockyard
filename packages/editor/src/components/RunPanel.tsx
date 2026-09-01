@@ -8,8 +8,9 @@
  */
 import { useState } from 'react';
 import { readPref, writePref } from '../prefs';
-import { useRunStore } from '../run/store';
+import { useRunStore, type LogLine } from '../run/store';
 import { JsonTree } from './JsonTree';
+import { useKeysUi } from './keysStore';
 
 /** §8.3：變數面板預設開著，但要能關。開關記在偏好裡，**不進 IR**（§16 Q15）。 */
 const VARIABLES_OPEN = 'variables-panel-open';
@@ -72,6 +73,13 @@ export function RunPanel() {
             {logs.map((line) => (
               <li key={line.id} className={`log-${line.level}`}>
                 {line.text}
+                {/* 錯誤附帶的補救動作（§6.1）。「還沒設定金鑰」的正確結局是一顆
+                    按鈕，不是一句叫使用者自己去右上角找面板、自己記得變數名的
+                    話。認不得的 kind 就當作沒有——payload 一路經過積木包的
+                    process，前端只認白名單。 */}
+                {line.action?.kind === 'configure_secret' && (
+                  <LogAction action={line.action} />
+                )}
               </li>
             ))}
           </ol>
@@ -82,5 +90,29 @@ export function RunPanel() {
         )}
       </section>
     </aside>
+  );
+}
+
+
+/** log 那一列上的補救按鈕。目前只有一種 kind，但形狀是為了會有第二種。 */
+function LogAction({ action }: { action: NonNullable<LogLine['action']> }) {
+  const openKeys = useKeysUi((s) => s.openKeys);
+  const what = action.label ?? action.envVar ?? action.key;
+  return (
+    <button
+      type="button"
+      className="log-action"
+      onClick={() =>
+        openKeys({
+          extId: action.extId,
+          extName: action.extName,
+          key: action.key,
+          label: action.label,
+          envVar: action.envVar,
+        })
+      }
+    >
+      去設定{what}
+    </button>
   );
 }

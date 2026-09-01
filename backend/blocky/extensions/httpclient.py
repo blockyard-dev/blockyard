@@ -23,9 +23,14 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 if TYPE_CHECKING:  # httpx 只在真的有包要用網路時才 import
     import httpx
+
+# §12.2：query string 裡這幾類名字（大小寫不分）常常帶著 secret——
+# `?api_key=sk-…`、`?token=…`。錯誤訊息把整段 URL 塞進去之前先洗一遍。
+_SENSITIVE_QUERY_KEYS = ("token", "key", "secret")
 
 # 連線 10 秒、整趟 30 秒。整趟的上限刻意不無限：長輪詢那種需求要的是 §7.3 的
 # trigger，不是一顆等 10 分鐘的積木。
@@ -53,4 +58,33 @@ def new_client(**overrides: Any) -> httpx.AsyncClient:
     return httpx.AsyncClient(**kwargs)
 
 
-__all__ = ["CONNECT_RETRIES", "CONNECT_TIMEOUT", "TOTAL_TIMEOUT", "USER_AGENT", "new_client"]
+def redact_url(url: str) -> str:
+    """§12.2：query string 裡看起來像 token／key／secret 的參數值換成 `***`。
+
+    只洗 query string——路徑與網域本身很少帶 secret，而且是使用者最需要看到
+    才判斷得出「是哪個網址」的部分。名字比對只看有沒有出現
+    `token`／`key`／`secret` 這幾個字（不分大小寫），例如 `api_key`、
+    `access_token` 都算——寧可洗多不洗漏，反正這裡只是拿掉錯誤訊息裡的一段
+    文字，不影響真正送出去的請求。
+    """
+    parts = urlsplit(url)
+    if not parts.query:
+        return url
+    cleaned = [
+        (k, "***" if any(s in k.lower() for s in _SENSITIVE_QUERY_KEYS) else v)
+        for k, v in parse_qsl(parts.query, keep_blank_values=True)
+    ]
+    # `safe='*'`：不然 `urlencode` 會把遮蔽用的 `***` 自己 percent-encode 成
+    # `%2A%2A%2A`，讀起來比原始明文還難懂，違背遮蔽是為了「看得懂但看不到
+    # 明文」的用意。
+    return urlunsplit(parts._replace(query=urlencode(cleaned, safe="*")))
+
+
+__all__ = [
+    "CONNECT_RETRIES",
+    "CONNECT_TIMEOUT",
+    "TOTAL_TIMEOUT",
+    "USER_AGENT",
+    "new_client",
+    "redact_url",
+]

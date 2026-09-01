@@ -199,6 +199,7 @@ class Worker:
             token=token,
             block_id=block_id,
             http=lambda: self._http_for(loaded),
+            secrets=loaded.source.manifest.secret_specs(),
         )
 
     def _http_for(self, loaded: _Loaded) -> Any:

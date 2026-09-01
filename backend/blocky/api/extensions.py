@@ -11,9 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
-from blocky.extensions import Manifest, discover
+from blocky.errors import BlockyError
+from blocky.extensions import Manifest, discover, open_registry, secret_store
 from blocky.interpreter import declarations
 
 router = APIRouter(prefix="/api/extensions", tags=["extensions"])
@@ -27,6 +28,36 @@ async def list_extensions(request: Request) -> list[dict[str, Any]]:
         _dump(src.manifest) for src in discover(request.app.state.extensions_root).values()
     )
     return out
+
+
+@router.post("/{ext_id}/dropdown/{source}")
+async def get_dropdown(ext_id: str, source: str, request: Request) -> list[dict[str, Any]]:
+    """動態下拉（D22、§8.1）。內建積木的下拉是靜態的（宣告在 manifest 的
+    `options` 裡），永遠不會走到這裡——`source` 只存在於積木包的 `dropdown`
+    型參數。
+
+    照 `api/validation.py::open_project` 已有的「開一個用完即關的 registry」
+    風格：只載這一個包，查完就卸載，不留著。
+    """
+    root = request.app.state.extensions_root
+    sources = discover(root)
+    if ext_id not in sources:
+        raise HTTPException(status_code=404, detail={"message": f"找不到積木包「{ext_id}」"})
+
+    config = secret_store.resolve_config({ext_id: sources[ext_id].manifest})
+    try:
+        registry = await open_registry(root, only=[ext_id], config=config)
+    except BlockyError as e:
+        raise HTTPException(
+            status_code=422, detail={"message": f"載入積木包時失敗：{e}"}
+        ) from None
+
+    try:
+        return await registry.dropdown(ext_id, source)
+    except BlockyError as e:
+        raise HTTPException(status_code=422, detail={"message": str(e)}) from None
+    finally:
+        await registry.unload_all()
 
 
 def _dump(mf: Manifest) -> dict[str, Any]:

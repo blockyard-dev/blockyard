@@ -18,6 +18,7 @@ export type Type = 'string' | 'number' | 'boolean' | 'secret';
 export type Label = string | null;
 export type Help = string | null;
 export type Default = unknown;
+export type Envvar = string | null;
 export type Config = ConfigSpec[];
 export type Opcode = string;
 export type Type1 = 'command' | 'reporter' | 'boolean' | 'hat';
@@ -95,6 +96,7 @@ export interface ConfigSpec {
   label?: Label;
   help?: Help;
   default?: Default;
+  envVar?: Envvar;
 }
 /**
  * 一顆積木的宣告。`opcode` 是**不帶命名空間**的短名。

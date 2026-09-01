@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -45,12 +46,25 @@ class EventSink:
         *,
         on_emit: Callable[[Event], None] | None = None,
         retain: bool = True,
+        secrets: Iterable[str] = (),
     ) -> None:
         self.events: list[Event] = []
         self._on_emit = on_emit
         self._retain = retain
+        self._secrets: set[str] = {s for s in secrets if s}
+
+    def register_secrets(self, values: Iterable[str | None]) -> None:
+        """§12.2：把這次 Run 用到的 secret 明文值加進遮蔽名單。
+
+        呼叫端（`api/validation.py::open_project`）在解出 config 之後才知道
+        有哪些值，所以是後補而不是建構子一次給——建構子的 `secrets` 是給
+        已經知道全部名單的呼叫端（例如測試）用的捷徑。
+        """
+        self._secrets.update(v for v in values if v)
 
     def emit(self, op: str, **data: Any) -> None:
+        if self._secrets:
+            data = _redact(data, self._secrets)
         ev = Event(op=op, data=data)
         if self._retain:
             self.events.append(ev)
@@ -59,6 +73,25 @@ class EventSink:
 
     def dicts(self) -> list[dict[str, Any]]:
         return [e.to_dict() for e in self.events]
+
+
+def _redact(v: Any, secrets: set[str]) -> Any:
+    """§12.2 的值遮蔽：子字串比對，命中換成 `***`。
+
+    粗暴但有效——完整方案需要污點追蹤，成本遠超 v1 的預算（§12.2 的已知
+    限制：擋不住編碼過或被切割的 secret）。只走 `dict`／`list`／`str`：
+    事件的 `data` 不會有別的容器型別。
+    """
+    if isinstance(v, str):
+        for s in secrets:
+            if s in v:
+                v = v.replace(s, "***")
+        return v
+    if isinstance(v, dict):
+        return {k: _redact(item, secrets) for k, item in v.items()}
+    if isinstance(v, list):
+        return [_redact(item, secrets) for item in v]
+    return v
 
 
 def clip_value(v: Any) -> tuple[Any, bool]:

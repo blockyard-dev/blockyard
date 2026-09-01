@@ -361,6 +361,18 @@
         "default": {
           "default": null,
           "title": "Default"
+        },
+        "envVar": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Envvar"
         }
       },
       "required": [

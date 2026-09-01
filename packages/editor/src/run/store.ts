@@ -11,7 +11,7 @@
  * 訂閱它的元件只重繪一次。
  */
 import { create } from 'zustand';
-import type { BlockError, RunFrame, RunSummary } from '../api/runs';
+import type { BlockError, BlockErrorAction, RunFrame, RunSummary } from '../api/runs';
 
 /** §8.3 的積木狀態。同一顆積木同時只會是其中一種。 */
 export type BlockPhase = 'running' | 'hot' | 'done' | 'error';
@@ -33,6 +33,8 @@ export interface LogLine {
   level: string;
   text: string;
   blockId?: string | null;
+  /** 這一列**可以按**（`RunPanel` 畫成按鈕）。只有 `block.error` 會帶。 */
+  action?: BlockErrorAction;
 }
 
 /** §8.2：log buffer 上限 5000 筆，環形。 */
@@ -150,7 +152,12 @@ export const useRunStore = create<RunState>((set) => ({
                 bump(blocks.get(event.blockId), { phase: 'error', error: event.error }),
               );
             }
-            logs = append(logs, { level: 'error', text: event.error.message, blockId: event.blockId });
+            logs = append(logs, {
+              level: 'error',
+              text: event.error.message,
+              blockId: event.blockId,
+              action: event.error.action,
+            });
             break;
           case 'var.set':
             variables.set(event.name, event.value);

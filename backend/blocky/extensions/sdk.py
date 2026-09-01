@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, TypeVar
 
-from blocky.errors import ExtensionError
+from blocky.errors import ExtensionError, MissingSecretError
+from blocky.extensions.httpclient import redact_url
 
 # 積木包**寫給使用者看的**錯誤。與 `raise ValueError(...)` 的差別在訊息的主詞：
 # 未被包住的例外會被 host 包成「積木包「HTTP」的 http.request 執行時發生錯誤：
@@ -80,7 +81,7 @@ class Ctx:
     而 `ctx.block_id` 每次都不同。
     """
 
-    __slots__ = ("config", "state", "block_id", "_channel", "_token", "_http")
+    __slots__ = ("config", "state", "block_id", "_channel", "_token", "_http", "_secrets")
 
     def __init__(
         self,
@@ -91,12 +92,16 @@ class Ctx:
         token: str,
         block_id: str | None = None,
         http: Callable[[], Any] | None = None,
+        secrets: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.config = config
         self.state = state
         self.block_id = block_id
         self._channel = channel
         self._token = token
+        # key → 那一項 `secret` 宣告的描述（extId／extName／envVar／label），由
+        # host 從 manifest 算出來。積木包看不到也改不了，見 `require_secret`。
+        self._secrets = secrets or {}
         # 取得 client 的**函式**而不是 client 本身：建一個 `AsyncClient` 會開連線
         # 池，而多數積木碰都不會碰它。權限檢查也在這個函式裡（§12.1）。
         self._http = http
@@ -114,6 +119,41 @@ class Ctx:
         """trigger 專用：送出一次事件。"""
         await self._channel.emit(self._token, payload)
 
+    def require_secret(self, key: str) -> str:
+        """拿一把 `secret` 型 config 的值；沒設定就丟出一個**點得下去**的錯誤。
+
+        每個要金鑰的包都得處理「使用者還沒填」這件事，而各自寫一句中文的結果
+        是每個包把使用者送到不同的地方、用不同的說法叫他去找同一個面板。這裡
+        統一：訊息由 manifest 的 `label`／`name` 組出來，補救動作
+        （`configure_secret`）帶著 extId 與 envVar，前端據此開啟金鑰面板並且
+        **把欄位填好**——使用者要做的只剩貼上那一串。
+
+        payload 從 manifest 來而不是從呼叫端的參數來，所以積木包沒有辦法叫前端
+        去設定「別人的」金鑰，也沒有辦法把值塞進這條路。
+        """
+        value = self.config.get(key)
+        if value:
+            return str(value)
+
+        spec = self._secrets.get(key)
+        if spec is None:
+            # 包要一把自己沒宣告過的金鑰。這是包的 bug，不是使用者的問題，
+            # 所以主詞要指回包身上，也不給補救按鈕。
+            raise ExtensionError(f"這個積木包沒有宣告名為「{key}」的 secret 設定項")
+
+        what = spec.get("label") or key
+        raise MissingSecretError(
+            f"還沒設定「{spec['extName']}」的{what}",
+            action={
+                "kind": "configure_secret",
+                "extId": spec["extId"],
+                "extName": spec["extName"],
+                "key": key,
+                "label": spec.get("label"),
+                "envVar": spec.get("envVar"),
+            },
+        )
+
     @property
     def http(self) -> Any:
         """共用的 httpx client（§7.4、`httpclient.py`）。
@@ -129,10 +169,12 @@ class Ctx:
 __all__ = [
     "BlockError",
     "Ctx",
+    "MissingSecretError",
     "block",
     "dropdown",
     "exports",
     "on_load",
     "on_unload",
+    "redact_url",
     "trigger",
 ]

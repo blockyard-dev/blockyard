@@ -116,7 +116,7 @@ class ExtensionHost(Protocol):
     async def call(self, opcode: str, args: dict[str, Any], ctx_token: str) -> Any: ...
 
     async def dropdown(
-        self, opcode: str, source: str, ctx_token: str
+        self, ext_id: str, source: str, ctx_token: str
     ) -> list[dict[str, Any]]: ...
 
     async def start_trigger(

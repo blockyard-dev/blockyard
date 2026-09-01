@@ -82,6 +82,16 @@ class ExtensionRegistry:
         found = self.lookup(opcode)
         return found[1].type if found else None
 
+    async def dropdown(self, ext_id: str, source: str) -> list[dict[str, Any]]:
+        """動態下拉的選項（D22、§8.1）。`ext_id`／`source` 直接對映
+        `POST /api/extensions/{ext_id}/dropdown/{source}`——這是包層級的東西，
+        不像 `call()` 需要一個 opcode 去查形狀。"""
+        ctx = self.contexts.open(ext_id)
+        try:
+            return await self.host.dropdown(ext_id, source, ctx.token)
+        finally:
+            self.contexts.close(ctx.token)
+
     def handler(self, opcode: str, *, want_value: bool) -> Handler | None:
         """回一個與內建積木同簽章的 handler，形狀不符時回 None。
 

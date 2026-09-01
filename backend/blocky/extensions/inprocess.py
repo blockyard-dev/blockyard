@@ -158,12 +158,14 @@ class InProcessHost:
         # 出：驗證（§7.5）
         return validate_return(loaded.manifest, spec, result, block_id=block_id)
 
-    async def dropdown(self, opcode: str, source: str, ctx_token: str) -> list[dict[str, Any]]:
-        loaded, _ = self._resolve(opcode)
-        full = f"{loaded.source.id}.{source}"
+    async def dropdown(self, ext_id: str, source: str, ctx_token: str) -> list[dict[str, Any]]:
+        loaded = self._loaded.get(ext_id)
+        if loaded is None:
+            raise ExtensionError(f'積木包「{ext_id}」還沒載入')
+        full = f"{ext_id}.{source}"
         fn = loaded.dropdowns.get(full)
         if fn is None:
-            raise ExtensionError(f"積木包「{loaded.source.id}」沒有下拉來源 {source}")
+            raise ExtensionError(f"積木包「{ext_id}」沒有下拉來源 {source}")
 
         ctx = self.contexts.get(ctx_token)
         options = await self._invoke(fn, self._ctx(loaded, ctx), {}, what=full)
@@ -216,6 +218,7 @@ class InProcessHost:
             token=ctx.token if ctx else "",
             block_id=block_id,
             http=lambda: self._http_for(loaded),
+            secrets=loaded.manifest.secret_specs(),
         )
 
     def _http_for(self, loaded: _Loaded) -> Any:

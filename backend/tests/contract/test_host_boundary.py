@@ -49,10 +49,10 @@ class Harness:
         finally:
             self.contexts.close(ctx.token)
 
-    async def dropdown(self, opcode: str, source: str) -> list[dict[str, Any]]:
-        ctx = self.contexts.open("demo")
+    async def dropdown(self, ext_id: str, source: str) -> list[dict[str, Any]]:
+        ctx = self.contexts.open(ext_id)
         try:
-            return await self.host.dropdown(opcode, source, ctx.token)
+            return await self.host.dropdown(ext_id, source, ctx.token)
         finally:
             self.contexts.close(ctx.token)
 
@@ -220,9 +220,14 @@ async def test_ctx_config_defaults_come_from_manifest(h: Harness) -> None:
 
 
 async def test_dropdown_returns_label_value_pairs(h: Harness) -> None:
-    options = await h.dropdown("demo.color_of", "list_fruits")
+    options = await h.dropdown("demo", "list_fruits")
     assert {o["value"] for o in options} == {"apple", "banana", "grape"}
     assert all(isinstance(o["label"], str) for o in options)
+
+
+async def test_dropdown_from_an_unloaded_package_is_rejected(h: Harness) -> None:
+    with pytest.raises(ExtensionError, match="還沒載入"):
+        await h.dropdown("nope", "whatever")
 
 
 async def test_unknown_opcode_is_rejected(h: Harness) -> None:
