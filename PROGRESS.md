@@ -69,10 +69,13 @@ passthrough，所以從工具箱拉一顆 `http.get` 出來按執行，後端說
    出現，才是「一個包一個 venv」真正要解決的問題（D13）；`subprocess_host.py`
    的 `load()` 目前寫死 `sys.executable`，要換成「先確保這個包的 venv 存在
    （`uv venv` + `uv pip install`），再用那個 venv 的直譯器路徑去 spawn」。
-2. **secret 怎麼進 `ctx.config` 還沒設計。** 現在 `config` 全部走
-   manifest 的 `config_defaults()` + 明文 override；金鑰要嘛是新的
-   `type: secret` 走 keyring 查詢再填進去，要嘛是別的機制——§12.2 的值遮蔽
-   （執行歷史裡不能出現明文）要在同一輪決定它存在哪一層。
+2. **金鑰的 UI 已經決定（D28、design.md v0.21），落地還沒做。** 右上角一個
+   全域「金鑰」入口：唯讀清單（只顯示已設定／未設定，不顯示明文）+「匯入
+   `.env`」（逐行比對各包宣告的 `envVar`，對不上的行列出來但不寫入）；
+   **沒有匯出**。要做的：`secret` 型 `config` 加 `envVar` 欄位（manifest
+   schema）、金鑰讀寫的 API（存進 OS keyring，`ctx.config` 組裝時查詢解密）、
+   §12.2 的值遮蔽（執行歷史裡不能出現明文）要在同一輪把「Host 持有本次 Run
+   用到的 secret 明文集合」這件事接上。
 3. **動態下拉最晚要在這一步之前接上**，`http` 的 `method` 是現成的第一個
    測試對象（選項封閉、答案不會變）；`openai` 的模型清單是它的第一個真實
    消費者。
