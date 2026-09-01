@@ -1,0 +1,10 @@
+title: 丟出錯誤 之後 try 裡剩下的積木不執行
+spec: §5.6 錯誤處理
+tags:
+- try_catch
+- throw
+expect:
+  status: ok
+  logs:
+  - 丟之前
+  - 接到了

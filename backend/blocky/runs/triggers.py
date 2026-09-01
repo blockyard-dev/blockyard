@@ -55,12 +55,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from blocky.api.validation import open_project
 from blocky.cron import CRON_OPCODE, CronSpec
 from blocky.cron import parse as parse_cron
-from blocky.extensions import discover
+from blocky.extensions import discover, secret_store
 from blocky.interpreter.events import EventSink
 from blocky.runs.manager import ProjectNotFound, RunManager
 from blocky.storage import ProjectStore
 from blocky.storage.triggers import ActiveStore, WebhookTokenStore
-from blocky.webhook import WEBHOOK_OPCODE, WebhookSpec
+from blocky.webhook import VERIFY_NONE, WEBHOOK_OPCODE, WebhookSpec, verify_signature
 from blocky.webhook import parse as parse_webhook
 
 if TYPE_CHECKING:
@@ -83,6 +83,8 @@ class Want:
     webhook: WebhookSpec | None = None
     #: 積木包 id；內建的（`event.*`）是 None。registry 要不要重載只看這一欄。
     ext_id: str | None = None
+    #: 內建 cron / webhook 才有：它是哪一顆積木。
+    block_id: str | None = None
     #: §5.1 宣告的併發模式。
     concurrency: str = "parallel"
 
@@ -103,6 +105,10 @@ class Bound:
     job_id: str | None = None
     #: webhook 在查表裡的鍵 `(token, path)`。
     route: tuple[str, str] | None = None
+    #: webhook 才有：驗簽章要用的宣告（密鑰不在裡面，見 `webhook.py`）。
+    hook: WebhookSpec | None = None
+    #: 這顆積木的 id。webhook 的簽章密鑰以它為 key（§16 Q22）。
+    block_id: str | None = None
 
 
 @dataclass
@@ -362,34 +368,91 @@ class TriggerManager:
             raise RuntimeError("沒有 token 儲存，webhook 掛不上")
         token = self._tokens.ensure(state.project_id)
         route = (token, want.webhook.path)
-        self._routes[route] = _forward(
-            self, state.project_id, want.opcode, want.concurrency
+        bound = Bound(
+            key=key,
+            opcode=want.opcode,
+            spec=want.spec,
+            route=route,
+            hook=want.webhook,
+            block_id=want.block_id,
         )
-        return Bound(key=key, opcode=want.opcode, spec=want.spec, route=route)
+        self._routes[route] = (
+            bound,
+            state.project_id,
+            _forward(self, state.project_id, want.opcode, want.concurrency),
+        )
+        return bound
 
-    async def deliver(self, token: str, path: str, payload: dict[str, Any]) -> bool:
-        """一個進來的請求 → 一個 Run。回傳有沒有人接。
+    async def deliver(
+        self,
+        token: str,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        body: bytes = b"",
+    ) -> str:
+        """一個進來的請求 → 一個 Run。
+
+        回傳 `"ok"` / `"unknown"` / `"bad_signature"`。
 
         **查不到就是查不到，不分「token 錯」與「路徑錯」。** 兩種分開回答等於
         告訴掃描的人「token 對了，繼續猜路徑」——而 §9.3 的整個模型就建立在
-        那串東西猜不到上面。
+        那串東西猜不到上面。簽章不符則是另一回事：那個人已經知道網址了，回
+        401 是在告訴他「你少了什麼」，而那正是設定 webhook 的人需要看到的。
         """
-        fire = self._routes.get((token, path.strip("/")))
-        if fire is None:
-            return False
+        found = self._routes.get((token, path.strip("/")))
+        if found is None:
+            return "unknown"
+        bound, project_id, fire = found
+
+        if bound.hook is not None and bound.hook.verify != VERIFY_NONE:
+            if not self._signature_ok(bound, project_id, body, payload):
+                state = self._projects.get(project_id)
+                if state is not None:
+                    _push(state, f"{bound.hook.path} 的簽章不符，這一則沒有執行")
+                return "bad_signature"
+
         await fire(payload)
-        return True
+        return "ok"
+
+    def _signature_ok(
+        self, bound: Bound, project_id: str, body: bytes, payload: dict[str, Any]
+    ) -> bool:
+        assert bound.hook is not None and bound.block_id is not None
+        secret = secret_store.get(secret_store.webhook_owner(project_id), bound.block_id)
+        if not secret:
+            # **沒設密鑰就一律擋。** 「宣告要驗但驗不了」的正確答案不是放行——
+            # 那會讓一份分享來的專案（密鑰沒跟著走，D28）安靜地退回不驗，而畫面
+            # 上那顆積木還寫著「驗證簽章：HMAC-SHA256」。形狀不能說謊。
+            return False
+        headers = payload.get("headers") or {}
+        return verify_signature(
+            bound.hook, secret, body, str(headers.get(bound.hook.signature_header, ""))
+        )
 
     def urls(self, project_id: str) -> list[dict[str, str]]:
         """這個專案現在掛著的 webhook 網址。給前端顯示「複製網址」用的。"""
         state = self._projects.get(project_id)
         if state is None:
             return []
-        return [
-            {"path": b.route[1], "url": f"/hooks/{b.route[0]}/{b.route[1]}"}
-            for b in state.bound.values()
-            if b.route is not None
-        ]
+        out: list[dict[str, Any]] = []
+        for b in state.bound.values():
+            if b.route is None or b.hook is None:
+                continue
+            entry: dict[str, Any] = {
+                "path": b.route[1],
+                "url": f"/hooks/{b.route[0]}/{b.route[1]}",
+                "blockId": b.block_id,
+                "verify": b.hook.verify,
+            }
+            if b.hook.verify != VERIFY_NONE and b.block_id is not None:
+                # 密鑰本身不出去（D28）——只說有沒有設。沒設的話那顆積木現在
+                # 擋掉每一則請求，而使用者要看得到這件事。
+                entry["secretSet"] = secret_store.is_configured(
+                    secret_store.webhook_owner(project_id), b.block_id
+                )
+            out.append(entry)
+        return out
 
     def _scheduler(self) -> AsyncIOScheduler:
         """**懶啟動。** 一個沒有任何 cron 的後端不該有一條排程器的執行緒在轉，
@@ -472,6 +535,7 @@ def _desired(data: Any, extensions_root: Path) -> dict[str, Want]:
                 opcode=opcode,
                 spec=hook.spec,
                 webhook=hook,
+                block_id=top,
                 concurrency=_declared_concurrency(opcode),
             )
             continue

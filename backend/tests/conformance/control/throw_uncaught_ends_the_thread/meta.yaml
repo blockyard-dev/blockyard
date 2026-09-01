@@ -1,0 +1,9 @@
+title: 沒有 try 接住的 丟出錯誤 中止這條 thread
+spec: §5.6 錯誤處理
+tags:
+- throw
+- errors
+expect:
+  status: error
+  logs:
+  - 丟之前

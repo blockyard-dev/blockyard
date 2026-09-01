@@ -271,9 +271,9 @@ def test_credentials_never_reach_the_payload(client: TestClient) -> None:
     manager = client.app.state.triggers  # type: ignore[attr-defined]
     original = manager.deliver
 
-    async def spy(token: str, path: str, payload: dict[str, Any]) -> bool:
+    async def spy(token: str, path: str, payload: dict[str, Any], **kw: Any) -> str:
         seen.update(payload)
-        return await original(token, path, payload)
+        return await original(token, path, payload, **kw)
 
     manager.deliver = spy
     client.post(url, json={}, headers={"Authorization": "Bearer s3cret", "X-Hub": "github"})
@@ -290,9 +290,9 @@ def test_query_and_method_are_in_the_payload(client: TestClient) -> None:
     manager = client.app.state.triggers  # type: ignore[attr-defined]
     original = manager.deliver
 
-    async def spy(token: str, path: str, payload: dict[str, Any]) -> bool:
+    async def spy(token: str, path: str, payload: dict[str, Any], **kw: Any) -> str:
         seen.update(payload)
-        return await original(token, path, payload)
+        return await original(token, path, payload, **kw)
 
     manager.deliver = spy
     client.post(f"{url}?a=1&b=2", json={"x": 1})
@@ -332,3 +332,208 @@ def test_deleting_the_project_drops_the_token(client: TestClient) -> None:
     client.delete("/api/projects/p_hook")
 
     assert client.app.state.webhook_tokens.get("p_hook") is None  # type: ignore[attr-defined]
+
+
+# --------------------------------------------------------------------------
+# 5. 簽章驗證（§9.3、§16 Q22 決議 (a)）
+# --------------------------------------------------------------------------
+
+
+def signed_project(
+    project_id: str = "p_hook",
+    *,
+    verify: str = "hmac_sha256",
+    header: str = "X-Hub-Signature-256",
+) -> dict[str, Any]:
+    p = hook_project(project_id)
+    p["blocks"]["hat"]["fields"].update({"verify": verify, "signature_header": header})
+    return p
+
+
+def sign(secret: str, body: bytes, algorithm: str = "sha256") -> str:
+    import hmac
+
+    return hmac.new(secret.encode(), body, algorithm).hexdigest()
+
+
+def test_the_secret_never_appears_in_the_ir(client: TestClient) -> None:
+    """D28：Key 不能存進專案檔——分享專案會變成分享明文金鑰。積木上只有三格
+    **不是秘密**的東西：要不要驗、簽章在哪個 header、用哪個雜湊。"""
+    save(client, signed_project())
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+
+    stored = client.get("/api/projects/p_hook").json()
+    assert "s3cret" not in str(stored)
+
+
+def test_a_correct_signature_is_accepted(client: TestClient) -> None:
+    save(client, signed_project())
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    url = activate(client)["webhooks"][0]["url"]
+
+    body = b'{"who": "GitHub"}'
+    res = client.post(
+        url,
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": "sha256=" + sign("s3cret", body),
+        },
+    )
+
+    assert res.status_code == 202
+
+
+def test_a_bare_hex_signature_also_works(client: TestClient) -> None:
+    """`sha256=<hex>` 是 GitHub 的格式，裸 hex 是自己寫 webhook 的人最常送的。"""
+    save(client, signed_project())
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    url = activate(client)["webhooks"][0]["url"]
+
+    body = b"{}"
+    res = client.post(
+        url,
+        content=body,
+        headers={"Content-Type": "application/json", "X-Hub-Signature-256": sign("s3cret", body)},
+    )
+
+    assert res.status_code == 202
+
+
+def test_a_wrong_signature_is_401_and_starts_no_run(client: TestClient) -> None:
+    """401 而不是 404：對方已經知道網址了，而「你少了什麼」正是設定 webhook
+    的人需要看到的。"""
+    save(client, signed_project())
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    url = activate(client)["webhooks"][0]["url"]
+
+    res = client.post(url, content=b"{}", headers={"X-Hub-Signature-256": "sha256=deadbeef"})
+
+    assert res.status_code == 401
+    assert client.get("/api/runs").json() == []
+
+
+def test_a_missing_signature_header_is_401(client: TestClient) -> None:
+    save(client, signed_project())
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    url = activate(client)["webhooks"][0]["url"]
+
+    assert client.post(url, content=b"{}").status_code == 401
+
+
+def test_no_secret_blocks_everything_it_does_not_fall_back_to_unverified(
+    client: TestClient,
+) -> None:
+    """**這是這一整塊最要緊的一題。**
+
+    「宣告要驗但驗不了」的正確答案不是放行——那會讓一份分享來的專案（密鑰沒
+    跟著走，D28）安靜地退回不驗，而畫面上那顆積木還寫著「驗證簽章：
+    HMAC-SHA256」。形狀不能說謊。
+    """
+    save(client, signed_project())
+    url = activate(client)["webhooks"][0]["url"]  # 沒設密鑰
+
+    body = b"{}"
+    res = client.post(url, content=body, headers={"X-Hub-Signature-256": sign("", body)})
+
+    assert res.status_code == 401
+    assert client.get("/api/runs").json() == []
+
+
+def test_the_state_says_whether_the_secret_is_set(client: TestClient) -> None:
+    """沒設的話那顆積木現在擋掉每一則請求，而使用者要看得到這件事。"""
+    save(client, signed_project())
+    before = activate(client)["webhooks"][0]
+    assert before["verify"] == "hmac_sha256"
+    assert before["secretSet"] is False
+
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    assert activate(client)["webhooks"][0]["secretSet"] is True
+
+
+def test_an_unverified_hook_has_no_secret_flag(client: TestClient) -> None:
+    save(client, hook_project())
+    entry = activate(client)["webhooks"][0]
+
+    assert entry["verify"] == "none"
+    assert "secretSet" not in entry
+
+
+def test_clearing_the_secret_goes_back_to_blocking(client: TestClient) -> None:
+    save(client, signed_project())
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    url = activate(client)["webhooks"][0]["url"]
+
+    assert client.delete("/api/triggers/p_hook/secret/hat").status_code == 204
+
+    body = b"{}"
+    res = client.post(url, content=body, headers={"X-Hub-Signature-256": sign("s3cret", body)})
+    assert res.status_code == 401
+
+
+def test_an_empty_secret_is_422_not_a_silent_clear(client: TestClient) -> None:
+    save(client, signed_project())
+    res = client.put("/api/triggers/p_hook/secret/hat", json={"secret": "  "})
+
+    assert res.status_code == 422
+
+
+def test_verify_without_a_header_is_rejected_at_save_time(client: TestClient) -> None:
+    res = save(client, signed_project(header=""))
+
+    assert res.status_code == 422
+    assert "header" in res.json()["detail"]["message"]
+
+
+def test_an_unknown_verify_mode_is_rejected(client: TestClient) -> None:
+    assert save(client, signed_project(verify="rot13")).status_code == 422
+
+
+def test_sha1_works_too(client: TestClient) -> None:
+    save(client, signed_project(verify="hmac_sha1", header="X-Signature"))
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    url = activate(client)["webhooks"][0]["url"]
+
+    body = b"{}"
+    res = client.post(
+        url, content=body, headers={"X-Signature": "sha1=" + sign("s3cret", body, "sha1")}
+    )
+
+    assert res.status_code == 202
+
+
+def test_the_signature_covers_the_raw_body_not_the_parsed_one(client: TestClient) -> None:
+    """簽的是原始位元組。解析過再簽的話，一個多空白或不同 key 順序的 JSON 就
+    會算出不同的簽章——而對面簽的是它送出去的那串。"""
+    save(client, signed_project())
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "s3cret"})
+    url = activate(client)["webhooks"][0]["url"]
+
+    body = b'{"a":  1}'  # 刻意多一個空白
+    res = client.post(
+        url,
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": "sha256=" + sign("s3cret", body),
+        },
+    )
+
+    assert res.status_code == 202
+
+
+def test_changing_the_secret_does_not_remount_the_route(client: TestClient) -> None:
+    """密鑰不在 §9.2 的 spec 裡——驗證是每次請求進來時才做的事，路由沒有變。"""
+    save(client, signed_project())
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "one"})
+    url = activate(client)["webhooks"][0]["url"]
+
+    client.put("/api/triggers/p_hook/secret/hat", json={"secret": "two"})
+
+    body = b"{}"
+    assert (
+        client.post(
+            url, content=body, headers={"X-Hub-Signature-256": "sha256=" + sign("two", body)}
+        ).status_code
+        == 202
+    )

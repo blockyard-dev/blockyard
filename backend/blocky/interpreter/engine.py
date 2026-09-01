@@ -358,6 +358,13 @@ class Interpreter:
         except asyncio.CancelledError:
             status = "cancelled"
             raise
+        except BaseException:
+            # handler 自己爆了——那是 runtime 的 bug，不是積木層級的錯誤，所以
+            # 不發 `block.error`（那顆積木沒有做錯什麼，訊息也不是給使用者看的）。
+            # 但 `finally` 一定會發 `thread.end`，而讓它說 `ok` 等於**在事件流裡
+            # 說謊**：畫面上那條腳本會顯示成順利跑完，而它其實中途死了。
+            status = "error"
+            raise
         finally:
             self.sink.emit("thread.end", threadId=thread_id, status=status)
         return status

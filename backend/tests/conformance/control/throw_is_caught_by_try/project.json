@@ -1,0 +1,106 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "control.try_catch",
+      "parent": "blk_1",
+      "next": "blk_5",
+      "inputs": {
+        "try": {
+          "kind": "stack",
+          "id": "blk_3"
+        },
+        "catch": {
+          "kind": "stack",
+          "id": "blk_4"
+        }
+      },
+      "fields": {
+        "error_name": "error"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "control.throw",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "message": {
+          "kind": "literal",
+          "value": "這份資料不對"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "template",
+          "value": "${error.code}：${error.message}",
+          "refs": [
+            {
+              "root": "error",
+              "path": [
+                "code"
+              ]
+            },
+            {
+              "root": "error",
+              "path": [
+                "message"
+              ]
+            }
+          ],
+          "whole": false
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "debug.log",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "literal",
+          "value": "繼續執行"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

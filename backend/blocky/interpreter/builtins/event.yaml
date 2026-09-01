@@ -36,9 +36,29 @@ palette:
 
   - opcode: when_webhook
     type: hat
-    text: "當收到 webhook %(path)"
+    text: "當收到 webhook %(path) %(verify) %(signature_header)"
     args:
       path: { type: string, field: true, default: "hook", help: "網址的最後一段，例如 github。完整網址在啟用之後從積木上複製" }
+      # §9.3 的簽章驗證（§16 Q22 決議 (a)）。**這三格都不是秘密**——密鑰進
+      # keyring，key 是專案 + blockId，因為 D28 說 Key 不能存進專案檔。
+      #
+      # 預設 `none`：多數 webhook 來源不簽章，而一個預設就要求密鑰的欄位會讓
+      # 最常見的那條路先失敗一次。
+      verify:
+        type: dropdown
+        field: true
+        default: none
+        label: 驗證簽章
+        options:
+          - { value: none, label: "不驗" }
+          - { value: hmac_sha256, label: "HMAC-SHA256" }
+          - { value: hmac_sha1, label: "HMAC-SHA1" }
+      signature_header:
+        type: string
+        field: true
+        default: ""
+        label: 簽章 header
+        help: "GitHub 是 X-Hub-Signature-256。不驗的話留空"
     yields:
       - { name: body, type: object }
       - { name: headers, type: object }

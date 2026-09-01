@@ -463,3 +463,42 @@ def test_runs_are_listed_newest_first(client: TestClient) -> None:
     second = client.post("/api/runs", json={"projectId": pid}).json()["runId"]
 
     assert [r["runId"] for r in client.get("/api/runs").json()] == [second, first]
+
+
+# --------------------------------------------------------------------------
+# §5.6：handler 自己爆掉時，事件流不能說謊
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_crashing_handler_reports_the_thread_as_error() -> None:
+    """handler 丟出非 `BlockyError` 的例外時（那是 runtime 的 bug，不是積木層級
+    的錯誤），`finally` 仍然會發 `thread.end`。
+
+    **它不能說 `ok`。** 說了的話，畫面上那條腳本會顯示成順利跑完，而它其實中途
+    就死了——這是這個專案最不想要的一種 bug：兩邊都對，中間那句話沒有人負責。
+
+    `control.throw` 的第一版正是這樣被抓到的：它拿了一個不存在的
+    `Block.id`，於是 `AttributeError` 一路穿出去，而事件流說那條 thread 沒事。
+    """
+    from blocky.interpreter.engine import Interpreter
+    from blocky.interpreter.events import EventSink
+    from blocky.interpreter.registry import COMMANDS
+    from blocky.ir.schema import load
+    from blocky.testing import blk, build
+
+    async def boom(t: object, b: object) -> None:
+        raise AttributeError("runtime 的 bug")
+
+    COMMANDS["debug.boom"] = boom
+    try:
+        project = build(scripts=[[blk("event.when_flag_clicked"), blk("debug.boom")]])
+        sink = EventSink()
+        interp = Interpreter(load(project), sink=sink)
+        result = await interp.run(run_id="r1", trigger="event.when_flag_clicked")
+    finally:
+        COMMANDS.pop("debug.boom", None)
+
+    assert result.status == "error"
+    ends = [e for e in sink.dicts() if e["op"] == "thread.end"]
+    assert [e["status"] for e in ends] == ["error"]

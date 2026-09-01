@@ -1,0 +1,9 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "丟之前", "blockId": "blk_2"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_3", "error": {"type": "ThrownError", "code": "thrown", "message": "停", "blockId": "blk_3"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

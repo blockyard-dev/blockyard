@@ -1,7 +1,7 @@
 # PROGRESS
 
 > 這份文件只做一件事：**交接**。它記「現在在哪裡、什麼還沒解決、下一步做什麼」。
-> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.27），實作經過在 `git log`。
+> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.28），實作經過在 `git log`。
 > 兩邊已經有的東西，這裡不重複。
 
 最後更新：2026-09-01
@@ -122,14 +122,28 @@ APScheduler、`timezone` 必填、`concurrency: drop`。
 `app.routes` 是有順序的 list，所以改成一條 catch-all + 一張查表，使用者看到的
 網址一模一樣。§9.1 那張表因此四列全滿，Trigger Manager 完成。
 
-**HMAC 沒做，因為 §9.3 與 D28 衝突**：前者說 secret 放「hat 積木參數」（＝IR），
-後者說「Key 不能存進專案檔——分享專案會變成分享明文金鑰」。開成 §16 Q22，傾向
-是進 keyring（key 是專案+blockId），但**先確認有人真的需要**——GitHub 與 Stripe
-的簽章演算法各不相同，一個「通用 HMAC 欄位」很可能誰都用不上。
+**HMAC 做了，Q22 決議走 (a)**（design v0.28）：密鑰進 keyring（key 是
+`webhook:{專案}` + blockId），積木上只留「要不要驗／哪個 header／哪個雜湊」三格
+不是秘密的東西。**沒設密鑰時一律擋，不是退回不驗**——分享來的專案密鑰不會跟著
+走，放行等於讓它安靜地變成不驗，而積木上還寫著「驗證簽章：HMAC-SHA256」。
+界線寫進 §9.3：只對得上 GitHub 那一類（簽 body），Stripe 那種簽 `時間戳.內容`
+的要積木包自己驗。
 
-**下一步是 P2 剩下的三塊**：執行歷史與日誌檢視（前端；後端的
-`GET /api/runs/{id}/events` 第 1 步就備好了）、`try_catch`、以及 Q19 的可重複
-參數群組（它與 `try_catch` 的多個 catch 是同一個機制，一起做）。
+**`丟出錯誤` 積木也加了**。`try_catch` 其實 P0a 就實作了（P2 的範圍表寫得過期），
+缺的一直是它。順手抓到引擎的一個 bug：handler 丟出非 `BlockyError` 的例外時，
+`finally` 照發 `thread.end` 而 status 還是 `ok`——畫面上那條腳本會顯示成順利跑
+完，其實中途就死了。
+
+**下一步是 P2 剩下的兩塊**（`try_catch` 那一項可以從清單上劃掉了）：
+
+1. **執行歷史與日誌檢視**（前端）。後端的 `GET /api/runs/{id}/events` 第 1 步就
+   備好了，`?projectId=` 過濾也有。
+2. **Q19 的可重複參數群組**，與 `try_catch` 的多個 catch、HTTP 的多個 header 是
+   同一個機制。
+
+**webhook 的前端還沒有**：`GET /api/triggers/{id}` 已經回得出 `webhooks`
+（含 `url`、`verify`、`secretSet`），但畫面上還沒有「複製網址」與「設定簽章密鑰」
+那兩顆按鈕。密鑰的端點是 `PUT/DELETE /api/triggers/{專案}/secret/{blockId}`。
 
 **cron 留下三個已知缺口**：
 

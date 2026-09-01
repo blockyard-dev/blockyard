@@ -64,11 +64,17 @@ async def receive(token: str, path: str, request: Request) -> dict[str, Any]:
         "method": request.method,
     }
 
-    if not await manager.deliver(token, path, payload):
+    outcome = await manager.deliver(token, path, payload, body=raw)
+    if outcome == "unknown":
         # **不分「token 錯」與「路徑錯」。** 兩種分開回答等於告訴掃描的人
         # 「token 對了，繼續猜路徑」——而 §9.3 的整個模型建立在那串東西猜不到
         # 上面。也不說「這個專案沒有在跑」，同一個理由。
         raise HTTPException(status_code=404, detail={"message": "找不到這個 webhook"})
+    if outcome == "bad_signature":
+        # 這裡反而要說清楚：對方已經知道網址了，而「你少了什麼」正是設定
+        # webhook 的人需要看到的。**但不說是「沒設密鑰」還是「簽錯了」**——
+        # 那是這一端的內部狀態。
+        raise HTTPException(status_code=401, detail={"message": "簽章驗證不通過"})
 
     return {"status": "accepted"}
 

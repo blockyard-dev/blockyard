@@ -72,6 +72,18 @@ class BlockyError(Exception):
         return f"{self.message}（{self.hint}）" if self.hint else self.message
 
 
+class ThrownError(BlockyError):
+    """使用者自己丟的（`control.throw`）。
+
+    **有自己的 `code` 是刻意的。** `try_catch` 綁進 catch 的是
+    `BlockyError.to_dict()`，所以畫布上讀得到 `${錯誤.code}`——使用者因此分得出
+    「這是我自己丟的」與「網路死了」，而那兩件事在 catch 裡多半要做不同的處理。
+    沒有這個 code 的話，唯一的線索是訊息字串，而那是要拿去比對中文句子的。
+    """
+
+    code = "thrown"
+
+
 class TypeCoercionError(BlockyError):
     """§4.3 型別轉換失敗。"""
 

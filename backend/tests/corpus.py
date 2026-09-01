@@ -670,6 +670,50 @@ case(
 )
 
 case(
+    "control/throw_is_caught_by_try",
+    "丟出錯誤 被 try_catch 接住，code 是 thrown",
+    "§5.6 錯誤處理",
+    one(
+        blk("control.try_catch", fields={"error_name": "error"},
+            **{"try": Stack([blk("control.throw", message="這份資料不對")]),
+               "catch": Stack([log(Tpl("${error.code}：${error.message}"))])}),
+        log("繼續執行"),
+    ),
+    {"status": "ok", "logs": ["thrown：這份資料不對", "繼續執行"]},
+    tags=["try_catch", "throw"],
+)
+
+case(
+    "control/throw_uncaught_ends_the_thread",
+    "沒有 try 接住的 丟出錯誤 中止這條 thread",
+    "§5.6 錯誤處理",
+    one(
+        log("丟之前"),
+        blk("control.throw", message="停"),
+    ),
+    {"status": "error", "logs": ["丟之前"]},
+    tags=["throw", "errors"],
+)
+
+case(
+    "control/throw_skips_the_rest_of_the_try",
+    "丟出錯誤 之後 try 裡剩下的積木不執行",
+    "§5.6 錯誤處理",
+    one(
+        blk("control.try_catch", fields={"error_name": "error"},
+            **{"try": Stack([
+                   log("丟之前"),
+                   blk("control.if", condition=blk("operator.true"),
+                       then=Stack([blk("control.throw", message="停")])),
+                   log("丟之後"),
+               ]),
+               "catch": Stack([log("接到了")])}),
+    ),
+    {"status": "ok", "logs": ["丟之前", "接到了"]},
+    tags=["try_catch", "throw"],
+)
+
+case(
     "control/stop_this_script_not_caught_by_try",
     "control.stop 必須穿透 try_catch",
     "§5.6 錯誤處理",

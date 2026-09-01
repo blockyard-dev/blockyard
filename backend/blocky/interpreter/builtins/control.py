@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 
-from blocky.errors import BlockyError, StopSignal
+from blocky.errors import BlockyError, StopSignal, ThrownError
 from blocky.interpreter.registry import command
 from blocky.ir.schema import Block
 from blocky.ir.values import TYPE_LABELS_ZH, TYPE_LIST, to_number, type_of
@@ -83,6 +83,21 @@ async def _wait_until(t: Thread, b: Block) -> None:
 async def _stop(t: Thread, b: Block) -> None:
     # scope: this_script | all
     raise StopSignal(t.field(b, "scope", "this_script"))
+
+
+@command("control.throw")
+async def _throw(t: Thread, b: Block) -> None:
+    """使用者自己丟一個錯誤（§5.6）。
+
+    丟的是 `ThrownError`，所以它**走與其他錯誤完全一樣的路**：`try_catch` 接得
+    到、接不到就發 `block.error` 並中止這條 thread。這裡刻意不做任何特別處理
+    ——一個「使用者丟的錯誤」如果需要引擎為它開一條分支，那它就不是錯誤了。
+
+    `blockId` 不在這裡填：`_exec_block` 對 `block_id is None` 的 `BlockyError`
+    會補上正在執行的那一顆（引擎才知道自己在哪）。所以 catch 裡的
+    `${錯誤.blockId}` 照樣指得回是哪一顆丟的。
+    """
+    raise ThrownError(await t.string(b, "message"))
 
 
 @command("control.try_catch")

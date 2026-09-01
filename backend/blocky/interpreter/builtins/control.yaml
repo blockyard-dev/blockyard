@@ -93,6 +93,17 @@ palette:
           - { value: this_script, label: "這個腳本" }
           - { value: all, label: "全部" }
 
+  # 與 `try_catch` 成對。沒有它，`嘗試 ⋯ 出錯時` 只接得到別人丟的錯誤，而
+  # 「這份資料不對，別再往下做了」是工作流最常見的一種失敗。
+  - opcode: throw
+    type: command
+    # cap block，同 `停止` 與 `回傳`（§4.6）：丟出去之後的積木永遠跑不到，
+    # 而形狀不說這件事的話，使用者接得上去、按存檔才被打回來。
+    terminal: true
+    text: "丟出錯誤 %(message)"
+    args:
+      message: { type: string, default: "出錯了" }
+
   - opcode: try_catch
     type: command
     # §5.6：只捕捉積木層級的錯誤。return / stop / 取消必須穿透。

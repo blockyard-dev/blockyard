@@ -23,6 +23,22 @@ def _username(ext_id: str, key: str) -> str:
     return f"{ext_id}.{key}"
 
 
+#: webhook 簽章密鑰的命名空間（§9.3、§16 Q22）。用一個**不可能是 ext_id 的
+#: 前綴**（積木包 id 不含 `:`），所以它跟積木包的金鑰共用同一個 keyring 服務
+#: 卻永遠撞不到。
+WEBHOOK_NS = "webhook:"
+
+
+def webhook_owner(project_id: str) -> str:
+    """簽章密鑰的「擁有者」。以專案為範圍，key 是 blockId。
+
+    為什麼是 `專案 + blockId` 而不是 `專案` 一把：一份專案可以同時收 GitHub 與
+    某個內部系統的 webhook，而那是兩個不同單位發的密鑰。共用一把等於要求使用者
+    去說服其中一邊改。
+    """
+    return f"{WEBHOOK_NS}{project_id}"
+
+
 def get(ext_id: str, key: str) -> str | None:
     return keyring.get_password(SERVICE, _username(ext_id, key))
 

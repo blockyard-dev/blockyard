@@ -1,0 +1,10 @@
+title: 丟出錯誤 被 try_catch 接住，code 是 thrown
+spec: §5.6 錯誤處理
+tags:
+- try_catch
+- throw
+expect:
+  status: ok
+  logs:
+  - thrown：這份資料不對
+  - 繼續執行
