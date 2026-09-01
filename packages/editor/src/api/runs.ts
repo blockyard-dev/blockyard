@@ -126,6 +126,31 @@ export async function listRuns(options: {
   return (await res.json()) as RunSummary[];
 }
 
+/**
+ * 輪詢到的那批 Run 裡，**哪一個值得把 WebSocket 接過去**（§6.1、§9）。
+ *
+ * hat 觸發的 Run 是後端自己起的，前端沒有那個 runId——不問就不知道它存在。
+ * 但「問到了」不等於「接得上」：
+ *
+ * - **只接還在跑的。** 一次 cron 的 Run 可以只有幾毫秒，而輪詢是 1.5 秒一次，
+ *   所以絕大多數時候問到它時它已經結束了。對結束的 Run 開 WebSocket，後端回
+ *   4404（broker 早就關了），而前端把非正常關閉翻成「執行失敗：事件連線中
+ *   斷」——一個**成功跑完的**排程在畫面上看起來像壞了。
+ * - **同一個 Run 只接一次。** `lastSeen` 擋掉重複。
+ *
+ * 跑完的那些要看做了什麼，是「執行紀錄」的事（§6.3 的落地就是為此）。
+ */
+export function runToAttach(
+  runs: RunSummary[],
+  hats: string[],
+  lastSeen: string | null,
+): { attach: RunSummary | null; seen: string | null } {
+  const found = runs.find((r) => hats.includes(r.trigger));
+  if (!found || found.runId === lastSeen) return { attach: null, seen: lastSeen };
+  // 即使不接也要記下來——不然每 1.5 秒都會重新判斷同一個 Run 一次。
+  return { attach: found.endedAt == null ? found : null, seen: found.runId };
+}
+
 /** 一筆執行歷史的事件（§6.3）。`seq` 只保證遞增，**不保證連續**。 */
 export interface StoredEvent {
   seq: number;

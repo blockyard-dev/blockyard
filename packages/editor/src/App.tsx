@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Ear, History, Link2, Pause, Play, Square } from 'lucide-react';
 import * as Blockly from 'blockly/core';
 import { ApiError, fetchExtensions, fetchProject, saveProject } from './api/client';
-import { RunSocket, listRuns, startRun, stopRun } from './api/runs';
+import { RunSocket, listRuns, runToAttach, startRun, stopRun } from './api/runs';
 import {
   NOT_LISTENING,
   activateProject,
@@ -541,15 +541,14 @@ export function App() {
 
     const tick = async () => {
       try {
-        const runs = await listRuns();
-        // `listRuns` 新的在前。只接自己這個專案、由這次接上的那些 hat 觸發的。
-        const found = runs.find(
-          (r) => r.projectId === PROJECT_ID && listening.hats.includes(r.trigger),
-        );
-        if (!cancelled && found && found.runId !== latest) {
-          latest = found.runId;
-          attach(found);
-        }
+        // `listRuns` 新的在前。哪一個值得接的規則在 `runToAttach`（見那裡的
+        // 註解：只接還在跑的，因為跑完的接不到，而接不到會被翻成一句
+        // 「執行失敗」貼在一個其實成功了的排程上）。
+        const runs = await listRuns({ projectId: PROJECT_ID });
+        if (cancelled) return;
+        const next = runToAttach(runs, listening.hats, latest);
+        latest = next.seen;
+        if (next.attach) attach(next.attach);
       } catch {
         // 後端暫時答不出來不該讓監聽看起來像壞了：下一輪再問。
       }
