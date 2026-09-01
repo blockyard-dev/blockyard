@@ -15,7 +15,7 @@ import asyncio
 import contextlib
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Request, Response, WebSocket
+from fastapi import APIRouter, Body, HTTPException, Query, Request, Response, WebSocket
 from fastapi.websockets import WebSocketDisconnect
 from pydantic import BaseModel, Field
 
@@ -67,16 +67,49 @@ async def start_run(request: Request, body: RunRequest = Body(...)) -> dict[str,
 
 
 @router.get("")
-async def list_runs(request: Request) -> list[dict[str, Any]]:
-    return [h.summary() for h in _runs(request).list()]
+async def list_runs(
+    request: Request,
+    projectId: str | None = None,  # noqa: N803  — 附錄 A 的查詢參數是 camelCase
+    limit: int = Query(100, ge=1, le=1000),
+) -> list[dict[str, Any]]:
+    """執行歷史（§6.3 落地之後**跨後端重啟存活**）。新的在前。"""
+    return _runs(request).list(project_id=projectId, limit=limit)
 
 
 @router.get("/{run_id}")
 async def get_run(run_id: str, request: Request) -> dict[str, Any]:
-    handle = _runs(request).get(run_id)
-    if handle is None:
+    summary = _runs(request).summary(run_id)
+    if summary is None:
         raise HTTPException(status_code=404, detail={"message": f"找不到執行 {run_id}"})
-    return handle.summary()
+    return summary
+
+
+@router.get("/{run_id}/events")
+async def get_run_events(
+    run_id: str,
+    request: Request,
+    after: int = Query(0, ge=0),
+    limit: int = Query(5000, ge=1, le=20000),
+) -> dict[str, Any]:
+    """§6.3 的執行歷史（重播用）。
+
+    `after` 是**上一頁最後一筆的 seq**，不是 offset：分頁期間 Run 還在跑、
+    還在寫，offset 會漏掉或重複，seq 不會。
+
+    這裡回的是**落地過**的那些（§6.3 的白名單），不是 WebSocket 上那一串。
+    `block.enter/exit` 查不到是規格，不是缺陷——它們是除錯用的即時訊號。
+    """
+    manager = _runs(request)
+    if manager.summary(run_id) is None:
+        raise HTTPException(status_code=404, detail={"message": f"找不到執行 {run_id}"})
+    events = manager.events(run_id, after=after, limit=limit)
+    return {
+        "runId": run_id,
+        "events": events,
+        # 下一頁從哪裡開始。空的代表沒有更多了——由後端算而不是讓前端自己從
+        # 最後一筆挖 seq，因為「還有沒有下一頁」只有這裡知道。
+        "nextAfter": events[-1]["seq"] if len(events) == limit else None,
+    }
 
 
 @router.delete("/{run_id}", status_code=202)
@@ -88,11 +121,13 @@ async def stop_run(run_id: str, request: Request, response: Response) -> dict[st
     要等它自己跑完（§5.3）。回 204 等於承諾「已經停了」，那是騙人的。
     """
     manager = _runs(request)
-    handle = manager.get(run_id)
-    if handle is None:
+    summary = manager.summary(run_id)
+    if summary is None:
         raise HTTPException(status_code=404, detail={"message": f"找不到執行 {run_id}"})
+    # 已經跑完的照樣回 202 而不是 4xx：使用者按下停止與 Run 自己結束是一場
+    # 競賽，而「你按晚了」不是一個錯誤。`stop()` 對死掉的 Run 是 no-op。
     manager.stop(run_id)
-    return handle.summary()
+    return summary
 
 
 @ws_router.websocket("/ws/run/{run_id}")

@@ -73,6 +73,10 @@ async def put_project(
 async def delete_project(project_id: str, request: Request) -> Response:
     if not _store(request).delete(project_id):
         raise not_found(project_id)
+    # 執行歷史與持久值一起清（§6.3、§5.4 第 4 層）。留著的話，那些紀錄指向
+    # 一份不存在的專案——點進去看不到任何積木，而 `persist_values` 會在下一個
+    # 剛好同名的專案身上復活。
+    request.app.state.runs_store.delete_project_history(project_id)
     return Response(status_code=204)
 
 

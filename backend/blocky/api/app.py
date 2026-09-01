@@ -25,7 +25,8 @@ from blocky.api import runs as runs_routes
 from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
 from blocky.runs import RunManager
 from blocky.runs.listeners import ListenerManager
-from blocky.storage import ProjectStore, default_db_path
+from blocky.runs.recorder import RunRecorder
+from blocky.storage import ProjectStore, RunStore, default_db_path
 
 # P0b 的前端跑在 Vite 的 dev server 上（另一個 port），所以本機開發一定跨源。
 # 打包後前端由同一個 process 提供，這串就用不到了——但留著不礙事，因為
@@ -42,12 +43,17 @@ def create_app(
     *,
     db_path: Path | str | None = None,
     store: ProjectStore | None = None,
+    runs_store: RunStore | None = None,
     extensions_root: Path | str | None = None,
     static_root: Path | str | None = None,
     broker_options: dict[str, Any] | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # 上次沒收尾的 Run（後端被 kill -9）在這裡標成 interrupted。不做的話
+        # 執行歷史上會有一排永遠停在「執行中」的紀錄，而那比沒有紀錄更難讀。
+        app.state.runs_store.reconcile_interrupted()
+        app.state.recorder.start()
         yield
         # 監聽先收：它手上是長連線（discord 的 gateway），而且它會**起新的
         # Run**——反過來的話，收完 Run 之後還可能有一則訊息進來又起一個。
@@ -65,9 +71,14 @@ def create_app(
 
     app.state.store = store or ProjectStore(db_path or default_db_path())
     app.state.extensions_root = Path(extensions_root or DEFAULT_EXTENSIONS_ROOT)
+    # 與專案同一個 SQLite 檔案：執行歷史指向專案，刪一個就該連著刪。
+    app.state.runs_store = runs_store or RunStore(db_path or default_db_path())
+    app.state.recorder = RunRecorder(app.state.runs_store)
     app.state.runs = RunManager(
         store=app.state.store,
         extensions_root=app.state.extensions_root,
+        runs_store=app.state.runs_store,
+        recorder=app.state.recorder,
         broker_options=broker_options or {},
     )
     app.state.listeners = ListenerManager(

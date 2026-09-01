@@ -22,10 +22,12 @@ from typing import TYPE_CHECKING, Any
 from blocky.api.validation import open_project
 from blocky.errors import ValidationError
 from blocky.interpreter.engine import DEFAULT_TRIGGER, Entry, Interpreter
-from blocky.interpreter.events import EventSink
+from blocky.interpreter.events import Event, EventSink
 from blocky.interpreter.scope import InMemoryPersistStore
 from blocky.runs.broker import RunBroker
+from blocky.runs.recorder import RunRecorder
 from blocky.storage import ProjectStore
+from blocky.storage.runs import RUN_LIMIT_PER_PROJECT, RunStore, SqlitePersistStore
 
 if TYPE_CHECKING:
     from blocky.extensions.registry import ExtensionRegistry
@@ -34,9 +36,18 @@ if TYPE_CHECKING:
 # `trigger` 欄位而不是留空，執行歷史那一欄才不會有一半是空白。
 MANUAL_TRIGGER = "manual"
 
-# 記憶體裡留幾個跑完的 Run。§6.3 的 SQLite 落地還沒做，所以這是整個執行歷史
-# ——上限存在是為了讓一個開著三天的編輯器不會慢慢吃光記憶體。
-HISTORY_LIMIT = 50
+# 跑完的 Run 在記憶體裡多留一會兒。**這不是執行歷史**——歷史在 SQLite（§6.3
+# 的落地），而且不再有筆數上限這種東西（那個上限現在叫 `RUN_LIMIT_PER_PROJECT`，
+# 管的是硬碟）。
+#
+# 留著的理由只有一個：`POST /api/runs` 回來到前端把 WebSocket 接上，中間有幾
+# 毫秒空窗，而那段時間的事件由 `RunBroker` 的 backlog 接住。一個跑得夠快的
+# Run 會在客戶端連上來之前就結束——把 handle 立刻丟掉，那些事件就跟著沒了，
+# 使用者看到的是一個空的執行結果。
+#
+# 數字小是刻意的：它衡量的是「使用者的瀏覽器慢多久」，不是「使用者想回頭看
+# 多少次執行」。後者由 SQLite 回答。
+HANDOFF_LIMIT = 50
 
 
 class ProjectNotFound(LookupError):
@@ -89,31 +100,74 @@ class RunManager:
         *,
         store: ProjectStore,
         extensions_root: Path,
-        history_limit: int = HISTORY_LIMIT,
+        runs_store: RunStore | None = None,
+        recorder: RunRecorder | None = None,
+        run_limit: int = RUN_LIMIT_PER_PROJECT,
+        handoff_limit: int = HANDOFF_LIMIT,
         broker_options: dict[str, Any] | None = None,
     ) -> None:
         self._store = store
         self._extensions_root = extensions_root
-        self._history_limit = history_limit
+        self._runs_store = runs_store
+        self._recorder = recorder
+        self._run_limit = run_limit
+        self._handoff_limit = handoff_limit
         self._broker_options = broker_options or {}
         self._runs: dict[str, RunHandle] = {}
+        # 沒有 `runs_store` 時的退路：`r_1`、`r_2`…，同落地之前的行為。給的是
+        # 不需要歷史的呼叫端（題庫、單元測試）——有了 store 之後序號改從資料庫
+        # 拿，因為 process 的計數器每次重啟都從 1 開始，會直接撞上昨天那一筆。
         self._seq = 0
-        # §5.4 第 4 層：持久值以專案為範圍，**跨 Run 存活**（D12 的第 4 層）。
-        # 這裡是 process 記憶體而不是 SQLite——「跨後端重啟」還沒實作（§6.3
-        # 的落地一起做）。刻意用同一個物件而不是每個 Run 一份新的，是因為
-        # 「跨 Run」才是 persist_* 存在的全部理由；每次重來的話 §5.4 那張表的
-        # 第 3 層與第 4 層就沒有差別了。
-        self._persist: dict[str, InMemoryPersistStore] = {}
+        # §5.4 第 4 層：持久值以專案為範圍，**跨 Run、跨後端重啟存活**（D12）。
+        # 沒有 `runs_store` 時退回記憶體——那時「跨後端重啟」本來就無從談起。
+        # 刻意快取同一個物件而不是每個 Run 一份新的，是因為「跨 Run」才是
+        # persist_* 存在的全部理由。
+        self._persist: dict[str, InMemoryPersistStore | SqlitePersistStore] = {}
 
     # ---- 查 ----
 
     def get(self, run_id: str) -> RunHandle | None:
+        """記憶體裡那份：還在跑的，加上剛跑完、還在交接窗口裡的。
+
+        停止與 WebSocket 要的是 broker 與 interp，而它們沒有一個存得進 SQLite。
+        更早以前的 Run 在這裡查不到是對的——那時候要的是 `summary()`／
+        `events()`，不是一個已經關掉的 broker。
+        """
         return self._runs.get(run_id)
 
-    def list(self) -> list[RunHandle]:
-        """新的在前。用插入順序而不是 `startedAt`——同一毫秒內連按兩次執行
-        是完全正常的操作，排序鍵撞在一起時順序就不再穩定。"""
-        return list(reversed(self._runs.values()))
+    def summary(self, run_id: str) -> dict[str, Any] | None:
+        """給 HTTP 用的那一份。活的、跑完的、上次開機跑的，都走這裡。
+
+        以 SQLite 為準而不是先問記憶體：`start()` 與收尾都是**同步**寫進那一
+        列的，所以它永遠是最新的；兩邊都問則要多一條「哪一邊贏」的規則，而
+        那條規則遲早會答錯一次。
+        """
+        if self._runs_store is not None:
+            stored = self._runs_store.get(run_id)
+            return stored.summary() if stored is not None else None
+        handle = self._runs.get(run_id)
+        return handle.summary() if handle is not None else None
+
+    def list(self, *, project_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        """新的在前。落地之後這是**執行歷史**，不再只是這個 process 記得的
+        那幾筆——P2 的驗收句（關掉瀏覽器，隔天回來查）踩的就是這裡。"""
+        if self._runs_store is not None:
+            return [r.summary() for r in self._runs_store.list(project_id=project_id, limit=limit)]
+        # 退路：用插入順序而不是 `startedAt`——同一毫秒內連按兩次執行是完全
+        # 正常的操作，排序鍵撞在一起時順序就不再穩定。
+        runs = [h for h in reversed(self._runs.values()) if project_id in (None, h.project_id)]
+        return [h.summary() for h in runs[:limit]]
+
+    def events(self, run_id: str, *, after: int = 0, limit: int = 5000) -> list[dict[str, Any]]:
+        """§6.3 的執行歷史。沒有落地就沒有歷史——回空的，不是報錯：那個端點
+        存在與否不該取決於呼叫端有沒有給 store。"""
+        if self._runs_store is None:
+            return []
+        # 還在跑的 Run 有一批事件卡在 writer 的緩衝區裡。使用者在執行中按下
+        # 「歷史」看到的必須是**現在**，不是 250 毫秒前。
+        if self._recorder is not None:
+            self._recorder.flush()
+        return self._runs_store.events(run_id, after=after, limit=limit)
 
     # ---- 開始 ----
 
@@ -140,13 +194,28 @@ class RunManager:
         if stored is None:
             raise ProjectNotFound(project_id)
 
-        self._seq += 1
-        run_id = f"r_{self._seq}"
+        if self._runs_store is not None:
+            seq = self._runs_store.next_seq()
+        else:
+            self._seq += 1
+            seq = self._seq
+        run_id = f"r_{seq}"
 
         broker = RunBroker(run_id, **self._broker_options)
+        recorder = self._recorder
+
+        def emit(e: Event) -> None:
+            # 兩個消費者，兩套規則：§6.2 決定送多少給前端，§6.3 決定存多少到
+            # 硬碟。同一份事件在這裡分岔，而**分岔點只有這一個**——兩邊各自
+            # 訂閱一次的話，「這件事有沒有發生過」就有兩個答案。
+            d = e.to_dict()
+            broker.publish(d)
+            if recorder is not None:
+                recorder.record(run_id, d)
+
         # retain=False：事件送出去就丟。留著的話一個掛著跑的 `forever` 迴圈
         # 會把幾億筆事件堆在記憶體裡，而它們早就從 WebSocket 出去了。
-        sink = EventSink(on_emit=lambda e: broker.publish(e.to_dict()), retain=False)
+        sink = EventSink(on_emit=emit, retain=False)
 
         project, registry = await open_project(
             stored.data, extensions_root=self._extensions_root, sink=sink
@@ -155,7 +224,7 @@ class RunManager:
         interp = Interpreter(
             project,
             sink=sink,
-            persist=self._persist.setdefault(project_id, InMemoryPersistStore()),
+            persist=self._persist_for(project_id),
             extensions=registry,
         )
         entry: Entry | None = None
@@ -181,11 +250,35 @@ class RunManager:
             entry=entry,
         )
 
+        started_at = handle.started_at
+        if self._runs_store is not None:
+            # **同步寫，不進 writer 的緩衝區。** `POST /api/runs` 回來之後前端
+            # 立刻會 `GET /api/runs`；排進批次的話那次 GET 有機會看不到剛剛
+            # 才建立的 Run。一個 Run 只有兩次這種寫入，成本可以忽略。
+            self._runs_store.start(
+                run_id,
+                seq=seq,
+                project_id=project_id,
+                trigger=handle.trigger,
+                started_at=started_at,
+                block_id=block_id,
+            )
+
         broker.start()
         handle.task = asyncio.create_task(self._drive(handle))
         self._runs[run_id] = handle
-        self._prune()
         return handle
+
+    def _persist_for(self, project_id: str) -> InMemoryPersistStore | SqlitePersistStore:
+        if (existing := self._persist.get(project_id)) is not None:
+            return existing
+        store: InMemoryPersistStore | SqlitePersistStore
+        if self._runs_store is not None:
+            store = SqlitePersistStore(self._runs_store, project_id)
+        else:
+            store = InMemoryPersistStore()
+        self._persist[project_id] = store
+        return store
 
     # ---- 停 ----
 
@@ -203,6 +296,10 @@ class RunManager:
                 handle.task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await handle.task
+        # 最後才收 writer：上面那些 task 被 cancel 之後還會走一次 `_settle`，
+        # 而它要 writer 還活著。
+        if self._recorder is not None:
+            await self._recorder.close()
 
     # ---- 內部 ----
 
@@ -241,22 +338,52 @@ class RunManager:
             # 先關 broker：最後那個 run.end 還在 50ms 的窗口裡等著，卸載積木包
             # 若卡住，使用者會看到一個永遠沒有結尾的 Run。
             handle.broker.close()
+            self._settle(handle)
             if handle.registry is not None:
                 with contextlib.suppress(Exception):
                     await handle.registry.unload_all()
                 handle.registry = None
+            # 不立刻丟：WebSocket 可能還沒接上來（見 HANDOFF_LIMIT）。
+            self._prune_handoff()
 
-    def _prune(self) -> None:
+    def _prune_handoff(self) -> None:
+        """記憶體只留還在跑的 + 最近 N 個跑完的。與 §6.3 的剪枝是兩件事：
+        那個管硬碟上的執行歷史，這個管 WebSocket 的交接窗口。"""
         finished = [h for h in self._runs.values() if not h.running]
-        excess = len(finished) - self._history_limit
-        if excess <= 0:
-            return
+        excess = len(finished) - self._handoff_limit
         for handle in finished[:excess]:  # 插入順序 = 由舊到新
             self._runs.pop(handle.id, None)
 
+    def _settle(self, handle: RunHandle) -> None:
+        """把 Run 的結尾寫進 SQLite。
+
+        順序是**先 flush 再 finish**：緩衝區裡最後那幾筆正是 `thread.end` 與
+        `run.end`，而收尾之後才寫的話，一個「已完成」的 Run 會有幾百毫秒是
+        少了結尾事件的——那正是使用者點進去要看的東西。
+        """
+        if self._runs_store is None:
+            return
+        if self._recorder is not None:
+            with contextlib.suppress(Exception):
+                self._recorder.flush()
+            self._recorder.forget(handle.id)
+        with contextlib.suppress(Exception):
+            self._runs_store.finish(
+                handle.id,
+                status=handle.status,
+                ended_at=handle.ended_at or _now(),
+            )
+            self._runs_store.prune(handle.project_id, keep=self._run_limit)
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-__all__ = ["DEFAULT_TRIGGER", "MANUAL_TRIGGER", "ProjectNotFound", "RunHandle", "RunManager"]
+__all__ = [
+    "DEFAULT_TRIGGER",
+    "HANDOFF_LIMIT",
+    "MANUAL_TRIGGER",
+    "ProjectNotFound",
+    "RunHandle",
+    "RunManager",
+]

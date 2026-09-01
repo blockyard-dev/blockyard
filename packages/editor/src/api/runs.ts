@@ -8,16 +8,31 @@
  */
 import { toApiError } from './client';
 
+/**
+ * 一次執行**跑完時**的結局。`run.end` 事件帶的就是這個。
+ *
+ * 與 `RunSummary['status']` 分開是刻意的：`interrupted` 只會出現在執行歷史裡
+ * （後端被砍掉時還在跑的那些，啟動時補標），**永遠不會**沿著 WebSocket 送出來
+ * ——沒有人在那一刻還活著可以送它。合成一個型別的話，`run.end` 的 handler 就得
+ * 處理一個它永遠收不到的狀態。
+ */
+export type RunEndStatus = 'running' | 'ok' | 'error' | 'cancelled';
+
+/** 執行歷史裡才有的狀態（§6.3 的落地）。 */
+export type StoredRunStatus = RunEndStatus | 'interrupted';
+
 export interface RunSummary {
   runId: string;
   projectId: string;
   /** 綠旗是 `event.when_flag_clicked`；「點一下就跑」是 `manual`。 */
   trigger: string;
-  status: 'running' | 'ok' | 'error' | 'cancelled';
+  status: StoredRunStatus;
   startedAt: string;
   endedAt?: string;
   /** §5.1「點一下就跑」點的那顆積木。 */
   blockId?: string;
+  /** §6.3：這個 Run 的 `log` 超過上限，最舊的那些被丟掉了。 */
+  logsTruncated?: boolean;
 }
 
 /** §5.6 的錯誤形狀（`backend/blocky/errors.py` 的 `BlockyError.to_dict`）。 */
@@ -50,7 +65,7 @@ export interface BlockError {
 
 export type RunEvent =
   | { op: 'run.start'; runId: string; ts?: number }
-  | { op: 'run.end'; runId: string; status: RunSummary['status']; ts?: number }
+  | { op: 'run.end'; runId: string; status: RunEndStatus; ts?: number }
   | { op: 'thread.start'; threadId: string; scriptId: string }
   | { op: 'thread.end'; threadId: string; status: string }
   | { op: 'block.enter'; threadId: string; blockId: string }

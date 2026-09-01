@@ -1,7 +1,7 @@
 # PROGRESS
 
 > 這份文件只做一件事：**交接**。它記「現在在哪裡、什麼還沒解決、下一步做什麼」。
-> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.23），實作經過在 `git log`。
+> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.24），實作經過在 `git log`。
 > 兩邊已經有的東西，這裡不重複。
 
 最後更新：2026-09-01
@@ -98,11 +98,18 @@ aiohttp 互不相見）在同一條堆疊上傳值——D13 那句「衝突不�
 ## 2. 下一步
 
 **P2 — 自動化**（design.md §15）。範圍：Trigger Manager（cron / webhook / stream，
-含 §4.9 的 timezone）；專案 active 狀態與後端重啟恢復；§6.3 的事件落地策略；
-執行歷史與日誌檢視；`try_catch`；錯誤重試策略；**manifest 的可重複參數群組
-（§16 Q19）**。
+含 §4.9 的 timezone）；專案 active 狀態與後端重啟恢復；~~§6.3 的事件落地策略~~
+（**第 1 步，完成**）；執行歷史與日誌檢視；`try_catch`；錯誤重試策略；**manifest
+的可重複參數群組（§16 Q19）**。
 
-**P2 有三塊這一輪已經先鋪好一半，接的時候要接在它上面而不是重寫**：
+**第 1 步（§6.3 落地）完成**——`storage/runs.py`（三張表）、`runs/recorder.py`
+（篩選 + 批次 writer）、`GET /api/runs/{id}/events`、`SqlitePersistStore`。
+先做它而不是先做 Trigger Manager，理由是三件事共用同一次 schema 決定：驗收句
+「隔天檢查執行歷史有紀錄」直接依賴它、它在監聽開著時當下就在痛（50 筆很快滿）、
+而 Trigger Manager 的 active 狀態與重啟恢復也要 SQLite。
+
+**下一步是第 2 步：Trigger Manager。** 下面這三塊是 P1 已經鋪好的一半，接的
+時候要接在它上面而不是重寫：
 
 1. **`runs/listeners.py` 就是 Trigger Manager 的形狀**（一個專案 → 一組 hat →
    handle）。P2 要補的是那張表裡打叉的四件事：active 狀態、IR diff 只重啟有變動
@@ -110,9 +117,10 @@ aiohttp 互不相見）在同一條堆疊上傳值——D13 那句「衝突不�
 2. **`start_trigger` 的整條管線已經在生產路徑上跑過真的長連線了**（在這之前它
    只有合約測試用 `demo` 包走過）。trigger 死掉會說話（`trigger_error_text`，
    兩個 host 共用一句）。
-3. **前端的「監聽」是輪詢 `GET /api/runs`**（1.5 秒）。P2 做 §6.3 的落地時要
-   一起決定「有新的 Run 了」該怎麼推——那條通道要回答「屬於哪個專案」「斷線
-   怎麼補」「backlog 留多久」，三題都是 §6.3 的題目。
+3. **前端的「監聽」是輪詢 `GET /api/runs`**（1.5 秒）。落地之後那個端點已經
+   吃得下 `?projectId=`，所以輪詢至少不再拿回全部——但**「有新的 Run 了」該怎麼
+   推還沒決定**：那條通道要回答「屬於哪個專案」「斷線怎麼補」「backlog 留多久」。
+   三題都還在，只是不再卡在「歷史存不存在」上。
 
 **Q19（可重複參數群組）現在可以動了**：它等的就是「先讓 P1 的三個手寫包磨過一
 輪」，而那一輪結束了。`try_catch` 的多個 catch 與 HTTP 的多個 header 是同一個
@@ -225,9 +233,10 @@ aiohttp 互不相見）在同一條堆疊上傳值——D13 那句「衝突不�
   重新倒數（要有 `try_catch` 才做得出來）。
 - **`block.error` 沒有 traceback**，§8.3 的「點擊展開」目前只展得出 hint。
 - **運算積木不發子步驟事件**（§4.7b）；`var.set` 的窗口內收斂（§6.2）比文件寫的多。
-- **§6.3 的 SQLite 落地沒做**：執行歷史只在記憶體、上限 50 個 Run、重啟就沒了；
-  `GET /api/runs/{id}/events` 因此不存在；**`persist_*` 不跨後端重啟**（D12 明講要有）。
-  **這一題現在更咬人**：監聽會持續產生 Run，50 筆很快就滿。
+- ~~**§6.3 的 SQLite 落地沒做**~~ **P2 第 1 步做完了**（design v0.24）：執行歷史與
+  持久值進了 SQLite、跨後端重啟存活，`GET /api/runs/{id}/events` 上線，保留策略是
+  每個專案最近 200 次。**§6.3 的「Trace 模式」（使用者明確開啟後全量落地）沒做**
+  ——它是那條規則的逃生口，但目前沒有人被咬到需要它。
 - **§5.5 的「清理有 5 秒上限」沒實作**，停止時只是 `cancel()`。
 - **遞迴 headroom 是估的**（`PYTHON_FRAMES_PER_BLOCKY_FRAME = 24`），靠 `RecursionError` 兜底。
 - **`blocky serve` 沒有正式打包測試**：只驗過 `python -m blocky.cli`。

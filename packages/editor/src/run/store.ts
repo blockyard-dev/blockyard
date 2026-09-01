@@ -11,7 +11,7 @@
  * 訂閱它的元件只重繪一次。
  */
 import { create } from 'zustand';
-import type { BlockError, BlockErrorAction, RunFrame, RunSummary } from '../api/runs';
+import type { BlockError, BlockErrorAction, RunEndStatus, RunFrame, RunSummary } from '../api/runs';
 
 /** §8.3 的積木狀態。同一顆積木同時只會是其中一種。 */
 export type BlockPhase = 'running' | 'hot' | 'done' | 'error';
@@ -40,7 +40,7 @@ export interface LogLine {
 /** §8.2：log buffer 上限 5000 筆，環形。 */
 const LOG_LIMIT = 5000;
 
-export type RunStatus = 'idle' | 'starting' | 'running' | RunSummary['status'];
+export type RunStatus = 'idle' | 'starting' | 'running' | RunEndStatus;
 
 interface RunState {
   runId: string | null;
@@ -58,7 +58,7 @@ interface RunState {
   attach(run: RunSummary): void;
   fail(message: string): void;
   apply(frame: RunFrame): void;
-  finish(status: RunSummary['status'], message?: string): void;
+  finish(status: RunEndStatus, message?: string): void;
 }
 
 function emptyRun() {
