@@ -19,9 +19,17 @@ palette:
 
   - opcode: when_cron
     type: hat
-    text: "當時間到 %(cron)"
+    text: "當時間到 %(cron) 時區 %(timezone)"
     args:
-      cron: { type: string, default: "0 9 * * *", help: "cron 運算式，例如 0 9 * * *" }
+      cron: { type: string, field: true, default: "0 9 * * *", help: "cron 運算式：分 時 日 月 星期。例如 0 9 * * * 是每天早上九點" }
+      # **必填**（§9.1、§4.9）：沒有它，同一份專案在不同機器上會在不同時刻
+      # 觸發——與 D11 拒絕「可設定的索引基底」是同一個理由。
+      #
+      # **刻意沒有 default。** 給 `UTC` 的話，一個台北的使用者設「早上九點」會
+      # 在下午五點觸發，而積木上只寫著一個他沒讀的字。這是 §4.9 要防的那件事
+      # 的另一面：可攜性守住了，但意思錯了。空的則存不進去（存檔期 422 帶
+      # blockId），使用者一定會看到那句話。
+      timezone: { type: string, field: true, default: "", help: "IANA 時區名稱，例如 Asia/Taipei" }
     yields:
       - { name: scheduled_at, type: object }
     concurrency: drop

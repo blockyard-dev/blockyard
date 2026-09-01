@@ -2,14 +2,28 @@
 
 | 項目 | 內容 |
 |---|---|
-| 版本 | Draft v0.25 |
+| 版本 | Draft v0.26 |
 | 日期 | 2026-09-01 |
-| 狀態 | 已審閱，**P0 與 P1 全部完成**。**P2 第 1 步（§6.3 落地）完成**；**第 2 步（Trigger Manager）的骨架完成**——active 狀態寫在 SQLite、重啟自動恢復、hat 集合會 diff。接下來是內建的 cron 與 webhook trigger |
+| 狀態 | 已審閱，**P0 與 P1 全部完成**。**P2 第 1 步（§6.3 落地）完成**；**第 2 步（Trigger Manager）的 cron 做完**——active 狀態寫在 SQLite、重啟自動恢復、hat 集合會 diff、`when_cron` 真的會排程。接下來是 webhook |
 | 代號 | `blocky`（暫定，套件名 `blocky-runtime`） |
 
 ---
 
 ## 0.0 變更摘要
+
+### v0.26
+
+**P2 第 2b 步：cron。** §9.1 那張表的第二列。P2 的驗收句就是這顆積木——
+「設定每天 09:00 的流程，關掉瀏覽器，隔天檢查執行歷史有紀錄」。
+
+| 類別 | 變更 | 章節 |
+|---|---|---|
+| **新增** | `event.when_cron` 多一個 `timezone` 參數，**刻意沒有 default**。給 `UTC` 的話台北的使用者設「早上九點」會在下午五點觸發——可攜性守住了，但意思錯了 | §9.1、§4.9 |
+| **新增** | 解析與排程是**同一份實作**（`blocky/cron.py`），存檔驗證與真的排程都呼叫它。「存檔時驗過的一定排得上」因此是結構上的事實，不是承諾 | §9.1 |
+| **新增** | 錯過的班次**不補跑**：後端關了一整夜再開機，使用者要的是「從現在開始準時跑」，不是在開機瞬間送出十二則 Discord 訊息 | §9.2 |
+| **新增** | 排程本身**不落地**——active 存 SQLite，排程從 IR 重建。job id 含 `project_id`，否則複製貼上一份專案之後兩顆同 blockId 的 cron 會互相覆蓋 | §9.2 |
+| **新增** | `concurrency: drop`（§5.1）實作了：上一個還沒跑完就跳過這一次。一個十二點的排程若自己跑兩小時，沒有這條規則會愈疊愈多。**`queue` 與 `restart` 仍未實作**，目前與 `parallel` 同行為 | §5.1 |
+| **相依** | `apscheduler>=3.10,<4`。不自己寫 cron parser 的理由是時區與日光節約時間——那是寫起來很短、但錯起來一年錯兩次而且沒有人發現的東西 | §14 |
 
 ### v0.25
 
@@ -2145,7 +2159,7 @@ object / list **不新增積木形狀**。理由是形狀會說謊：`data.get (
 | Trigger | 積木 | 實作 |
 |---|---|---|
 | 手動 | `event.when_flag_clicked` | 前端 POST `/api/runs` |
-| 排程 | `event.when_cron (expr) (timezone)` | APScheduler，支援 cron 與 interval。**timezone 為必填**（§4.9）——沒有它，同一份專案在不同機器上會在不同時刻觸發 |
+| 排程 | `event.when_cron (expr) (timezone)` | APScheduler ✅。**timezone 為必填**（§4.9）——沒有它，同一份專案在不同機器上會在不同時刻觸發。五欄 crontab（分鐘是最小粒度）；interval 沒做 |
 | Webhook | `event.when_webhook (path)` | FastAPI 動態路由 `/hooks/{token}/{path}`，payload 綁成 `body` / `headers` / `query` |
 | 擴充 | 任何 `type: hat` | extension 的 async generator |
 
@@ -2182,6 +2196,25 @@ Discord 的 gateway 不該斷線重連——那會掉訊息，而且要花好幾
 例外是**積木包的集合變了**：registry 是一次載入一整組子行程（§7.6），沒有「只
 換掉其中一個」這種操作，所以那時整組重來。它比 trigger 層的 diff 粗，但只在使
 用者真的加減了積木包時才發生，而那本來就是一次大改。
+
+#### cron 的四個決定（v0.26）
+
+**「必填」是真的沒有 default，不是給一個 `UTC`。** 給 UTC 的話，一個台北的使用者
+設「早上九點」會在下午五點觸發，而積木上只寫著一個他沒讀的字——**可攜性守住了，
+但意思錯了**。空的則存不進去（存檔期 422 帶 blockId），那句話他一定看得到。
+
+**解析與排程是同一份實作**（`blocky/cron.py`），存檔驗證與真的排程都呼叫它。
+所以「存檔時驗過的東西一定排得上」不是一句承諾，是一個結構上的事實。分成兩份的
+話，第一次它們對不齊時，使用者會拿到一份存得進去、卻永遠不會觸發的專案——而那種
+bug 沒有任何畫面看得出來。
+
+**錯過的班次不補跑**（`misfire_grace_time=None`、`coalesce=True`）。後端關了一整夜
+再開機時，使用者要的是「從現在開始準時跑」，不是「把昨晚十二次補完」——那會在開機
+瞬間送出十二則 Discord 訊息。
+
+**排程本身不落地。** active 存在 SQLite，排程從 IR 重建——它是 IR 的衍生物，存兩份
+就會漂移（同 §4.7 對 `refs` 的判斷）。job id 含 `project_id`，否則複製貼上一份專案
+之後兩顆同 blockId 的 cron 會互相覆蓋，而使用者只會看到「其中一個流程不跑了」。
 
 #### 三條「一顆壞掉不能拖垮其他」（v0.25）
 
@@ -2770,6 +2803,13 @@ tags: [procedure, control, unwind]
 | §9.2 | 存檔會重新對齊 active 專案；但**不會**把關著的專案打開 |
 | §9.2 | 改一顆與 hat 無關的積木存檔 → 那條連線**沒有**重接（diff 的全部用處） |
 | §9.2 | active 紀錄指向一份已被刪除的專案 → 啟動不炸，順手清掉那筆 |
+| §9.1 | `when_cron` 的空時區／壞運算式／不認得的時區 → **存檔期** 422 帶 blockId |
+| §9.1 | 結構錯誤比 cron 錯誤先報 |
+| §9.1 | job 帶的是宣告的時區，不是機器的；兩顆 cron 積木是兩份 job |
+| §9.1 | 兩個專案的 blockId 相同時 job 不互相覆蓋 |
+| §9.1 | 改時間會重排；改一顆無關的積木**不會**動到 `next_run_time` |
+| §9.1 | 排程跨後端重啟存活（從 IR 重建，不是從排程表讀回來） |
+| §5.1 | `concurrency: drop`：上一個還在跑就跳過，並在專案的 errors 留一句 |
 | §4.5 | hat 的 `yields` 與全域變數同名 → 那顆 hat 標 info，讀取積木**不**標；執行時讀到的是 thread-local |
 | §5.5 | `CancelledError` 穿透 `try_catch`；`finally` 清理有 5 秒上限 |
 | §5.6 | 一個 thread 出錯，其餘 thread **繼續執行** |

@@ -14,6 +14,10 @@ dependencies = [
     "httpx>=0.27,<1",
     # secret 存進 OS keyring（§12.1），不是 project.json 或任何檔案。
     "keyring>=25,<26",
+    # §9.1 的 cron trigger。用它而不是自己寫一個 cron parser，理由是時區與
+    # 日光節約時間——「每天早上九點」在換日光節約的那兩天是什麼意思，是一個
+    # 寫起來很短、但錯起來一年錯兩次而且沒有人發現的東西。
+    "apscheduler>=3.10,<4",
 ]
 
 [project.optional-dependencies]

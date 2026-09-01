@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError as PydanticError
 
+from blocky.cron import validate_blocks as validate_cron_blocks
 from blocky.errors import BlockyError, ValidationError
 from blocky.extensions import discover, open_registry, secret_store
 from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
@@ -74,16 +75,22 @@ async def open_project(
             raise ValidationError(f"載入積木包時失敗：{e}") from None
 
     try:
-        return (
-            load(
-                data,
-                strict_refs=True,
-                shapes=resolve_shape(registry),
-                expressions=expression_fields,
-                terminals=resolve_terminal(registry),
-            ),
-            registry,
+        loaded = load(
+            data,
+            strict_refs=True,
+            shapes=resolve_shape(registry),
+            expressions=expression_fields,
+            terminals=resolve_terminal(registry),
         )
+        # §9.1／§4.9：`when_cron` 的排程與時區在**存檔期**就解析。留到執行期的
+        # 話，一顆設錯的 cron 可以安靜地不觸發好幾個月（同 §4.7b 的運算式）。
+        # 跟真的排程走同一個 `cron.parse()`，所以「存檔時驗過的一定排得上」是
+        # 結構上的事實，不是一句承諾。
+        #
+        # **排在 `load()` 之後**：結構錯誤比一顆設錯的 cron 更根本，而且那時
+        # `blocks` 已經確定是一份格式正確的積木表。
+        validate_cron_blocks(data.get("blocks") or {})
+        return loaded, registry
     except PydanticError as e:
         if registry is not None:
             await registry.unload_all()

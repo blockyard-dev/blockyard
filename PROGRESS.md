@@ -1,7 +1,7 @@
 # PROGRESS
 
 > 這份文件只做一件事：**交接**。它記「現在在哪裡、什麼還沒解決、下一步做什麼」。
-> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.25），實作經過在 `git log`。
+> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.26），實作經過在 `git log`。
 > 兩邊已經有的東西，這裡不重複。
 
 最後更新：2026-09-01
@@ -114,11 +114,26 @@ aiohttp 互不相見）在同一條堆疊上傳值——D13 那句「衝突不�
 表）、`runs/triggers.py`（key + spec 的 diff、重啟恢復）、`/api/triggers`。P1
 那張「§9.2 要的 / 這裡有嗎」的表現在只剩最後一格是叉。
 
-**下一步是 2b（cron）與 2c（webhook）。** cron 先做，因為 P2 的驗收句就是它
-（「設定每天 09:00 的流程，關掉瀏覽器，隔天檢查」）。要注意兩件事：
-`event.when_cron` 的宣告**還沒有 timezone 參數**，而 §9.1 說它必填（§4.9：沒有
-它，同一份專案在不同機器上會在不同時刻觸發）；加參數會走到 Q21 的路（既有專案
-那一格是空的輸入孔），只是目前還沒有任何專案存過這顆積木。
+**2b（cron）完成**（design v0.26）——`blocky/cron.py`（解析與排程共用一份）、
+APScheduler、`timezone` 必填、`concurrency: drop`。
+
+**下一步是 2c（webhook）**：`event.when_webhook` + FastAPI 動態路由
+`/hooks/{32位隨機}/{使用者路徑}`（§9.3）。key 與 spec 的形狀跟 cron 一樣
+（`opcode#blockId` + path），所以 diff 那一半不用重寫；新的是**路由要動態
+增刪**，而 FastAPI 的 router 沒有現成的移除 API——那大概是這一步最花時間的地方。
+
+**cron 留下三個已知缺口**：
+
+1. **編輯器沒有時區的輔助**。宣告刻意沒有 default（給 UTC 會讓台北的使用者在
+   下午五點觸發），所以拖出一顆 cron 積木之後**存檔一定先失敗一次**，訊息叫他
+   填時區。這是對的行為，但使用者得自己知道 `Asia/Taipei` 這種寫法。真正的解
+   要嘛是一顆下拉，要嘛是一個「拖出來時填入瀏覽器時區」的宣告
+   （像 `defaultFrom: timezone`）——後者是一次 schema 決定，照 Q21 的同一條理由
+   不該夾在別的工作裡做。
+2. **`queue` 與 `restart` 沒實作**（§5.1），目前與 `parallel` 同行為。`drop`
+   做了，因為 `when_cron` 宣告的就是它，而它是真的需要。
+3. **interval 沒做**（§9.1 說「支援 cron 與 interval」）。目前只有五欄 crontab，
+   所以最小粒度是一分鐘。
 
 下面這兩塊是 P1 鋪好的，接的時候要接在它上面而不是重寫：
 1. **`start_trigger` 的整條管線已經在生產路徑上跑過真的長連線了**（在這之前它

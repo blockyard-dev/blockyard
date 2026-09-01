@@ -135,6 +135,18 @@ class RunManager:
         """
         return self._runs.get(run_id)
 
+    def has_running(self, project_id: str, trigger: str) -> bool:
+        """這個專案的這個 trigger 現在有沒有還在跑的 Run（§5.1 的 `drop`）。
+
+        只問記憶體：跑完的 Run 在 SQLite，而那裡的 `running` 有可能是上一次
+        後端被砍掉留下的（§6.3 的 `interrupted` 補標之前）。**「現在還在跑」
+        只有這個 process 答得出來。**
+        """
+        return any(
+            h.running and h.project_id == project_id and h.trigger == trigger
+            for h in self._runs.values()
+        )
+
     def summary(self, run_id: str) -> dict[str, Any] | None:
         """給 HTTP 用的那一份。活的、跑完的、上次開機跑的，都走這裡。
 
