@@ -335,7 +335,14 @@ export function buildBlock(manifest: Manifest, spec: BlockSpec): BuiltBlock {
       if (built) {
         definition[`message${messageIndex}`] = built.message;
         definition[`args${messageIndex}`] = built.args;
-        collectShadows(type, built.inputs, args, shadows, shadowDefinitions);
+        collectShadows(
+          type,
+          built.inputs,
+          args,
+          shadows,
+          shadowDefinitions,
+          definition.colour as string,
+        );
         messageIndex++;
       }
     }
@@ -583,11 +590,12 @@ function collectShadows(
   args: Record<string, ArgSpec>,
   out: Record<string, ShadowSpec>,
   definitions: Record<string, unknown>[],
+  blockColour: string,
 ): void {
   for (const name of inputs) {
     const arg = args[name];
     if (!arg || arg.type === 'boolean') continue;
-    out[name] = shadowFor(blockType, name, arg, definitions);
+    out[name] = shadowFor(blockType, name, arg, definitions, blockColour);
   }
 }
 
@@ -596,6 +604,7 @@ function shadowFor(
   name: string,
   arg: ArgSpec,
   definitions: Record<string, unknown>[],
+  blockColour: string,
 ): ShadowSpec {
   if (arg.type === 'number') {
     const value = typeof arg.default === 'number' ? arg.default : 0;
@@ -636,7 +645,21 @@ function shadowFor(
         { type: FIELD_DYNAMIC_DROPDOWN_TYPE, name: SHADOW_FIELD, value, extId, source: arg.source },
       ],
       output: null,
-      colour: SHADOW_COLOUR,
+      // **不是 `SHADOW_COLOUR`（白）**，這一顆跟父積木同色。
+      //
+      // 白色膠囊在這套視覺文法裡一直都是「這一格的內容是資料、可以打字」
+      // （網址、提示詞都是）。下拉正好相反：值是封閉的一組（D22），只能挑。
+      // Scratch 對這兩件事用的就是兩種樣子。
+      //
+      // 深色是**免費的**：Blockly 畫影子積木時本來就會用一個從 `colour` 推導
+      // 出來的深色版，所以這裡給它包的顏色，畫出來就是「積木底色的深色版」。
+      // 原本給白色，推出來就是一格灰——那正是它先前難看的原因，不是少了一層
+      // CSS。（實測過：這顆欄位的群組裡連 `rect.blocklyFieldRect` 都沒有，
+      // 想靠 CSS 壓底色是壓不到東西的；文字與箭頭也本來就是白的。）
+      //
+      // 顏色來自 manifest（§8.1），所以不寫死也不在 JS 裡算：寫死一個綠色會在
+      // discord 那種紫色的包上壞掉。
+      colour: blockColour,
     });
     return { type, fields: { [SHADOW_FIELD]: value } };
   }
