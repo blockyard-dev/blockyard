@@ -43,10 +43,11 @@ async def list_active(request: Request) -> list[dict[str, Any]]:
 async def get_active(project_id: str, request: Request) -> dict[str, Any]:
     """一個專案的狀態。**沒在跑不是 404**：「它是不是 active」對任何存在的
     專案都有答案，而那個答案是 false。"""
-    state = _triggers(request).get(project_id)
+    manager = _triggers(request)
+    state = manager.get(project_id)
     if state is not None:
-        return state.summary()
-    return {"projectId": project_id, "active": False, "hats": [], "errors": []}
+        return {**state.summary(), "webhooks": manager.urls(project_id)}
+    return {"projectId": project_id, "active": False, "hats": [], "errors": [], "webhooks": []}
 
 
 @router.post("", status_code=201)
@@ -68,7 +69,7 @@ async def activate(request: Request, body: ActivateRequest = Body(...)) -> dict[
         # 積木包接不上（token 不對、包壞了）。422 而不是 500：錯的是這份專案
         # 用到的東西，不是後端。
         raise HTTPException(status_code=422, detail=e.to_dict()) from None
-    return state.summary()
+    return {**state.summary(), "webhooks": _triggers(request).urls(body.projectId)}
 
 
 @router.delete("/{project_id}", status_code=204)

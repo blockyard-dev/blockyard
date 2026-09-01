@@ -21,6 +21,18 @@ export interface TriggerSummary {
   hats: string[];
   /** 沒有 Run 可以歸屬的錯誤（連線斷了、token 不對）。 */
   errors: string[];
+  /**
+   * 這個專案掛著的 webhook 網址（§9.3）。**只有 active 的時候才有東西**——
+   * 網址是掛上去之後才存在的，沒在跑的專案沒有位址可以給。
+   */
+  webhooks?: WebhookUrl[];
+}
+
+export interface WebhookUrl {
+  /** 積木上寫的那一段，正規化過（`/github/` → `github`）。 */
+  path: string;
+  /** `/hooks/{32位隨機}/{path}`。前面接上這台後端的來源就是完整網址。 */
+  url: string;
 }
 
 /** 標記 active 並接上。已經 active 就重新同步一次，不是 409。 */

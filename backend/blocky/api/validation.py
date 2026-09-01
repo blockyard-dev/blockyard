@@ -23,6 +23,7 @@ from blocky.interpreter.declarations import expression_fields
 from blocky.interpreter.events import EventSink
 from blocky.interpreter.registry import resolve_shape, resolve_terminal
 from blocky.ir.schema import LoadedProject, load
+from blocky.webhook import validate_blocks as validate_webhook_blocks
 
 if TYPE_CHECKING:
     from blocky.extensions.registry import ExtensionRegistry
@@ -90,6 +91,9 @@ async def open_project(
         # **排在 `load()` 之後**：結構錯誤比一顆設錯的 cron 更根本，而且那時
         # `blocks` 已經確定是一份格式正確的積木表。
         validate_cron_blocks(data.get("blocks") or {})
+        # §9.3：webhook 路徑同理，外加「同路徑兩顆」——那是一個看不出來的錯：
+        # 兩顆都存得進去、都掛得上，但請求只會餵到其中一顆。
+        validate_webhook_blocks(data.get("blocks") or {})
         return loaded, registry
     except PydanticError as e:
         if registry is not None:

@@ -81,6 +81,8 @@ async def delete_project(project_id: str, request: Request) -> Response:
     # 剛好同名的專案身上復活。
     request.app.state.runs_store.delete_project_history(project_id)
     await request.app.state.triggers.deactivate(project_id)
+    # 留著的話，下一個剛好同名的專案會繼承一個外面可能還有人在打的網址。
+    request.app.state.webhook_tokens.delete(project_id)
     return Response(status_code=204)
 
 

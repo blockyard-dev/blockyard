@@ -9,7 +9,7 @@
 | diff 新舊 IR 的 hat 集合、只重啟有變動的 | ✅ 見下面的「鍵與規格」 |
 | 後端重啟時從 SQLite 恢復 | ✅ `restore()`，由 lifespan 呼叫 |
 | cron 內建 trigger | ✅ 第 2b 步 |
-| webhook 內建 trigger | ✳️ 第 2c 步 |
+| webhook 內建 trigger | ✅ 第 2c 步 |
 
 ## 鍵與規格
 
@@ -23,7 +23,18 @@
 腳本（`_triggered()` 會把它們全部選中），所以同一顆 hat 放兩次不該開兩條連線。
 
 內建的 cron 是 `event.when_cron#<blockId>`，spec 是 `(運算式, 時區)`——兩顆 cron
-積木是兩份排程，而改了時間就得重排。webhook（第 2c 步）會是同一個形狀。
+積木是兩份排程，而改了時間就得重排。webhook 同一個形狀，spec 是 `(路徑,)`。
+
+## webhook 為什麼不是「動態路由」
+
+§9.1 寫的是「FastAPI 動態路由」，但實作上是**一條 catch-all 路由 + 一張查表**。
+理由很現實：FastAPI／Starlette 沒有移除路由的 API，而 `app.routes` 是一個
+list——真的去增刪它就是在動框架沒有承諾過的內部狀態，而且路由是有順序的，刪到
+一半的中間狀態會讓別的路徑也 404。
+
+一條 `/hooks/{token}/{path:path}` 掛在 app 建立時，進來之後查
+`(token, path) → 專案`。使用者看到的網址一模一樣，而「現在有哪些 webhook」變成
+一個 dict 的內容，跟其他 trigger 的生命週期走同一條路。
 
 **這個分法的用處全在「不要無謂斷開」上。** 使用者改一顆 log 積木的文字然後存檔，
 Discord 的 gateway 不該斷線重連——那會掉訊息，而且要花好幾秒。
@@ -48,7 +59,9 @@ from blocky.extensions import discover
 from blocky.interpreter.events import EventSink
 from blocky.runs.manager import ProjectNotFound, RunManager
 from blocky.storage import ProjectStore
-from blocky.storage.triggers import ActiveStore
+from blocky.storage.triggers import ActiveStore, WebhookTokenStore
+from blocky.webhook import WEBHOOK_OPCODE, WebhookSpec
+from blocky.webhook import parse as parse_webhook
 
 if TYPE_CHECKING:
     from blocky.extensions.registry import ExtensionRegistry
@@ -64,8 +77,10 @@ class Want:
 
     opcode: str
     spec: tuple[Any, ...]
-    #: 內建 cron 才有。有值就走排程器，沒有就走積木包的 `start_trigger`。
+    #: 內建 cron 才有。有值就走排程器。
     cron: CronSpec | None = None
+    #: 內建 webhook 才有。有值就掛進查表。
+    webhook: WebhookSpec | None = None
     #: 積木包 id；內建的（`event.*`）是 None。registry 要不要重載只看這一欄。
     ext_id: str | None = None
     #: §5.1 宣告的併發模式。
@@ -86,6 +101,8 @@ class Bound:
     spec: tuple[Any, ...]
     handle: Any = None
     job_id: str | None = None
+    #: webhook 在查表裡的鍵 `(token, path)`。
+    route: tuple[str, str] | None = None
 
 
 @dataclass
@@ -128,14 +145,18 @@ class TriggerManager:
         extensions_root: Path,
         runs: RunManager,
         active: ActiveStore,
+        tokens: WebhookTokenStore | None = None,
     ) -> None:
         self._store = store
         self._extensions_root = extensions_root
         self._runs = runs
         self._active = active
+        self._tokens = tokens
         self._projects: dict[str, ProjectTriggers] = {}
         #: 整個 app 一個排程器，懶啟動（見 `_scheduler`）。
         self._sched: AsyncIOScheduler | None = None
+        #: §9.3 的查表：`(token, 路徑)` → 收到請求要做什麼。見檔頭。
+        self._routes: dict[tuple[str, str], Any] = {}
 
     # ---- 查 ----
 
@@ -284,6 +305,8 @@ class TriggerManager:
             try:
                 if want.cron is not None:
                     bound = self._schedule(state, key, want)
+                elif want.webhook is not None:
+                    bound = self._mount(state, key, want)
                 else:
                     bound = await self._connect(state, key, want)
             except Exception as e:  # noqa: BLE001
@@ -332,6 +355,42 @@ class TriggerManager:
         )
         return Bound(key=key, opcode=want.opcode, spec=want.spec, job_id=job_id)
 
+    def _mount(self, state: ProjectTriggers, key: str, want: Want) -> Bound:
+        """把一顆 webhook 積木掛進查表（§9.3）。"""
+        assert want.webhook is not None
+        if self._tokens is None:
+            raise RuntimeError("沒有 token 儲存，webhook 掛不上")
+        token = self._tokens.ensure(state.project_id)
+        route = (token, want.webhook.path)
+        self._routes[route] = _forward(
+            self, state.project_id, want.opcode, want.concurrency
+        )
+        return Bound(key=key, opcode=want.opcode, spec=want.spec, route=route)
+
+    async def deliver(self, token: str, path: str, payload: dict[str, Any]) -> bool:
+        """一個進來的請求 → 一個 Run。回傳有沒有人接。
+
+        **查不到就是查不到，不分「token 錯」與「路徑錯」。** 兩種分開回答等於
+        告訴掃描的人「token 對了，繼續猜路徑」——而 §9.3 的整個模型就建立在
+        那串東西猜不到上面。
+        """
+        fire = self._routes.get((token, path.strip("/")))
+        if fire is None:
+            return False
+        await fire(payload)
+        return True
+
+    def urls(self, project_id: str) -> list[dict[str, str]]:
+        """這個專案現在掛著的 webhook 網址。給前端顯示「複製網址」用的。"""
+        state = self._projects.get(project_id)
+        if state is None:
+            return []
+        return [
+            {"path": b.route[1], "url": f"/hooks/{b.route[0]}/{b.route[1]}"}
+            for b in state.bound.values()
+            if b.route is not None
+        ]
+
     def _scheduler(self) -> AsyncIOScheduler:
         """**懶啟動。** 一個沒有任何 cron 的後端不該有一條排程器的執行緒在轉，
         而絕大多數專案沒有 cron。"""
@@ -355,6 +414,8 @@ class TriggerManager:
         if bound.job_id is not None and self._sched is not None:
             with contextlib.suppress(Exception):
                 self._sched.remove_job(bound.job_id)
+        if bound.route is not None:
+            self._routes.pop(bound.route, None)
         if bound.handle is not None:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await bound.handle.stop()
@@ -399,6 +460,18 @@ def _desired(data: Any, extensions_root: Path) -> dict[str, Want]:
                 opcode=opcode,
                 spec=cron.spec,
                 cron=cron,
+                concurrency=_declared_concurrency(opcode),
+            )
+            continue
+
+        if opcode == WEBHOOK_OPCODE:
+            # 同 cron：兩顆積木是兩個網址，所以 key 含 blockId；改了路徑就得
+            # 換掉查表那一筆，所以 spec 是路徑。
+            hook = parse_webhook(block.get("fields") or {}, block_id=top)
+            out[f"{WEBHOOK_OPCODE}#{top}"] = Want(
+                opcode=opcode,
+                spec=hook.spec,
+                webhook=hook,
                 concurrency=_declared_concurrency(opcode),
             )
             continue

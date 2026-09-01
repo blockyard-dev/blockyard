@@ -252,7 +252,13 @@ def test_沒在跑的專案問得到答案而不是_404(client: TestClient) -> N
 
     body = client.get(f"/api/triggers/{pid}").json()
 
-    assert body == {"projectId": pid, "active": False, "hats": [], "errors": []}
+    assert body == {
+        "projectId": pid,
+        "active": False,
+        "hats": [],
+        "errors": [],
+        "webhooks": [],
+    }
 
 
 def test_active_跨後端重啟存活(tmp_path: Path) -> None:

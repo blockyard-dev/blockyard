@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from blocky.api import extensions as extensions_routes
+from blocky.api import hooks as hooks_routes
 from blocky.api import keys as keys_routes
 from blocky.api import projects as projects_routes
 from blocky.api import runs as runs_routes
@@ -26,7 +27,13 @@ from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
 from blocky.runs import RunManager
 from blocky.runs.recorder import RunRecorder
 from blocky.runs.triggers import TriggerManager
-from blocky.storage import ActiveStore, ProjectStore, RunStore, default_db_path
+from blocky.storage import (
+    ActiveStore,
+    ProjectStore,
+    RunStore,
+    WebhookTokenStore,
+    default_db_path,
+)
 
 # P0b 的前端跑在 Vite 的 dev server 上（另一個 port），所以本機開發一定跨源。
 # 打包後前端由同一個 process 提供，這串就用不到了——但留著不礙事，因為
@@ -86,11 +93,13 @@ def create_app(
         broker_options=broker_options or {},
     )
     app.state.active_store = ActiveStore(db_path or default_db_path())
+    app.state.webhook_tokens = WebhookTokenStore(db_path or default_db_path())
     app.state.triggers = TriggerManager(
         store=app.state.store,
         extensions_root=app.state.extensions_root,
         runs=app.state.runs,
         active=app.state.active_store,
+        tokens=app.state.webhook_tokens,
     )
 
     app.add_middleware(
@@ -106,6 +115,8 @@ def create_app(
     app.include_router(runs_routes.router)
     app.include_router(runs_routes.ws_router)
     app.include_router(triggers_routes.router)
+    # /hooks 不在 /api 底下：它不是這個編輯器的 API，是給外面打的位址。
+    app.include_router(hooks_routes.router)
 
 
     @app.get("/api/health", tags=["meta"])

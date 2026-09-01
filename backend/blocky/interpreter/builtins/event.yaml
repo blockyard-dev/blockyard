@@ -38,7 +38,7 @@ palette:
     type: hat
     text: "當收到 webhook %(path)"
     args:
-      path: { type: string, default: "/hook" }
+      path: { type: string, field: true, default: "hook", help: "網址的最後一段，例如 github。完整網址在啟用之後從積木上複製" }
     yields:
       - { name: body, type: object }
       - { name: headers, type: object }

@@ -16,7 +16,7 @@ from blocky.storage.runs import (
     SqlitePersistStore,
     StoredRun,
 )
-from blocky.storage.triggers import ActiveProject, ActiveStore
+from blocky.storage.triggers import ActiveProject, ActiveStore, WebhookTokenStore
 
 __all__ = [
     "INTERRUPTED",
@@ -30,5 +30,6 @@ __all__ = [
     "SqlitePersistStore",
     "StoredProject",
     "StoredRun",
+    "WebhookTokenStore",
     "default_db_path",
 ]

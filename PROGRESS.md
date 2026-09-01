@@ -1,7 +1,7 @@
 # PROGRESS
 
 > 這份文件只做一件事：**交接**。它記「現在在哪裡、什麼還沒解決、下一步做什麼」。
-> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.26），實作經過在 `git log`。
+> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.27），實作經過在 `git log`。
 > 兩邊已經有的東西，這裡不重複。
 
 最後更新：2026-09-01
@@ -117,10 +117,19 @@ aiohttp 互不相見）在同一條堆疊上傳值——D13 那句「衝突不�
 **2b（cron）完成**（design v0.26）——`blocky/cron.py`（解析與排程共用一份）、
 APScheduler、`timezone` 必填、`concurrency: drop`。
 
-**下一步是 2c（webhook）**：`event.when_webhook` + FastAPI 動態路由
-`/hooks/{32位隨機}/{使用者路徑}`（§9.3）。key 與 spec 的形狀跟 cron 一樣
-（`opcode#blockId` + path），所以 diff 那一半不用重寫；新的是**路由要動態
-增刪**，而 FastAPI 的 router 沒有現成的移除 API——那大概是這一步最花時間的地方。
+**2c（webhook）完成**（design v0.27）——`blocky/webhook.py`、`api/hooks.py`、
+每個專案一把落地的 token。**路由沒有動態增刪**：Starlette 沒有移除 API，而
+`app.routes` 是有順序的 list，所以改成一條 catch-all + 一張查表，使用者看到的
+網址一模一樣。§9.1 那張表因此四列全滿，Trigger Manager 完成。
+
+**HMAC 沒做，因為 §9.3 與 D28 衝突**：前者說 secret 放「hat 積木參數」（＝IR），
+後者說「Key 不能存進專案檔——分享專案會變成分享明文金鑰」。開成 §16 Q22，傾向
+是進 keyring（key 是專案+blockId），但**先確認有人真的需要**——GitHub 與 Stripe
+的簽章演算法各不相同，一個「通用 HMAC 欄位」很可能誰都用不上。
+
+**下一步是 P2 剩下的三塊**：執行歷史與日誌檢視（前端；後端的
+`GET /api/runs/{id}/events` 第 1 步就備好了）、`try_catch`、以及 Q19 的可重複
+參數群組（它與 `try_catch` 的多個 catch 是同一個機制，一起做）。
 
 **cron 留下三個已知缺口**：
 

@@ -180,7 +180,9 @@ describe('沒有被設定過的變數（§4.5）', () => {
         h: {
           opcode: 'event.when_webhook',
           next: 'get',
-          inputs: { path: { kind: 'literal', value: '/hook' } },
+          // `path` 是 field 不是輸入孔（§9.3：它是這顆積木自己的位址，
+          // 塞不進別的積木，同 `設定 [名稱] 為` 的名字那一格）。
+          fields: { path: 'hook' },
         },
         get: { opcode: 'data.change', parent: 'h', fields: { name: 'body' } },
       },
