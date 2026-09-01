@@ -116,8 +116,10 @@ class ExtensionHost(Protocol):
     async def call(self, opcode: str, args: dict[str, Any], ctx_token: str) -> Any: ...
 
     async def dropdown(
-        self, ext_id: str, source: str, ctx_token: str
+        self, ext_id: str, source: str, ctx_token: str, args: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]: ...
+    """`args` 是同一顆積木上其他已填參數的值（manifest 的 `depends`）。
+    預設 `None` 讓「不吃別格的下拉」的呼叫端一個字都不用改。"""
 
     async def start_trigger(
         self, opcode: str, sink: Callable[[dict[str, Any]], Awaitable[None]]

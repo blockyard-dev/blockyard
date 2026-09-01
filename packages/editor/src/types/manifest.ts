@@ -43,6 +43,7 @@ export type Source = string | null;
 export type Options = OptionSpec[] | null;
 export type Value = string;
 export type Label2 = string | null;
+export type Depends = string[] | null;
 export type Field = boolean;
 export type Binds = boolean;
 export type Reads = boolean;
@@ -128,6 +129,7 @@ export interface ArgSpec {
   help?: Help1;
   source?: Source;
   options?: Options;
+  depends?: Depends;
   field?: Field;
   binds?: Binds;
   reads?: Reads;

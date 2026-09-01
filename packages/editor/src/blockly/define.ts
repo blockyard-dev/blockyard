@@ -642,7 +642,19 @@ function shadowFor(
       type,
       message0: '%1',
       args0: [
-        { type: FIELD_DYNAMIC_DROPDOWN_TYPE, name: SHADOW_FIELD, value, extId, source: arg.source },
+        {
+          type: FIELD_DYNAMIC_DROPDOWN_TYPE,
+          name: SHADOW_FIELD,
+          value,
+          extId,
+          source: arg.source,
+          // manifest 的 `depends`：這份選項要吃同一顆積木上哪幾格的值
+          // （`discord.channels` 要先知道是哪個伺服器）。
+          ...(arg.depends ? { depends: arg.depends } : {}),
+          // 值還空著時顯示的字。從 `label` 導出而不是讓積木包自己寫一句：
+          // 會忘記的包就是大多數，而忘記的代價是畫布上一格看不見的東西。
+          placeholder: arg.label ? `選擇${arg.label}` : '選擇…',
+        },
       ],
       output: null,
       // **不是 `SHADOW_COLOUR`（白）**，這一顆跟父積木同色。

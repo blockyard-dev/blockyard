@@ -38,6 +38,12 @@ async def get_dropdown(ext_id: str, source: str, request: Request) -> list[dict[
 
     照 `api/validation.py::open_project` 已有的「開一個用完即關的 registry」
     風格：只載這一個包，查完就卸載，不留著。
+
+    body 是選填的 `{"args": {...}}`——manifest 宣告了 `depends` 的下拉要吃同一
+    顆積木上其他已填的值（`discord.channels` 要先知道是哪個伺服器）。**沒有
+    body 仍然是合法請求**：不吃別格的下拉佔絕大多數，而讓它們為了一個空物件
+    多帶一個 header 只是噪音。收到的東西在 host 邊界依宣告過濾
+    （`boundary.normalize_dropdown_args`），這裡不做也不該做那件事。
     """
     root = request.app.state.extensions_root
     sources = discover(root)
@@ -53,11 +59,27 @@ async def get_dropdown(ext_id: str, source: str, request: Request) -> list[dict[
         ) from None
 
     try:
-        return await registry.dropdown(ext_id, source)
+        return await registry.dropdown(ext_id, source, args=await _dropdown_args(request))
     except BlockyError as e:
         raise HTTPException(status_code=422, detail={"message": str(e)}) from None
     finally:
         await registry.unload_all()
+
+
+async def _dropdown_args(request: Request) -> dict[str, Any]:
+    """body 讀不出來就當沒有。
+
+    「沒有 body」與「body 不是 JSON」在這裡是同一件事：無論哪一種，這個請求都
+    只是沒有帶 `depends` 的值——而該不該有值是 manifest 說了算，不是這個函式。
+    真正宣告了 `depends` 卻沒收到值的下拉會拿到空字串，那是積木包要處理的正常
+    狀態（「還沒選伺服器」），不是 400。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {}
+    args = body.get("args") if isinstance(body, dict) else None
+    return args if isinstance(args, dict) else {}
 
 
 def _dump(mf: Manifest) -> dict[str, Any]:

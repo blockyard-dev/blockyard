@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
 
+from blocky.errors import ExtensionError
 from blocky.extensions.host import (
     CallContexts,
     EventSinkChannel,
@@ -82,15 +83,34 @@ class ExtensionRegistry:
         found = self.lookup(opcode)
         return found[1].type if found else None
 
-    async def dropdown(self, ext_id: str, source: str) -> list[dict[str, Any]]:
+    async def dropdown(
+        self, ext_id: str, source: str, *, args: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """動態下拉的選項（D22、§8.1）。`ext_id`／`source` 直接對映
         `POST /api/extensions/{ext_id}/dropdown/{source}`——這是包層級的東西，
-        不像 `call()` 需要一個 opcode 去查形狀。"""
+        不像 `call()` 需要一個 opcode 去查形狀。
+
+        `args` 是同一顆積木上其他已填參數的值（manifest 的 `depends`）；
+        host 會依宣告過濾（`boundary.normalize_dropdown_args`）。"""
         ctx = self.contexts.open(ext_id)
         try:
-            return await self.host.dropdown(ext_id, source, ctx.token)
+            return await self.host.dropdown(ext_id, source, ctx.token, args)
         finally:
             self.contexts.close(ctx.token)
+
+    async def start_trigger(
+        self, opcode: str, sink: Callable[[dict[str, Any]], Awaitable[None]]
+    ) -> Any:
+        """接上一顆 hat（§7.3、§9）。回一個 `TriggerHandle`，`stop()` 可以停。
+
+        跟 `dropdown()` 一樣是**包層級**的入口，但生命週期相反：下拉是問完就
+        關的一次呼叫，這裡的 ctx 要活到 trigger 被停掉為止（那條 WebSocket 就
+        掛在上面），所以 context 由 host 自己開自己關，不是這裡。
+        """
+        ext_id = opcode.split(".", 1)[0]
+        if ext_id not in self._loaded:
+            raise ExtensionError(f'積木包「{ext_id}」還沒載入')
+        return await self.host.start_trigger(opcode, sink)
 
     def handler(self, opcode: str, *, want_value: bool) -> Handler | None:
         """回一個與內建積木同簽章的 handler，形狀不符時回 None。
@@ -165,9 +185,23 @@ async def open_registry(
     )
     registry = ExtensionRegistry(ext_host, sources, contexts)
 
-    for ext_id in sources if only is None else only:
-        if ext_id in sources:
-            await registry.load(ext_id)
+    # **載到一半失敗要把前面那幾個收掉。**
+    #
+    # 每個包是一個子行程（§7.6），而在這個函式回傳之前，**握得到那些子行程的
+    # 只有這個還沒交出去的 `registry`**。所以這裡不收就沒有人收得了：它們會活到
+    # 後端關掉為止，而症狀不會出現在失敗的那一次——是後來某一次無關的呼叫拿到
+    # 「子行程意外結束」。
+    #
+    # 兩種失敗都要接住：一個包壞掉（`ExtensionError`），以及**整個請求被取消**
+    # （瀏覽器關掉分頁、Run 被停掉）。後者是 `CancelledError`，它不是
+    # `Exception` 的子類別，所以這裡接的是 `BaseException`。
+    try:
+        for ext_id in sources if only is None else only:
+            if ext_id in sources:
+                await registry.load(ext_id)
+    except BaseException:
+        await registry.unload_all()
+        raise
     return registry
 
 

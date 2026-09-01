@@ -207,6 +207,28 @@ def validate_return(
 # --------------------------------------------------------------------------
 
 
+def normalize_dropdown_args(
+    manifest: Manifest, source: str, args: dict[str, Any] | None
+) -> dict[str, str]:
+    """動態下拉要吃的「同積木其他已填參數」，在邊界過濾成宣告過的那幾格。
+
+    **這是那條路唯一的守門員。** 呼叫端是瀏覽器（`POST …/dropdown/{source}`
+    的 body），終點是積木包的一個 Python 函式——中間不過濾的話，那個端點就是
+    「任意 kwargs 進到積木包」，而第一個症狀會是一句 `TypeError: got an
+    unexpected keyword argument`，主詞指著積木包。
+
+    宣告缺的那幾格補空字串而不是省略：`@dropdown` 的簽章是固定的，少一個參數
+    就是 TypeError。**「還沒選伺服器」是積木包要處理的正常狀態**（回一份空清
+    單，或一句「先選伺服器」），不是一個錯誤——使用者本來就是從左往右填的。
+
+    值一律轉成字串：來源是欄位上的顯示值，而下拉的 `value` 本來就是字串
+    （`validate_dropdown_options`）。
+    """
+    declared = manifest.dropdown_depends().get(source, [])
+    given = args or {}
+    return {name: to_string(given.get(name, "")) for name in declared}
+
+
 def validate_dropdown_options(options: Any, source: str) -> list[dict[str, Any]]:
     if not isinstance(options, list) or not all(
         isinstance(o, dict) and isinstance(o.get("label"), str) and "value" in o
@@ -264,6 +286,7 @@ def ensure_transportable(
 
 
 __all__ = [
+    "normalize_dropdown_args",
     "ensure_transportable",
     "normalize_args",
     "validate_dropdown_options",

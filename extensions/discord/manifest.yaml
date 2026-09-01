@@ -1,0 +1,127 @@
+# Discord 積木包（§15、P1 第 4 步）。
+#
+# 三個手寫包裡它排最後，因為它是**唯一需要常駐連線**的：`on_message` 是第一顆
+# 由積木包宣告的 hat（§5.4、§9），而 §7.3 的 `@trigger` 到目前為止只有合約測試
+# 裡的 `demo` 包用過。前兩個包都只有 reporter。
+#
+# **這個包有兩種 client，生命週期不同**，而這件事是翻 discord.py 2.7.1 的原始碼
+# 才看清楚的：`Client.login()` 是**純 REST** 的（`client.py:647`——它只打
+# `GET /users/@me` 與 `application_info()`，不碰 gateway），`Client.start()` 才是
+# `login()` + `connect()`。所以 `send_message` 與 `get_channel_history` 不需要
+# 常駐連線、不需要 privileged intents、也不需要等 `on_ready`；只有 `on_message`
+# 那顆 hat 要開 WebSocket。一個 client 打天下會讓「發一則訊息」這件事付出一整條
+# gateway 連線的代價，而那條連線還會因為少了 message_content 這個 intent 而失敗。
+#
+# **`ctx.http` 在這個包身上守不住，這裡老實寫下來**（§12.1）：`HTTPClient`
+# 在 `static_login()` 裡自己 `aiohttp.ClientSession(...)` 建下去
+# （`discord/http.py:831`），沒有 `AsyncOpenAI(http_client=...)` 那種注入點。
+# 不為了硬塞而去改 SDK 的連線層——`permissions: [net]` 在這個包上退回成安裝
+# 畫面上的一句話，`requirements` 的 venv 隔離才是真的守得住的那一半。
+manifestVersion: 1
+id: discord
+name: Discord
+version: 0.1.0
+author: blocky
+description: 發訊息到頻道、讀頻道歷史
+color: "#5865F2"
+permissions: [net]
+# 2.7.1 是寫這一版時裝下來的版本。範圍照 §7.2 的宣告不動：2.x 之內 `login`／
+# `get_partial_messageable`／`history` 的形狀是穩定的，3 不知道會變成什麼。
+requirements: ["discord.py>=2.3,<3"]
+
+config:
+  # 存進 OS keyring，不進 project.json（§12.1）。Bot Token 比 API 金鑰更該藏：
+  # 它不只是花錢的權限，是以那隻 bot 的身分在別人的伺服器裡說話的權限。
+  - key: bot_token
+    type: secret
+    label: Bot Token
+    envVar: DISCORD_BOT_TOKEN
+    help: Developer Portal → 你的 App → Bot → Reset Token。它只會顯示一次
+
+palette:
+  # 最短的一顆。`channel` 收頻道 ID，也收整條頻道網址——後者才是使用者剪貼簿
+  # 裡真的有的東西（在 Discord 裡按「複製連結」比「複製頻道 ID」少一個要先去
+  # 設定裡開開發者模式的步驟）。只認 ID 的話，貼上去會得到一句「這不是數字」，
+  # 而使用者手上並沒有第二個東西可以貼。
+  - opcode: send_message
+    type: command
+    text: "發送訊息 %(message) 到 %(server) 的 %(channel)"
+    args:
+      message:
+        type: string
+        default: "哈囉，我是積木"
+        multiline: true
+        rows: 3
+      server: { type: dropdown, source: servers, default: "", label: 伺服器 }
+      # **這一格是 `depends` 存在的理由。** 頻道屬於某一個伺服器，而「所有伺服器
+      # 的所有頻道攤平成一份清單」對一個待在十個伺服器裡的人來說是幾百個名字，
+      # 其中好幾個叫「一般」——那份清單不是太長，是**問不出來**：不知道伺服器就
+      # 沒有那個 API 可以打。`http.method` 與 `openai.models` 都沒有這個形狀，
+      # 所以這個能力一路拖到現在才做（PROGRESS 3.4）。
+      channel:
+        type: dropdown
+        source: channels
+        depends: [server]
+        default: ""
+        label: 頻道
+
+  - section: true
+
+  # 說明按鈕放在需要它的那一刻旁邊（同 http、openai 的作法）：要拿 token、要開
+  # Message Content Intent，兩件事都在 Developer Portal 的同一頁上。
+  - button: portal
+    label: "Developer Portal（拿 Token、開 Intent）"
+    action: open_url
+    url: "https://discord.com/developers/applications"
+
+  # 回 list，讓 `對每一項` 直接接得上。一則訊息回一個 object 而不是一串字：
+  # 誰說的、什麼時候說的、內容是什麼，是三件不同的事，黏成一句話之後要在畫布
+  # 上再拆一次。
+  - opcode: get_channel_history
+    type: reporter
+    returns: list
+    text: "取得 %(server) 的 %(channel) 最近 %(limit) 則訊息"
+    args:
+      server: { type: dropdown, source: servers, default: "", label: 伺服器 }
+      channel:
+        type: dropdown
+        source: channels
+        depends: [server]
+        default: ""
+        label: 頻道
+      limit:
+        type: number
+        default: 10
+        min: 1
+        max: 100
+        help: 由新到舊
+
+  - section: 事件
+
+  # **這個包唯一需要常駐連線的東西**，也是第一顆由積木包宣告的 hat（§5.4、§9）。
+  # 前兩個包都只有 reporter，所以 §7.3 的 `@trigger` 到目前為止只有合約測試裡的
+  # `demo` 用過。
+  #
+  # **刻意沒有參數。** 「只聽某個頻道」很有用，但 hat 的參數要一路穿過
+  # `start_trigger` 才到得了 `@trigger` 函式，而 §9.2 的 trigger 生命週期
+  # （diff 新舊 hat 集合、只重啟有變動的那條長連線）本來就是 P2 的事——現在把
+  # 參數塞進去，等於在生命週期還沒有主人的時候先決定它怎麼變。過濾用 `如果
+  # ${channel_id} = …` 做得到，而且看得見。
+  #
+  # `content` 要靠 privileged 的 Message Content Intent 才有東西（Developer
+  # Portal → Bot → Privileged Gateway Intents）。沒開的話 connect 直接炸，
+  # main.py 那句錯誤會把路徑寫出來。
+  - opcode: on_message
+    type: hat
+    text: "當 Discord 收到訊息"
+    yields:
+      - { name: content, type: string }
+      # 物件而不是一個名字：`如果 ${author.bot}` 是這顆 hat 底下最常見的第一
+      # 顆 if——不濾掉別的 bot，兩隻互相回話的 bot 會打起來。
+      - { name: author, type: object }
+      - { name: channel_id, type: string }
+      # 整則訊息。要 jump url、要 id 回覆時在這裡拿，不必為了多一個欄位改宣告。
+      - { name: message, type: object }
+    # 一則訊息一條 Thread。收訊息是天生併發的，drop 會在連續兩則訊息之間漏掉
+    # 第二則，而使用者看到的是「有時候有反應有時候沒有」。
+    concurrency: parallel

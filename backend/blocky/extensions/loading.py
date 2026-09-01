@@ -10,6 +10,7 @@ manifest 與程式碼對得起來。**只寫一次**——manifest ↔ main.py �
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import sys
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -93,12 +94,59 @@ def check_coverage(manifest: Manifest, exp: Exports) -> None:
             f"積木包「{manifest.id}」的 hat 積木 {'、'.join(sorted(missing_triggers))} "
             "沒有對應的 @trigger"
         )
+    depends = manifest.dropdown_depends()
     for src in sorted(manifest.dropdown_sources()):
-        if f"{manifest.id}.{src}" not in exp.dropdowns:
+        fn = exp.dropdowns.get(f"{manifest.id}.{src}")
+        if fn is None:
             raise ExtensionError(
                 f"積木包「{manifest.id}」的參數指定了下拉來源 {src}，"
                 "但 main.py 沒有對應的 @dropdown"
             )
+        _check_dropdown_signature(manifest, src, fn, depends.get(src, []))
+
+
+def _check_dropdown_signature(
+    manifest: Manifest, source: str, fn: Callable[..., Any], depends: list[str]
+) -> None:
+    """`depends` 宣告的每一格，`@dropdown` 函式都得收得下。
+
+    manifest 說「這份選項取決於 server」，而 main.py 寫的是 `async def
+    channels(ctx)`——host 呼叫時就是 `TypeError: got an unexpected keyword
+    argument 'server'`，主詞指著積木包，發生的時機是**使用者點開那顆下拉的
+    那一刻**。這是 manifest ↔ main.py 漂移的老形狀（同 `check_coverage`
+    上面那幾條），所以擋在同一個地方。
+
+    只檢查「收不收得下」，不檢查「有沒有多的」：多出來的參數如果有預設值，那
+    是積木包自己的事。
+    """
+    if not depends:
+        return
+    params = inspect.signature(fn).parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return
+    if missing := [d for d in depends if d not in params]:
+        raise ExtensionError(
+            f"積木包「{manifest.id}」的下拉來源 {source} 宣告了 depends "
+            f"{'、'.join(sorted(depends))}，但它的 @dropdown 函式收不下 "
+            f"{'、'.join(missing)}"
+        )
+
+
+def trigger_error_text(opcode: str, pack_name: str, exc: BaseException) -> str:
+    """trigger 的 generator 死掉時，寫給使用者看的那一句。
+
+    **兩個 host 共用同一句**（同 `boundary.py` 的理由）：一條長連線在
+    in-process 與 subprocess 底下用不同的說法失敗，等於同一個問題要查兩次。
+
+    這句話必須存在，是因為 trigger 跟積木不一樣：積木的例外沿著呼叫堆疊回到
+    按下執行的那個人身上，而 trigger 的 generator 跑在一個沒有人在等的 task
+    裡——不主動說出來的話，症狀是**按了監聽、什麼都沒發生、也沒有任何錯誤**。
+    """
+    from blocky.errors import BlockyError
+
+    if isinstance(exc, BlockyError):
+        return f"{pack_name} 的監聽停了：{exc}"
+    return f"{pack_name} 的監聽因為一個未預期的錯誤停了：{type(exc).__name__}: {exc}"
 
 
 def check_net_permission(manifest: Manifest) -> None:

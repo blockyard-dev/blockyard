@@ -98,6 +98,16 @@ class ArgSpec(Strict):
     help: str | None = None
     source: str | None = None          # dropdown 專用：提供選項的 @dropdown 函式名
     options: list[OptionSpec] | None = None   # dropdown 專用：靜態選項（內建）
+    # 動態下拉專用：這份選項要吃**同一顆積木上**哪幾格已填的值。
+    #
+    # `http.method` 與 `openai.models` 都不需要它——選項是封閉的，或者只跟金鑰
+    # 有關。`discord` 的頻道不是：頻道屬於某一個伺服器，「所有伺服器的所有頻道
+    # 攤平成一份清單」對一個待在十個伺服器裡的人來說就是幾百個名字，而其中會
+    # 有好幾個叫「一般」。**這個宣告存在的理由是那份清單問不出來，不是它太長。**
+    #
+    # 宣告在**參數**上而不是在 `@dropdown` 函式上，因為它說的是「這一格的選項
+    # 取決於那一格」——那是兩格之間的關係，屬於積木，不屬於那個函式。
+    depends: list[str] | None = None
     # §4.2：值存在 IR 的 `fields` 而不是 `inputs`。field 屬於積木自己，塞不進
     # 別的積木——`重複 (10) 次` 的 10 是輸入孔，`停止 [這個腳本]` 的下拉不是。
     # 積木包的參數一律是輸入孔，所以這個欄位只有內建會設。
@@ -159,6 +169,11 @@ class ArgSpec(Strict):
             raise ValueError("只有 dropdown 參數能宣告 source")
         if self.type != "dropdown" and self.options is not None:
             raise ValueError("只有 dropdown 參數能宣告 options")
+        if self.depends is not None and not self.source:
+            # 靜態 options 沒有人可以問，所以它不可能取決於別格。
+            raise ValueError("depends 只適用於有 source 的動態下拉")
+        if self.depends is not None and not self.depends:
+            raise ValueError("depends 不能是空清單：不吃別格的下拉就不要宣告它")
         if self.type == "stack" and (self.field or self.has_default):
             raise ValueError("stack 參數是內部堆疊，不能是 field，也沒有預設值")
         if self.type == "expression" and self.default is not None and not isinstance(self.default, str):
@@ -355,6 +370,18 @@ class BlockSpec(Strict):
             raise ValueError("terminal 只適用於 command：它說的是「這顆積木下面不能再接」")
         if self.alsoCommand and self.type != "reporter":
             raise ValueError("alsoCommand 只適用於 reporter：它說的是「這一顆也可能沒有輸出孔」")
+
+        for name, arg in self.args.items():
+            for dep in arg.depends or ():
+                # 指到不存在的那一格，症狀是前端送出一個永遠是 undefined 的值，
+                # 而積木包收到的是一個空字串——「清單是空的」看起來像服務沒東西
+                # 可回，不像宣告寫錯了。
+                if dep not in self.args:
+                    raise ValueError(f"參數 {name} 的 depends 指到不存在的參數 {dep}")
+                if dep == name:
+                    raise ValueError(f"參數 {name} 的 depends 指到自己")
+                if name in (self.args[dep].depends or ()):
+                    raise ValueError(f"參數 {name} 與 {dep} 的 depends 互相指來指去")
         return self
 
     @property
@@ -490,7 +517,37 @@ class Manifest(Strict):
             if c.key in keys:
                 raise ValueError(f"config key 重複：{c.key}")
             keys.add(c.key)
+
+        self._check_dropdowns()
         return self
+
+    def _check_dropdowns(self) -> None:
+        """同一個下拉來源在不同積木上，`depends` 必須宣告得一模一樣。
+
+        `source` 是**一個函式**，而 `depends` 決定它被呼叫時收到哪些關鍵字參數。
+        兩顆積木對同一個 source 宣告不同的 depends，那個函式就得同時吃得下兩種
+        簽章——真正的後果是端點與 host 之間再也沒有一份「這個 source 收哪些
+        key」的權威清單，於是那條路變成「瀏覽器送什麼，積木包就收到什麼」。
+
+        擋在載入期而不是呼叫期：兩顆積木長什麼樣是宣告的事，不需要等到有人真
+        的去點開其中一顆的下拉才發現。
+        """
+        seen: dict[str, tuple[str, list[str]]] = {}
+        for b in self.blocks:
+            for name, a in b.args.items():
+                if not a.source:
+                    continue
+                depends = sorted(a.depends or [])
+                if a.source not in seen:
+                    seen[a.source] = (f"{b.opcode}.{name}", depends)
+                    continue
+                where, first = seen[a.source]
+                if first != depends:
+                    raise ValueError(
+                        f"下拉來源 {a.source} 的 depends 兩處宣告不一致："
+                        f"{where} 是 {first or '（沒有）'}，"
+                        f"{b.opcode}.{name} 是 {depends or '（沒有）'}"
+                    )
 
     def _check_builtin_boundary(self) -> None:
         """把「內建才有」的宣告擋在積木包外面。
@@ -563,6 +620,21 @@ class Manifest(Strict):
 
     def dropdown_sources(self) -> set[str]:
         return {a.source for b in self.blocks for a in b.args.values() if a.source}
+
+    def dropdown_depends(self) -> dict[str, list[str]]:
+        """每個動態下拉來源要吃哪幾格，`source` → 參數名（已排序）。
+
+        **同一個 source 在不同積木上的 depends 必須一致**（`_check_dropdowns`
+        在載入期擋）。所以這裡合併得起來，也所以 host 有一份「這個 source 收
+        哪些 key」的權威清單可以拿來過濾瀏覽器送上來的東西——沒有它，那個端點
+        就是一條把任意 kwargs 塞進積木包函式的路。
+        """
+        return {
+            a.source: sorted(a.depends or [])
+            for b in self.blocks
+            for a in b.args.values()
+            if a.source
+        }
 
     def config_defaults(self) -> dict[str, Any]:
         return {c.key: c.default for c in self.config if c.has_default}

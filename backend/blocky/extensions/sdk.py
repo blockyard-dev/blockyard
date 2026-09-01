@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, TypeVar
 
-from blocky.errors import ExtensionError, MissingSecretError
+from blocky.errors import ExtensionError, InvalidSecretError, MissingSecretError
 from blocky.extensions.httpclient import redact_url
 
 # 積木包**寫給使用者看的**錯誤。與 `raise ValueError(...)` 的差別在訊息的主詞：
@@ -135,24 +135,51 @@ class Ctx:
         if value:
             return str(value)
 
+        spec = self._secret_spec(key)
+        what = spec.get("label") or key
+        raise MissingSecretError(
+            f"還沒設定「{spec['extName']}」的{what}",
+            action=self._configure_action(spec),
+        )
+
+    def invalid_secret(self, key: str, message: str) -> InvalidSecretError:
+        """金鑰有設定，但**對方說它不對**。回一個帶著同一顆按鈕的錯誤。
+
+        `require_secret` 只管得到「還沒填」，而「填了、但對方拒絕」是同一條路
+        上更常見的一站：token 被 reset 過、複製時少了一個字元、貼成了另一個
+        專案那一把。這兩件事對使用者的意思不同（第二種還多一個「我以為我設定
+        好了」的落差），要去的地方卻**完全一樣**——所以是同一個
+        `configure_secret`，不是一種新的補救動作。
+
+        沒有這個方法，每個包只能自己寫一句「請到右上角『金鑰』重新匯入
+        XXX_API_KEY」的純文字——`openai` 現在就是這樣寫的，而那正是 D28 想要
+        消滅的東西。**訊息由包供，payload 仍然只從 manifest 來**：包說得出
+        「Discord 說這個 token 不對」，說不出「去設定別人的金鑰」。
+
+        回傳而不是 raise，是為了讓呼叫端寫得出 `raise ctx.invalid_secret(...)
+        from e`——原始例外要留在 `__cause__` 裡，那是 traceback 唯一說得出
+        「SDK 到底丟了什麼」的地方。
+        """
+        return InvalidSecretError(message, action=self._configure_action(self._secret_spec(key)))
+
+    def _secret_spec(self, key: str) -> dict[str, Any]:
         spec = self._secrets.get(key)
         if spec is None:
             # 包要一把自己沒宣告過的金鑰。這是包的 bug，不是使用者的問題，
             # 所以主詞要指回包身上，也不給補救按鈕。
             raise ExtensionError(f"這個積木包沒有宣告名為「{key}」的 secret 設定項")
+        return spec
 
-        what = spec.get("label") or key
-        raise MissingSecretError(
-            f"還沒設定「{spec['extName']}」的{what}",
-            action={
-                "kind": "configure_secret",
-                "extId": spec["extId"],
-                "extName": spec["extName"],
-                "key": key,
-                "label": spec.get("label"),
-                "envVar": spec.get("envVar"),
-            },
-        )
+    @staticmethod
+    def _configure_action(spec: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "kind": "configure_secret",
+            "extId": spec["extId"],
+            "extName": spec["extName"],
+            "key": spec["key"],
+            "label": spec.get("label"),
+            "envVar": spec.get("envVar"),
+        }
 
     @property
     def http(self) -> Any:
@@ -169,6 +196,7 @@ class Ctx:
 __all__ = [
     "BlockError",
     "Ctx",
+    "InvalidSecretError",
     "MissingSecretError",
     "block",
     "dropdown",

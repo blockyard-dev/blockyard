@@ -28,6 +28,10 @@ dev = [
     # 包 venv，所以 backend 裝了什麼，每個包都看得到。`openai` 自己宣告了
     # `requirements`，它那支 venv 裡的版本優先，但沒宣告的包會吃到這一份。
     "openai>=3.6,<4",
+    # 同上：`extensions/discord/tests/` 也是用 InProcessHost 直接呼叫的。
+    # 真的執行時它跑在 `~/.blocky/venvs/discord` 自己的直譯器下（§7.6）——
+    # 這個包更需要那份隔離，因為它帶的是 aiohttp 那一整棵樹。
+    "discord.py>=2.3,<3",
     "pytest-asyncio>=0.24",
     "hypothesis>=6.112",
     "ruff>=0.7",

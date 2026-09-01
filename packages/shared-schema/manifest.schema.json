@@ -77,6 +77,21 @@
           "default": null,
           "title": "Options"
         },
+        "depends": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Depends"
+        },
         "field": {
           "default": false,
           "title": "Field",

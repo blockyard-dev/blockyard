@@ -14,10 +14,12 @@
  * 單專案模式（`PROJECT_ID` 固定）：專案列表、切換專案是之後的事。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Play, Square } from 'lucide-react';
+import { Ear, Pause, Play, Square } from 'lucide-react';
 import * as Blockly from 'blockly/core';
 import { ApiError, fetchExtensions, fetchProject, saveProject } from './api/client';
-import { RunSocket, startRun, stopRun } from './api/runs';
+import { RunSocket, listRuns, startRun, stopRun } from './api/runs';
+import { startListening, stopListening } from './api/listeners';
+import type { RunSummary } from './api/runs';
 import { buildProjectToolbox, registerManifests, type Registration } from './blockly/setup';
 import {
   callType,
@@ -221,6 +223,69 @@ export function App() {
   }, [state]);
 
   /**
+   * 監聽（§9、P1 第 4 步第 3 段）。
+   *
+   * **跟「執行」分成兩列，因為它們是兩件事**：執行是「現在跑一次」，監聽是
+   * 「一直聽著，外面發生事情就跑」。同一顆按鈕的話，「停止」到底停的是哪一個
+   * 講不清楚——而使用者會需要「讓它繼續聽著，但把手上這次跑掉的停掉」。
+   *
+   * `hats` 是後端接上了哪幾顆。空陣列代表**這份畫布上沒有 hat**，不是失敗；
+   * 那句話要說出來，否則按下去什麼都沒發生會被當成壞掉。
+   */
+  const [listening, setListening] = useState<{
+    on: boolean;
+    hats: string[];
+    message?: string;
+  }>({ on: false, hats: [] });
+
+  /**
+   * 接上一個 Run 的事件流。
+   *
+   * 綠旗、「點一下就跑」與 **hat 觸發的 Run** 走同一條——後者是後端自己起的
+   * （`listeners.py`），前端只是把 socket 接過去。抽出來是因為它本來就該只有
+   * 一份：編輯器同時只顯示一個 Run（一個 socket、一份高亮）。
+   */
+  const attach = useCallback((run: RunSummary) => {
+    socketRef.current?.close();
+    useRunStore.getState().attach(run);
+    socketRef.current = new RunSocket(run.runId, {
+      onFrame: (frame) => useRunStore.getState().apply(frame),
+      onClose: (clean) => {
+        const s = useRunStore.getState();
+        // Run 還在跑卻斷線：使用者要知道畫面停在半路，而不是以為它跑完了。
+        if (s.status === 'running' || s.status === 'starting') {
+          s.finish(clean ? 'cancelled' : 'error', clean ? undefined : '事件連線中斷');
+        }
+      },
+    });
+  }, []);
+
+  const beginListening = useCallback(async () => {
+    // 監聽跑的也是**已存檔的那一份**（同執行，`runs/manager.py` 開頭那段）。
+    // 不先存的話，使用者剛拉出來的那顆 hat 後端根本看不到，而症狀是「按了監聽
+    // 但它說沒有 hat」。
+    if (!(await save())) {
+      setListening({ on: false, hats: [], message: '存檔沒過，沒有東西可以聽' });
+      return;
+    }
+    try {
+      const listener = await startListening(PROJECT_ID);
+      setListening({
+        on: true,
+        hats: listener.hats,
+        message: listener.hats.length === 0 ? '畫布上沒有事件積木' : undefined,
+      });
+    } catch (error: unknown) {
+      setListening({ on: false, hats: [], message: describe(error) });
+    }
+  }, [save]);
+
+  const endListening = useCallback(async () => {
+    setListening({ on: false, hats: [] });
+    await stopListening(PROJECT_ID).catch(() => {});
+  }, []);
+
+  /**
    * 開一次 Run。`blockId` 給了就是 §5.1 的「點一下就跑」。
    *
    * 綠旗與點擊走同一條路——差別只有多送一個 `blockId`。前一個 Run 先停掉：
@@ -245,23 +310,22 @@ export function App() {
       }
 
       try {
-        const run = await startRun(PROJECT_ID, { blockId });
-        store.attach(run);
-        socketRef.current = new RunSocket(run.runId, {
-          onFrame: (frame) => useRunStore.getState().apply(frame),
-          onClose: (clean) => {
-            const s = useRunStore.getState();
-            // Run 還在跑卻斷線：使用者要知道畫面停在半路，而不是以為它跑完了。
-            if (s.status === 'running' || s.status === 'starting') {
-              s.finish(clean ? 'cancelled' : 'error', clean ? undefined : '事件連線中斷');
-            }
-          },
-        });
+        attach(await startRun(PROJECT_ID, { blockId }));
       } catch (error: unknown) {
         store.fail(describe(error));
       }
+
+      // **只有綠旗會順手把監聽打開，「點一下就跑」不會。**
+      //
+      // 兩件事分成兩列是為了讓它們停得開，而綠旗順手打開監聽是因為「按下執行」
+      // 對一個畫布上有 hat 的人就是「這東西開始運作」。**但點一顆 reporter 不是
+      // 那個意思**——那是 §5.1 的探索動作（「這顆積木現在會算出什麼」），跟「讓
+      // 這份流程常駐起來」沒有關係。分不開的話，每點一次積木就去接一次事件來源，
+      // 而那在有 hat 的專案上是一條真的長連線。
+      if (blockId !== undefined || !useRunStore.getState().runId) return;
+      void beginListening();
     },
-    [save],
+    [attach, beginListening, save],
   );
 
   const handleStop = useCallback(() => {
@@ -425,6 +489,47 @@ export function App() {
    * 的 gesture 對欄位發的是 `doFieldClick`，不發 CLICK 事件。
    */
   /**
+   * 監聽中：把後端自己起的那些 Run 接過來。
+   *
+   * hat 觸發的 Run **前端沒有那個 runId**——它是外面發生一件事之後由後端起的。
+   * 不問就不知道它存在，而症狀是「Discord 有訊息進來、後端真的跑了、編輯器
+   * 一片安靜」。§6.1 的事件流是 per-run 的 WebSocket，所以這裡只能用問的。
+   *
+   * 輪詢而不是再開一條 WebSocket：一條「有新的 Run 了」的通道要先回答它屬於
+   * 哪個專案、斷線怎麼補、backlog 留多久——那三題是 P2 的 Trigger Manager 與
+   * §6.3 落地要一起回答的。1.5 秒的輪詢在那之前夠用，而且壞掉的樣子是「慢了
+   * 一秒」，不是「少了一則」。
+   */
+  useEffect(() => {
+    if (!listening.on || listening.hats.length === 0) return;
+    let cancelled = false;
+    let latest: string | null = null;
+
+    const tick = async () => {
+      try {
+        const runs = await listRuns();
+        // `listRuns` 新的在前。只接自己這個專案、由這次接上的那些 hat 觸發的。
+        const found = runs.find(
+          (r) => r.projectId === PROJECT_ID && listening.hats.includes(r.trigger),
+        );
+        if (!cancelled && found && found.runId !== latest) {
+          latest = found.runId;
+          attach(found);
+        }
+      } catch {
+        // 後端暫時答不出來不該讓監聽看起來像壞了：下一輪再問。
+      }
+    };
+
+    void tick();
+    const timer = window.setInterval(() => void tick(), 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [attach, listening.on, listening.hats]);
+
+  /**
    * 執行前的靜態檢查（§4.5、§4.6、§8.5）。載入完先跑一次，之後每次編輯節流重跑。
    *
    * `isUiEvent` 的那些（點選、捲動、縮放）跳過：它們改的是視角不是積木，而
@@ -504,6 +609,28 @@ export function App() {
             <button type="button" className="button" onClick={handleStop} disabled={!running}>
               <Square size={13} strokeWidth={2.5} fill="currentColor" /> 停止
             </button>
+
+            {/* 第二列：監聽。跟執行分開，因為「跑一次」與「一直聽著」是兩件
+                事，而使用者會需要「讓它繼續聽著，但把手上這次跑掉的停掉」。 */}
+            <span className="actions-divider" aria-hidden="true" />
+            {listening.on ? (
+              <button type="button" className="button" onClick={() => void endListening()}>
+                <Pause size={13} strokeWidth={2.5} fill="currentColor" /> 暫停監聽
+              </button>
+            ) : (
+              <button type="button" className="button" onClick={() => void beginListening()}>
+                <Ear size={14} strokeWidth={2.5} /> 監聽
+              </button>
+            )}
+            {listening.on && listening.hats.length > 0 && (
+              <span className="listen-status listen-status-on">
+                <span className="listen-dot" aria-hidden="true" />
+                聽著 {listening.hats.length} 顆事件積木
+              </span>
+            )}
+            {listening.message && (
+              <span className="listen-status listen-status-idle">{listening.message}</span>
+            )}
           </div>
         )}
         {/* 右上角的全域入口（D28）：不綁定某個專案，載入中／出錯時也該進得去。 */}

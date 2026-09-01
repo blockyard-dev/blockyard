@@ -206,3 +206,48 @@ async def test_no_client_until_someone_asks(tmp_path) -> None:
     ctx = contexts.open("p11")
     await host.call("p11.go", {}, ctx.token)
     assert host._loaded["p11"].http is None
+
+
+async def test_載到一半失敗時前面那幾個包要被卸載(tmp_path) -> None:
+    """**這一題釘住的是一個不會在失敗那一次出現的症狀。**
+
+    `open_registry` 一個一個載，而每個包是一個子行程（§7.6）。在它回傳之前，
+    握得到那些子行程的**只有那個還沒交出去的 registry**——中途失敗不收的話，
+    先載好的那幾個會活到後端關掉為止，而使用者看到的是**後來某一次無關的呼叫**
+    拿到「子行程意外結束」。錯誤與症狀隔著好幾分鐘與好幾個動作，是最難查的那種。
+
+    用 `InProcessHost` 驗（子行程數量在測試裡量不準）：`on_unload` 有沒有跑，
+    就是「有沒有被收拾」這件事在這一層的樣子。
+    """
+    from blocky.extensions import open_registry
+
+    marker = tmp_path / "unloaded.txt"
+
+    good = tmp_path / "aaa"
+    good.mkdir()
+    (good / "manifest.yaml").write_text(
+        MANIFEST.format(id="aaa", permissions="", blocks=ONE_BLOCK), encoding="utf-8"
+    )
+    (good / "main.py").write_text(
+        "from blocky import block, on_unload\n\n"
+        "@block('aaa.go')\n"
+        "async def go(ctx):\n"
+        "    return None\n\n"
+        "@on_unload\n"
+        "async def bye(ctx):\n"
+        f"    open({str(marker)!r}, 'w').write('yes')\n",
+        encoding="utf-8",
+    )
+
+    # 排在後面（`only` 的順序就是載入順序），而且它一定載不起來。
+    broken = tmp_path / "zzz"
+    broken.mkdir()
+    (broken / "manifest.yaml").write_text(
+        MANIFEST.format(id="zzz", permissions="", blocks=ONE_BLOCK), encoding="utf-8"
+    )
+    (broken / "main.py").write_text("this is not python\n", encoding="utf-8")
+
+    with pytest.raises(ExtensionError):
+        await open_registry(tmp_path, only=["aaa", "zzz"], host="inprocess")
+
+    assert marker.exists(), "先載好的 aaa 沒有被卸載"

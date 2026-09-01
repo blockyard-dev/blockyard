@@ -55,6 +55,39 @@ describe('fetchDropdownOptions', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
+  it('沒有 args 就不帶 body', async () => {
+    const fn = stubFetch([{ label: 'GET', value: 'GET' }]);
+    await fetchDropdownOptions('http', 'cache-g', { args: {} });
+    expect(fn).toHaveBeenCalledWith('/api/extensions/http/dropdown/cache-g', { method: 'POST' });
+  });
+
+  it('有 args 就送進 body', async () => {
+    const fn = stubFetch([{ label: '#一般', value: '10' }]);
+    await fetchDropdownOptions('discord', 'cache-h', { args: { server: '1' } });
+    expect(fn).toHaveBeenCalledWith('/api/extensions/discord/dropdown/cache-h', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ args: { server: '1' } }),
+    });
+  });
+
+  it('args 不同就是不同的快取', async () => {
+    // **這一題釘住的是「樣子」而不是「值」。** 少了它，選 A 伺服器、再選 B，
+    // B 的頻道下拉會在 60 秒內拿到 A 的頻道——那份清單看起來完全正常，只是
+    // 屬於另一個伺服器，而使用者選中的值一直都是他自己點的那一個。
+    const fn = stubFetch([{ label: '#一般', value: '10' }]);
+    await fetchDropdownOptions('discord', 'cache-i', { args: { server: 'A' } });
+    await fetchDropdownOptions('discord', 'cache-i', { args: { server: 'B' } });
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('args 的 key 順序不影響快取（同一次查詢就是同一格）', async () => {
+    const fn = stubFetch([{ label: '#一般', value: '10' }]);
+    await fetchDropdownOptions('discord', 'cache-j', { args: { a: '1', b: '2' } });
+    await fetchDropdownOptions('discord', 'cache-j', { args: { b: '2', a: '1' } });
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('回應不是 2xx 就丟出帶著端點與狀態碼的錯誤', async () => {
     vi.stubGlobal(
       'fetch',

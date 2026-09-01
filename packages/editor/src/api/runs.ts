@@ -92,6 +92,19 @@ export async function startRun(
   return (await res.json()) as RunSummary;
 }
 
+/**
+ * 目前所有的 Run，新的在前。
+ *
+ * 監聽（`api/listeners.ts`）要用：hat 觸發的 Run 是**後端自己起的**，前端沒有
+ * 那個 runId，不問就不知道它存在——症狀會是「Discord 有訊息進來、後端真的跑了、
+ * 而編輯器一片安靜」。
+ */
+export async function listRuns(): Promise<RunSummary[]> {
+  const res = await fetch('/api/runs');
+  if (!res.ok) throw await toApiError(res, `GET /api/runs → ${res.status}`);
+  return (await res.json()) as RunSummary[];
+}
+
 /** §5.5 的外部停止。202 是「收到了」，不是「已經停了」——見後端那段註解。 */
 export async function stopRun(runId: string): Promise<void> {
   const res = await fetch(`/api/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' });

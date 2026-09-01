@@ -18,7 +18,12 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from blocky.errors import BlockyError, ExtensionError
-from blocky.extensions.boundary import normalize_args, validate_dropdown_options, validate_return
+from blocky.extensions.boundary import (
+    normalize_args,
+    normalize_dropdown_args,
+    validate_dropdown_options,
+    validate_return,
+)
 from blocky.extensions.host import CallContexts, HostChannel
 from blocky.extensions.manifest import BlockSpec, ExtensionSource, Manifest
 from blocky.extensions.rpc import JsonRpcPeer, PeerClosed, RpcError
@@ -156,8 +161,20 @@ class SubprocessHost:
         except RpcError as e:
             raise BlockyError.from_dict(e.payload) from None
         except PeerClosed:
+            # **先問是不是我們自己砍的。** Run 結束或被停止時會 `unload`，而
+            # `unload` 會砍掉子行程——如果那一刻還有呼叫在等回應（積木包正卡在
+            # 一個不回應的網站上），它拿到的就是 PeerClosed。那不是「積木包壞
+            # 掉」，主詞完全不同：使用者做的是「停止」，看到的卻是一句指著積木
+            # 包的錯誤，於是他會去查那個包，而那裡沒有東西可以查。
+            if self._workers.get(opcode.split(".", 1)[0]) is not worker:
+                raise ExtensionError(
+                    f"{_where(manifest, spec)} 還沒跑完，這次執行就結束了",
+                    block_id=block_id,
+                    hint="積木包在 Run 結束時卸載。要讓它跑完就別在中途停止",
+                ) from None
             raise ExtensionError(
-                f"{_where(manifest, spec)} 執行時子行程意外結束", block_id=block_id
+                f"{_where(manifest, spec)} 執行時子行程意外結束{_why_gone(worker)}",
+                block_id=block_id,
             ) from None
         finally:
             if ctx is not None:
@@ -165,17 +182,27 @@ class SubprocessHost:
 
         return validate_return(manifest, spec, result, block_id=block_id)
 
-    async def dropdown(self, ext_id: str, source: str, ctx_token: str) -> list[dict[str, Any]]:
+    async def dropdown(
+        self, ext_id: str, source: str, ctx_token: str, args: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         worker = self._workers.get(ext_id)
         if worker is None:
             raise ExtensionError(f'積木包「{ext_id}」還沒載入')
         full = f"{ext_id}.{source}"
+        # 過濾在 parent 端做（child 端也會再做一次，見 `subprocess_worker.py`）
+        # ——同 `normalize_args`：兩邊都守，因為 child 收到的東西不一定只來自
+        # 這個 parent，而 parent 不該把沒過濾的東西送出去。
+        clean = normalize_dropdown_args(self.sources[ext_id].manifest, source, args)
         try:
-            result = await worker.peer.call("dropdown", {"token": ctx_token, "source": source})
+            result = await worker.peer.call(
+                "dropdown", {"token": ctx_token, "source": source, "args": clean}
+            )
         except RpcError as e:
             raise BlockyError.from_dict(e.payload) from None
         except PeerClosed:
-            raise ExtensionError(f"下拉來源 {full} 執行時子行程意外結束") from None
+            raise ExtensionError(
+                f"下拉來源 {full} 執行時子行程意外結束{_why_gone(worker)}"
+            ) from None
         return validate_dropdown_options(result, full)
 
     async def start_trigger(
@@ -221,6 +248,24 @@ class SubprocessHost:
         sink = self._trigger_sinks.get(params["token"])
         if sink is not None:
             await sink(params["payload"])
+
+
+def _why_gone(worker: _Worker) -> str:
+    """子行程死掉時，把它**怎麼**死的接在訊息後面。
+
+    「子行程意外結束」這句話對查問題的人是零資訊：它沒說是自己爆掉、被信號砍
+    掉，還是乾脆正常退出。三種的成因完全不同（積木包 import 期炸掉 / 被 OOM
+    killer 或 Ctrl-C 砍 / 協定被 stdout 上的雜訊打斷），而現場往往不重現——
+    所以要在死掉的當下就把 returncode 記下來，不是等下次再說。
+
+    負數的 returncode 在 POSIX 是「被第 n 號信號終止」。
+    """
+    code = worker.process.returncode
+    if code is None:
+        return "（行程還在，是連線斷了）"
+    if code < 0:
+        return f"（被信號 {-code} 終止）"
+    return f"（結束碼 {code}）"
 
 
 def _where(manifest: Manifest, spec: BlockSpec) -> str:

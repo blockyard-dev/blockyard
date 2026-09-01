@@ -15,7 +15,12 @@ import inspect
 from typing import Any, Awaitable, Callable
 
 from blocky.errors import BlockyError, ExtensionError
-from blocky.extensions.boundary import normalize_args, validate_dropdown_options, validate_return
+from blocky.extensions.boundary import (
+    normalize_args,
+    normalize_dropdown_args,
+    validate_dropdown_options,
+    validate_return,
+)
 from blocky.extensions.host import CallContext, CallContexts, HostChannel
 from blocky.extensions.httpclient import new_client
 from blocky.extensions.loading import (
@@ -23,6 +28,7 @@ from blocky.extensions.loading import (
     check_net_permission,
     collect_exports,
     import_extension_module,
+    trigger_error_text,
     unimport_extension_module,
 )
 from blocky.extensions.manifest import BlockSpec, ExtensionSource, Manifest
@@ -158,7 +164,9 @@ class InProcessHost:
         # 出：驗證（§7.5）
         return validate_return(loaded.manifest, spec, result, block_id=block_id)
 
-    async def dropdown(self, ext_id: str, source: str, ctx_token: str) -> list[dict[str, Any]]:
+    async def dropdown(
+        self, ext_id: str, source: str, ctx_token: str, args: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         loaded = self._loaded.get(ext_id)
         if loaded is None:
             raise ExtensionError(f'積木包「{ext_id}」還沒載入')
@@ -167,8 +175,9 @@ class InProcessHost:
         if fn is None:
             raise ExtensionError(f"積木包「{ext_id}」沒有下拉來源 {source}")
 
+        clean = normalize_dropdown_args(loaded.manifest, source, args)
         ctx = self.contexts.get(ctx_token)
-        options = await self._invoke(fn, self._ctx(loaded, ctx), {}, what=full)
+        options = await self._invoke(fn, self._ctx(loaded, ctx), clean, what=full)
         return validate_dropdown_options(options, full)
 
     async def start_trigger(
@@ -191,6 +200,12 @@ class InProcessHost:
             try:
                 async for payload in fn(ctx):
                     await sink(payload)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as e:
+                # 沒有人在 await 這個 task，所以例外不說出來就是消失
+                # （見 `trigger_error_text`）。
+                ctx.log(trigger_error_text(opcode, loaded.manifest.name, e), "error")
             finally:
                 self.contexts.close(ctx_obj.token)
 

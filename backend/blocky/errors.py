@@ -32,9 +32,9 @@ class BlockyError(Exception):
         # 是給 UI 讀的一個結構——「還沒設定金鑰」那句話的正確結局是一顆把你送
         # 到設定畫面、而且欄位已經填好的按鈕，不是要使用者自己去記變數名。
         #
-        # **只有 host 產得出來**（`Ctx.require_secret`），積木包沒有手刻的路徑：
-        # payload 裡的 extId／envVar 是從 manifest 讀的，不是包自己說的。前端
-        # 另外只認白名單內的 `kind`。
+        # **只有 host 產得出來**（`Ctx.require_secret` / `Ctx.invalid_secret`），
+        # 積木包沒有手刻的路徑：payload 裡的 extId／envVar 是從 manifest 讀的，
+        # 不是包自己說的——積木包供的只有那句話。前端另外只認白名單內的 `kind`。
         self.action = action
 
     def to_dict(self) -> dict[str, Any]:
@@ -150,6 +150,21 @@ class MissingSecretError(ExtensionError):
     code = "missing_secret"
 
 
+class InvalidSecretError(ExtensionError):
+    """金鑰**有**設定，但對方說它不對（§12.1、D28）。
+
+    與 `MissingSecretError` 分開一個 `code`，因為使用者要做的事不同：那邊是
+    「你還沒填」，這邊是「你填的那一把被對方拒絕了」——第二種還多一個「我以為
+    我已經設定好了」的心理落差，訊息要先把這件事講掉。
+
+    action 的 payload 兩者一模一樣（都從 manifest 讀），所以**同一顆按鈕**兩邊
+    都按得下去。這是它們共用 `configure_secret` 而不是各自發明一種補救動作的
+    原因：使用者要去的是同一個畫面、要換的是同一格。
+    """
+
+    code = "invalid_secret"
+
+
 _BY_CODE: dict[str, type[BlockyError]] = {
     cls.code: cls
     for cls in (
@@ -163,6 +178,7 @@ _BY_CODE: dict[str, type[BlockyError]] = {
         UnknownBlockError,
         ExtensionError,
         MissingSecretError,
+        InvalidSecretError,
     )
 }
 

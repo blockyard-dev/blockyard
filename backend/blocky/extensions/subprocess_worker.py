@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from blocky.errors import BlockyError, ExtensionError
-from blocky.extensions.boundary import ensure_transportable
+from blocky.extensions.boundary import ensure_transportable, normalize_dropdown_args
 from blocky.extensions.httpclient import new_client
 from blocky.extensions.loading import (
     Exports,
@@ -27,6 +27,7 @@ from blocky.extensions.loading import (
     check_net_permission,
     collect_exports,
     import_extension_module,
+    trigger_error_text,
     unimport_extension_module,
 )
 from blocky.extensions.manifest import ExtensionSource, discover
@@ -151,8 +152,11 @@ class Worker:
         fn = loaded.exports.dropdowns.get(full)
         if fn is None:
             raise ExtensionError(f"積木包「{loaded.source.id}」沒有下拉來源 {params['source']}")
+        clean = normalize_dropdown_args(
+            loaded.source.manifest, params["source"], params.get("args")
+        )
         ctx = self._ctx(loaded, params.get("token", ""))
-        return await self._invoke(fn, ctx, {}, what=full)
+        return await self._invoke(fn, ctx, clean, what=full)
 
     async def _on_start_trigger(self, params: dict[str, Any]) -> dict[str, Any]:
         loaded = self._require_loaded()
@@ -164,8 +168,15 @@ class Worker:
         ctx = self._ctx(loaded, token)
 
         async def pump() -> None:
-            async for payload in fn(ctx):
-                await ctx.emit(payload)
+            try:
+                async for payload in fn(ctx):
+                    await ctx.emit(payload)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as e:
+                # 與 in-process 同一句話（`trigger_error_text`）。這裡多一層
+                # 理由：例外留在 child 的話，parent 端連「它死了」都不知道。
+                ctx.log(trigger_error_text(opcode, loaded.source.manifest.name, e), "error")
 
         # 不等它跑完就回 ack——trigger 本來就是長駐的。
         self.trigger_tasks[token] = asyncio.create_task(pump())

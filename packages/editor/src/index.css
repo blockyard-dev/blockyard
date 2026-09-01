@@ -131,6 +131,53 @@ body,
   color: #fff;
 }
 
+/* 執行與監聽是兩列控制，中間要看得出斷開——不然四顆按鈕會讀成同一組，
+   而「停止」停的是哪一個就靠猜。 */
+.actions-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.15rem 0.25rem;
+  background: var(--line);
+}
+
+.listen-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.listen-status-on {
+  color: #2f9e57;
+}
+
+/* 「聽著」跟「什麼都沒發生」在畫面上長得太像，所以給它一個會跳的點——
+   靜態的綠字會被當成一句說明，不是一個狀態。 */
+.listen-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: currentColor;
+  animation: listen-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes listen-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listen-dot {
+    animation: none;
+  }
+}
+
 .run-status {
   font-size: 0.8125rem;
   color: var(--muted);
