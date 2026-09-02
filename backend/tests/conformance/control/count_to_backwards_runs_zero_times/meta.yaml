@@ -1,0 +1,9 @@
+title: 起點比終點大就跑 0 次——沒有「每次增加」那一格，+1 走不到比自己小的終點
+spec: §4.4 control
+tags:
+- control
+expect:
+  status: ok
+  logs:
+  - 前
+  - 後

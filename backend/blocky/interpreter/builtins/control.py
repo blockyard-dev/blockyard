@@ -69,6 +69,44 @@ async def _forever(t: Thread, b: Block) -> None:
         await t.exec_stack(body)
 
 
+@command("control.count_to")
+async def _count_to(t: Thread, b: Block) -> None:
+    """`讓 (i) 從 (1) 數到 (10)`——**兩端都算**。
+
+    兩端與次數都在進入迴圈前求值一次，與 `repeat` 一致（§4.4）：迴圈體改掉
+    `到` 那一格讀的變數，不該改變這一圈還要跑幾次。
+
+    **起點比終點大就跑 0 次。** 沒有 `每次增加` 那一格（實測回饋明講不要），
+    所以步伐永遠是 +1，而 +1 走不到一個比自己小的終點——這與「對一個空清單
+    的每一項」是同一個答案，也是這顆積木唯一講得出理由的答案。要倒數就把
+    迴圈體裡的 `i` 換成 `11 − i`，那件事畫面上看得見。
+
+    計數變數與 `for_each` 的迴圈變數是**同一層**（thread-local 的第 2 層，
+    D29）：一層撐完整個迴圈、每一輪覆寫那一格，所以巢狀深度等於畫面上的巢狀
+    深度，而不是跑幾圈就疊幾層。宣告裡的 `scope: body` 已經讓存檔期擋下
+    `設定 [i]`、讓迴圈外面讀 `i` 拿到一句指名是哪顆積木綁的錯誤——那些都不必
+    在這裡再寫一次。
+
+    值是 double（D15），所以 `從 1 數到 3.5` 唸到 3 就停：判斷是「還沒超過
+    終點」，不是「等於終點」。
+    """
+    name = t.field(b, "name")
+    start = await t.number(b, "start", default=1)
+    end = await t.number(b, "end", default=0)
+    body = t.stack(b, "body")
+
+    t.scope.thread.push({})
+    try:
+        i = float(start)
+        while i <= float(end):
+            t.scope.thread.assign(name, i)
+            t.interp.sink.emit("var.set", threadId=t.id, name=name, value=i)
+            await t.exec_stack(body)
+            i += 1
+    finally:
+        t.scope.thread.pop()
+
+
 @command("control.for_each")
 async def _for_each(t: Thread, b: Block) -> None:
     name = t.field(b, "name")

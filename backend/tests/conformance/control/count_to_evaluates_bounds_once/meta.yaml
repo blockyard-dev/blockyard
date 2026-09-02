@@ -1,0 +1,10 @@
+title: 兩端在進入迴圈前求值一次：迴圈體改掉終點讀的變數，不改變這一圈還要跑幾次
+spec: §4.4 control
+tags:
+- control
+expect:
+  status: ok
+  logs:
+  - '1'
+  - '2'
+  - '3'

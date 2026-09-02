@@ -1,0 +1,34 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "var.set", "threadId": "t1", "name": "i", "value": 1.0}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "thread.start", "threadId": "t2", "scriptId": "sc_2"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_6"}
+{"op": "var.set", "threadId": "t2", "name": "i", "value": 10.0}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "A1", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "i", "value": 2.0}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_7"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_8"}
+{"op": "log", "threadId": "t2", "level": "info", "text": "B10", "blockId": "blk_8"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_8"}
+{"op": "var.set", "threadId": "t2", "name": "i", "value": 11.0}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "log", "threadId": "t1", "level": "info", "text": "A2", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_7"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_8"}
+{"op": "log", "threadId": "t2", "level": "info", "text": "B11", "blockId": "blk_8"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_8"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_6"}
+{"op": "thread.end", "threadId": "t2", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

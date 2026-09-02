@@ -1,0 +1,14 @@
+title: 計數變數只在迴圈體裡有效，與 for_each 的迴圈變數是同一層（D29）
+spec: §5.4 綁定的作用範圍（D29）
+tags:
+- control
+- variables
+- D29
+expect:
+  status: error
+  logs:
+  - '1'
+  - '2'
+  error:
+    code: undefined_variable
+    message_contains: 只在那顆「讓 i 從 ⋯ 數到 ⋯」裡面有效

@@ -1,0 +1,21 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "var.set", "threadId": "t1", "name": "i", "value": 1.0}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4", "value": 1.0}
+{"op": "log", "threadId": "t1", "level": "info", "text": "1", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3"}
+{"op": "var.set", "threadId": "t1", "name": "i", "value": 2.0}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4", "value": 2.0}
+{"op": "log", "threadId": "t1", "level": "info", "text": "2", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_6", "error": {"type": "UndefinedVariableError", "code": "undefined_variable", "message": "變數「i」只在那顆「讓 i 從 ⋯ 數到 ⋯」裡面有效", "blockId": "blk_6", "hint": "綁進來的名字只在那顆積木的嘴巴裡看得見。要在外面用，先用「設定」把值存起來。"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

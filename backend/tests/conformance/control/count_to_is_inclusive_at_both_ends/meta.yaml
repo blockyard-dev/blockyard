@@ -1,0 +1,14 @@
+title: 從 1 數到 3 唸出 1 2 3；起點不是 1 也一樣（從 2 數到 5 = 2 3 4 5）
+spec: §4.4 control
+tags:
+- control
+expect:
+  status: ok
+  logs:
+  - '1'
+  - '2'
+  - '3'
+  - '2'
+  - '3'
+  - '4'
+  - '5'

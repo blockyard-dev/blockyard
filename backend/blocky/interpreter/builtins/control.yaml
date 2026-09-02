@@ -63,6 +63,26 @@ palette:
     args:
       body: { type: stack }
 
+  # 「重複 10 次」數不出**現在是第幾次**，而那是這顆積木最常見的下一句：
+  # 要編號、要 `${i}` 進網址、要「第 3 次的時候換一個做法」。原本只能用
+  # `設定 [i] 為 0` + `改變 [i] 增加 1` 三顆積木湊，而那個 `i` 寫的是全域層
+  # ——兩條腳本各跑一次就互相踩（D29 修 `for_each` 時的同一個 bug，往回一層）。
+  #
+  # 計數變數走的是與 `for_each` **完全相同**的宣告（`binds` + `scope: body`），
+  # 所以 §5.4 的四層、D29 的作用範圍、存檔期擋 `設定 [i]`——三件事一行都不必
+  # 再寫。這正是 D21 要的形狀。
+  - opcode: count_to
+    type: command
+    text: "讓 %(name) 從 %(start) 數到 %(end)"
+    args:
+      name: { type: variable, default: "i", label: "計數變數", binds: true, scope: body }
+      # 兩端都算：`從 1 數到 10` 就是 1…10 十次。中文的「數到」講的是唸出來的
+      # 最後一個數字，而 `range(1, 10)` 那種右開區間在畫面上沒有任何東西說得
+      # 出來——使用者看到的只有 1 與 10。
+      start: { type: number, default: 1 }
+      end: { type: number, default: 10 }
+      body: { type: stack }
+
   - opcode: for_each
     type: command
     text: "對 %(list) 的每一項 %(name)"

@@ -1,0 +1,162 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    },
+    {
+      "id": "sc_2",
+      "top": "blk_5",
+      "x": 0,
+      "y": 200
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "control.count_to",
+      "parent": "blk_1",
+      "next": null,
+      "inputs": {
+        "start": {
+          "kind": "literal",
+          "value": 1
+        },
+        "end": {
+          "kind": "literal",
+          "value": 2
+        },
+        "body": {
+          "kind": "stack",
+          "id": "blk_3"
+        }
+      },
+      "fields": {
+        "name": "i"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "control.wait",
+      "parent": "blk_2",
+      "next": "blk_4",
+      "inputs": {
+        "seconds": {
+          "kind": "literal",
+          "value": 0
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "debug.log",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "template",
+          "value": "A${i}",
+          "refs": [
+            {
+              "root": "i",
+              "path": []
+            }
+          ],
+          "whole": false
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_6",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "control.count_to",
+      "parent": "blk_5",
+      "next": null,
+      "inputs": {
+        "start": {
+          "kind": "literal",
+          "value": 10
+        },
+        "end": {
+          "kind": "literal",
+          "value": 11
+        },
+        "body": {
+          "kind": "stack",
+          "id": "blk_7"
+        }
+      },
+      "fields": {
+        "name": "i"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "control.wait",
+      "parent": "blk_6",
+      "next": "blk_8",
+      "inputs": {
+        "seconds": {
+          "kind": "literal",
+          "value": 0
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "debug.log",
+      "parent": "blk_7",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "template",
+          "value": "B${i}",
+          "refs": [
+            {
+              "root": "i",
+              "path": []
+            }
+          ],
+          "whole": false
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    }
+  }
+}

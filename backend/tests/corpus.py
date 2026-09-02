@@ -812,6 +812,103 @@ case(
     tags=["threads", "errors"],
 )
 
+# ---- `讓 (i) 從 (1) 數到 (10)` ----
+
+case(
+    "control/count_to_is_inclusive_at_both_ends",
+    "從 1 數到 3 唸出 1 2 3；起點不是 1 也一樣（從 2 數到 5 = 2 3 4 5）",
+    "§4.4 control",
+    one(
+        blk("control.count_to", fields={"name": "i"}, start=1, end=3, body=Stack([
+            log(var("i")),
+        ])),
+        blk("control.count_to", fields={"name": "n"}, start=2, end=5, body=Stack([
+            log(var("n")),
+        ])),
+    ),
+    # 值是 double（D15），所以唸出來的是 "1" 不是 "1.0"——那一段本來就有測試，
+    # 但這顆積木是它第一個**每一圈都**經過的消費者。
+    {"status": "ok", "logs": ["1", "2", "3", "2", "3", "4", "5"]},
+    tags=["control"],
+)
+
+case(
+    "control/count_to_backwards_runs_zero_times",
+    "起點比終點大就跑 0 次——沒有「每次增加」那一格，+1 走不到比自己小的終點",
+    "§4.4 control",
+    one(
+        log("前"),
+        blk("control.count_to", fields={"name": "i"}, start=10, end=1, body=Stack([
+            log(var("i")),
+        ])),
+        log("後"),
+    ),
+    {"status": "ok", "logs": ["前", "後"]},
+    tags=["control"],
+)
+
+case(
+    "control/count_to_evaluates_bounds_once",
+    "兩端在進入迴圈前求值一次：迴圈體改掉終點讀的變數，不改變這一圈還要跑幾次",
+    "§4.4 control",
+    one(
+        blk("data.set", fields={"name": "上限"}, value=3),
+        blk("control.count_to", fields={"name": "i"}, start=1, end=var("上限"), body=Stack([
+            log(var("i")),
+            # 迴圈裡把上限拉高。每一圈重算的話這一題永遠不會停。
+            blk("data.change", fields={"name": "上限"}, value=1),
+        ])),
+    ),
+    {"status": "ok", "logs": ["1", "2", "3"]},
+    tags=["control"],
+)
+
+case(
+    "control/count_to_var_dies_with_the_loop",
+    "計數變數只在迴圈體裡有效，與 for_each 的迴圈變數是同一層（D29）",
+    "§5.4 綁定的作用範圍（D29）",
+    one(
+        blk("control.count_to", fields={"name": "i"}, start=1, end=2, body=Stack([
+            log(var("i")),
+        ])),
+        log(var("i")),
+    ),
+    {
+        "status": "error",
+        "logs": ["1", "2"],
+        "error": {
+            "code": "undefined_variable",
+            "message_contains": "只在那顆「讓 i 從 ⋯ 數到 ⋯」裡面有效",
+        },
+    },
+    tags=["control", "variables", "D29"],
+)
+
+case(
+    "control/count_to_vars_do_not_collide_across_threads",
+    "兩條 thread 各跑一個同名計數變數的迴圈、迴圈體裡有 await → 互不干擾",
+    "§5.4 綁定的作用範圍（D29）",
+    build(scripts=[
+        hat(
+            blk("control.count_to", fields={"name": "i"}, start=1, end=2, body=Stack([
+                # 讓出 event loop：沒有這個 await 兩條 thread 不會交錯，
+                # 這一題就永遠是綠的（而 bug 還在）。
+                blk("control.wait", seconds=0),
+                log(Tpl("A${i}")),
+            ])),
+        ),
+        hat(
+            blk("control.count_to", fields={"name": "i"}, start=10, end=11, body=Stack([
+                blk("control.wait", seconds=0),
+                log(Tpl("B${i}")),
+            ])),
+        ),
+    ]),
+    # 計數變數寫全域時這裡會是 A10 / B10 / A11 / B11。
+    {"status": "ok", "logs": ["A1", "B10", "A2", "B11"]},
+    tags=["control", "threads", "variables", "D29"],
+)
+
 case(
     "control/for_each_snapshots_list",
     "for each 迭代前先複製：迴圈體改原清單不影響迭代範圍",

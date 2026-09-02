@@ -1,0 +1,14 @@
+title: 兩條 thread 各跑一個同名計數變數的迴圈、迴圈體裡有 await → 互不干擾
+spec: §5.4 綁定的作用範圍（D29）
+tags:
+- control
+- threads
+- variables
+- D29
+expect:
+  status: ok
+  logs:
+  - A1
+  - B10
+  - A2
+  - B11
