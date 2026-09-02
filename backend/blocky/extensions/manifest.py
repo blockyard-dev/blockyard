@@ -131,11 +131,15 @@ class ArgSpec(Strict):
     # ——「這個名字看得到多遠」——而 §5.4 的四層剛好就是它的值域：
     #
     #   `<stack 參數名>`  那一疊（`for_each` 是 `body`、`try_catch` 是 `catch`）
-    #   `frame`           所在的**函式體**（第 1 層，§16 Q6 的 `本次呼叫`）
+    #   `frame`           **最近的那一層 body**（第 1 層，§16 Q6 的 `這次`）：
+    #                     在函式定義底下是那次呼叫，在 hat 底下是這條腳本這一次
     #   沒寫              全域層（第 3 層，`data.set`）
     #
-    # `frame` 是保留字而不是「某個叫 frame 的參數」，因為函式體**不是一疊
-    # stack**：它掛在定義積木的 `next` 上，指不到。同一顆積木上真的有一格叫
+    # 那兩個答案不是兩條規則，是 D29 那句「範圍 = 綁它那顆積木的 body」套到
+    # 不同的外層積木上——同一份文件早就說過 hat 的 body 是整條腳本。
+    #
+    # `frame` 是保留字而不是「某個叫 frame 的參數」，因為那條 body **不是一疊
+    # stack**：它掛在外層積木的 `next` 上，指不到。同一顆積木上真的有一格叫
     # `frame` 時載入期會擋（見 `BlockSpec._check`）——那是唯一會撞的情形。
     #
     # 分辨這兩種綁定端**只有宣告答得出來**：`data.set.name` 與
@@ -338,7 +342,7 @@ class ConfigSpec(Strict):
         return "default" in self.model_fields_set
 
 
-#: `ArgSpec.scope` 的保留值：範圍是所在的函式體（§5.4 第 1 層、§16 Q6）。
+#: `ArgSpec.scope` 的保留值：範圍是最近的那一層 body（§5.4 第 1 層、§16 Q6）。
 SCOPE_FRAME = "frame"
 
 

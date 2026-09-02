@@ -257,16 +257,9 @@ describe('函式分類是動態的（§4.6、§8.5）', () => {
     expect(contents.some((c) => c.type === 'data.get')).toBe(false);
   });
 
-  it('沒有函式時分類裡只有按鈕與那兩顆非動態積木', () => {
-    // `回傳` 與 `本次呼叫` 都只有在函式體裡才合法（存檔期擋），但它們照樣上架
-    // ——不上架的話，使用者建了函式之後得先發現「原來要去別的地方找」。工具箱
-    // 列的是「這個命名空間有什麼」，合不合法是放下去之後的事。
+  it('沒有函式時分類裡只有按鈕與 `回傳`', () => {
     const contents = category(buildProjectToolbox(registration, []), '函式').contents;
-    expect(contents.map((c) => c.type)).toEqual([
-      undefined,
-      'procedure.set_local',
-      'procedure.return',
-    ]);
+    expect(contents.map((c) => c.type)).toEqual([undefined, 'procedure.return']);
   });
 });
 

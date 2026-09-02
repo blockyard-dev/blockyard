@@ -48,24 +48,6 @@ palette:
     returns: any
     text: "參數"
 
-  # §16 Q6：函式的暫存變數。**不配對 `本次呼叫取得`**——§5.4 第 1 層就是 frame，
-  # 既有的 `取得 (名稱)` 本來就讀得到它；再發一顆讀取積木要嘛是同一件事兩個入口
-  # （§4.6 否決「參數在分類裡再列一份」的同一條理由），要嘛得把它放進獨立命名
-  # 空間，而那樣 `${}` 就讀不到它。
-  #
-  # 名字取「本次呼叫」而不是「區域設定」：後者在中文電腦語境會被讀成 locale
-  # （控制台那個「地區設定」）。而「本次呼叫」與變數 pill 上已經在用的「本次
-  # 事件」（第 2 層）是同一家人——四層讀起來是 參數 / 本次呼叫 / 本次事件 / 全域。
-  - opcode: set_local
-    type: command
-    text: "本次呼叫 %(name) 為 %(value)"
-    args:
-      # binds + scope: frame——寫進當前 frame（§5.4 第 1 層），遞迴與並行各自
-      # 一份。範圍是**所在的函式體**，而函式體不是一疊 stack（它掛在定義積木的
-      # `next` 上），所以這裡是保留字而不是某一格的名字。
-      name: { type: variable, default: "", label: "變數名稱", binds: true, scope: frame }
-      value: { type: string, default: "" }
-
   - opcode: return
     type: command
     # cap block：下面不能接積木（`terminal`，前端不畫下凸點、後端載入期擋），

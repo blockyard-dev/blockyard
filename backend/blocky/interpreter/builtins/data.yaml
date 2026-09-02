@@ -32,6 +32,25 @@ palette:
       name: { type: variable, default: "", binds: true }
       value: { type: string, default: "" }
 
+  # §16 Q6：**不共用的**變數。`設定` 寫第 3 層，而第 3 層是同一個 Run 的所有
+  # thread 共用的——兩條腳本各跑一個計數器、或兩條 thread 各呼叫一次同一個函式，
+  # 就互相踩。這與 D29 修掉的迴圈變數是同一個 bug，只是外層那顆積木換了。
+  #
+  # **範圍 = 最近的那一層 body**，而那正是 D29 那條規則：在函式定義底下是「這次
+  # 呼叫」（遞迴各自一份），在 hat 底下是「這條腳本這一次執行」。不是第二條規則
+  # ——同一句話套到不同的外層積木上。迴圈與 `如果` 不算，它們不是一次「執行」。
+  #
+  # 名字取「這次」而不是「本次呼叫」：後者在 hat 底下講不通（那裡沒有呼叫）。
+  # 它的模糊是對的——「這次」指的就是最近的那一層執行，而那正是規則本身。
+  - opcode: set_local
+    type: command
+    text: "這次 %(name) 為 %(value)"
+    args:
+      # binds + scope: frame。保留字，因為「最近的那一層 body」不是同一顆積木上
+      # 的某一格 stack——它是外面那顆積木（定義帽子或事件帽子）的整條 body。
+      name: { type: variable, default: "", label: "變數名稱", binds: true, scope: frame }
+      value: { type: string, default: "" }
+
   - opcode: change
     type: command
     # §4.5：同樣要求變數已存在。少打一顆 set，換來的是打錯字被靜默當成新變數。

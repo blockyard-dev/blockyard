@@ -1,0 +1,12 @@
+title: 腳本的 `這次` 變數穿不過函式呼叫——那個名字在函式的畫面上不存在
+spec: §5.4 第 1 層 / D29 第 2 條
+tags:
+- procedure
+- variables
+- Q6
+expect:
+  status: error
+  logs: []
+  error:
+    code: undefined_variable
+    message_contains: 只在建立它的那條腳本裡面有效

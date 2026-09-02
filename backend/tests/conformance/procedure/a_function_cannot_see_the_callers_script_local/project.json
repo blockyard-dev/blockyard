@@ -7,18 +7,12 @@
   "extensions": [],
   "variables": {},
   "procedures": {
-    "p_x": {
-      "name": "跳",
-      "params": [
-        {
-          "id": "a1",
-          "name": "次數",
-          "type": "number"
-        }
-      ],
-      "returns": "number",
-      "body": "blk_5",
-      "definitionBlock": "blk_4"
+    "p_peek": {
+      "name": "偷看",
+      "params": [],
+      "returns": "string",
+      "body": "blk_6",
+      "definitionBlock": "blk_5"
     }
   },
   "scripts": [
@@ -40,58 +34,53 @@
       "ui": null
     },
     "blk_2": {
-      "opcode": "debug.log",
+      "opcode": "data.set_local",
       "parent": "blk_1",
-      "next": null,
+      "next": "blk_3",
       "inputs": {
-        "text": {
-          "kind": "block",
-          "id": "blk_3"
+        "value": {
+          "kind": "literal",
+          "value": "腳本的"
         }
       },
-      "fields": {},
+      "fields": {
+        "name": "暫存"
+      },
       "mutation": null,
       "ui": null
     },
     "blk_3": {
-      "opcode": "procedure.call",
+      "opcode": "debug.log",
       "parent": "blk_2",
       "next": null,
       "inputs": {
-        "a1": {
-          "kind": "literal",
-          "value": 1
+        "text": {
+          "kind": "block",
+          "id": "blk_4"
         }
       },
       "fields": {},
-      "mutation": {
-        "proc": "p_x"
-      },
-      "ui": null
-    },
-    "blk_4": {
-      "opcode": "procedure.definition",
-      "parent": null,
-      "next": "blk_5",
-      "inputs": {},
-      "fields": {
-        "proc": "p_x"
-      },
       "mutation": null,
       "ui": null
     },
-    "blk_5": {
-      "opcode": "data.set_local",
-      "parent": "blk_4",
-      "next": "blk_6",
-      "inputs": {
-        "value": {
-          "kind": "literal",
-          "value": 99
-        }
+    "blk_4": {
+      "opcode": "procedure.call",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {},
+      "fields": {},
+      "mutation": {
+        "proc": "p_peek"
       },
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "procedure.definition",
+      "parent": null,
+      "next": "blk_6",
+      "inputs": {},
       "fields": {
-        "name": "次數"
+        "proc": "p_peek"
       },
       "mutation": null,
       "ui": null
@@ -116,7 +105,7 @@
       "next": null,
       "inputs": {},
       "fields": {
-        "name": "次數"
+        "name": "暫存"
       },
       "mutation": null,
       "ui": null

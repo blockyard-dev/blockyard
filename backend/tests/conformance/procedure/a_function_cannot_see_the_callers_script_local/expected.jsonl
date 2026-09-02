@@ -1,0 +1,12 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "var.set", "threadId": "t1", "name": "暫存", "value": "腳本的"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_7", "error": {"type": "UndefinedVariableError", "code": "undefined_variable", "message": "變數「暫存」只在建立它的那條腳本裡面有效", "blockId": "blk_7", "hint": "函式看不到呼叫它的地方綁的名字（§5.4）。要用它就用參數傳進來。"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

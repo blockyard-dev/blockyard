@@ -358,7 +358,7 @@ BINDING_ARGS = {
     ("data.set", "name", None),                 # 寫入即建立，第 3 層（§4.5）
     ("control.for_each", "name", "body"),       # 迴圈變數，第 2 層（D29）
     ("control.try_catch", "error_name", "catch"),  # 錯誤，第 2 層（D29）
-    ("procedure.set_local", "name", "frame"),   # 本次呼叫，第 1 層（§16 Q6）
+    ("data.set_local", "name", "frame"),        # 這次，第 1 層（§16 Q6）
 }
 
 

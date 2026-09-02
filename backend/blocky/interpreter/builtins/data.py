@@ -49,6 +49,33 @@ async def _set(t: Thread, b: Block) -> None:
     _emit_set(t, name, v)
 
 
+@command("data.set_local")
+async def _set_local(t: Thread, b: Block) -> None:
+    """`這次 [名稱] 為 (值)`（§16 Q6）：**不共用的**變數。
+
+    `設定` 寫第 3 層，而第 3 層是同一個 Run 的所有 thread 共用的——兩條腳本各
+    跑一個計數器、或兩條 thread 各呼叫一次同一個函式，就互相踩。這顆積木存在的
+    全部理由就是那個，而它與 D29 修掉的迴圈變數是同一個 bug，只是外層那顆積木
+    換了。
+
+    **範圍 = 最近的那一層 body。** 在函式定義底下是這次呼叫（遞迴各自一份，寫進
+    frame），在 hat 底下是這條腳本這一次執行（寫進 thread）。那不是兩條規則，是
+    D29 那一句「範圍 = 綁它那顆積木的 body」套到不同的外層積木上——同一份文件
+    早就說過 hat 的 body 是整條腳本。
+
+    **迴圈與 `如果` 不算一層。** 它們不是一次「執行」，而且把暫存變數綁進迴圈體
+    等於每一輪重來一次——那顆積木最常見的用法（在迴圈外面宣告、在迴圈裡累加）
+    就整個不能寫了。
+
+    **沒有配對的讀取積木**：§5.4 的解析順序本來就會先看這一層，`取得 (名稱)` 與
+    `${名稱}` 直接讀得到。
+    """
+    name = _name(t, b)
+    v = await t.value(b, "value")
+    t.scope.set_local(name, v)
+    _emit_set(t, name, v)
+
+
 @command("data.change")
 async def _change(t: Thread, b: Block) -> None:
     """§4.5：**同樣要求變數已存在**。
@@ -67,7 +94,7 @@ async def _change(t: Thread, b: Block) -> None:
     v = cur + delta
     # **寫回它讀到的那一層**（§16 Q6）。`設定` 說的是「建立一個全域變數」，
     # 這顆說的是「把既有的那個變大」——寫死全域的話，函式裡的
-    # `本次呼叫 [總和] 為 (0)` 之後 `改變 [總和]` 會讀 frame、寫全域，那個累加
+    # `這次 [總和] 為 (0)` 之後 `改變 [總和]` 會讀 frame、寫全域，那個累加
     # 永遠加不上去，而畫面上什麼都看不出來。
     t.scope.change(name, v)
     _emit_set(t, name, v)

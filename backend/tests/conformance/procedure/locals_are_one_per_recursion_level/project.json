@@ -153,7 +153,7 @@
       "ui": null
     },
     "blk_10": {
-      "opcode": "procedure.set_local",
+      "opcode": "data.set_local",
       "parent": "blk_5",
       "next": "blk_14",
       "inputs": {
@@ -214,7 +214,7 @@
       "ui": null
     },
     "blk_14": {
-      "opcode": "procedure.set_local",
+      "opcode": "data.set_local",
       "parent": "blk_10",
       "next": "blk_18",
       "inputs": {

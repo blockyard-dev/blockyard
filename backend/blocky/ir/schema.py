@@ -353,7 +353,7 @@ def load(
     if shapes is not None:
         _validate_shapes(project, shapes)
     if specs is not None:
-        # §5.4／D29：`設定 [迴圈變數]`、`設定 [參數名]`、§16 Q6 的 `本次呼叫`。
+        # §5.4／D29：`設定 [迴圈變數]`、`設定 [參數名]`、§16 Q6 的 `這次`。
         # **排在最後**：它要走積木的祖先鏈，而那條鏈的完整性是
         # `_validate_structure` 驗過的。
         #

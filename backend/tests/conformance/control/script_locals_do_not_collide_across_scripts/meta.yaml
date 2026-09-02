@@ -1,0 +1,12 @@
+title: 兩條腳本各跑一個同名計數器 → 互不干擾（`這次` 在 hat 底下 = 這條腳本）
+spec: §5.4 第 1 層 / §16 Q6
+tags:
+- control
+- variables
+- threads
+- Q6
+expect:
+  status: ok
+  logs:
+  - A 數到 3
+  - B 數到 5

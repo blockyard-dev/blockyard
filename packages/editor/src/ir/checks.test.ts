@@ -336,12 +336,12 @@ describe('綁定的作用範圍（D29）', () => {
     expect(kindsOn(warnings, 'outside')).toEqual(['variable']);
   });
 
-  it('`本次呼叫` 建立的名字只在那個函式體裡（§16 Q6）', () => {
+  it('函式裡的 `這次` 只在那個函式體裡（§16 Q6）', () => {
     const s = scene(
       {
         d: { opcode: 'procedure.definition', next: 'local', fields: { proc: 'p_sum' } },
         local: {
-          opcode: 'procedure.set_local', parent: 'd', next: 'inside',
+          opcode: 'data.set_local', parent: 'd', next: 'inside',
           fields: { name: '總和' },
         },
         inside: { opcode: 'data.change', parent: 'local', fields: { name: '總和' } },
@@ -355,6 +355,38 @@ describe('綁定的作用範圍（D29）', () => {
     expect(kindsOn(warnings, 'inside')).toEqual([]);
     // 指的是**函式**不是那顆積木：範圍是整個函式體，而使用者要回去的地方是函式。
     expect(messageOn(warnings, 'outside')).toBe('變數「總和」只在函式「加總」裡面有效');
+  });
+
+  it('hat 底下的 `這次` 只在那條腳本裡（§16 Q6）', () => {
+    // 同一條規則套到 hat 上：hat 的 body 就是整條腳本。不是第二條規則。
+    const s = scene(
+      {
+        h: { opcode: 'event.when_flag_clicked', next: 'local' },
+        local: { opcode: 'data.set_local', parent: 'h', next: 'inside', fields: { name: 'i' } },
+        inside: { opcode: 'data.change', parent: 'local', fields: { name: 'i' } },
+        h2: { opcode: 'event.when_flag_clicked', next: 'other' },
+        other: { opcode: 'data.change', parent: 'h2', fields: { name: 'i' } },
+      },
+      ['h', 'h2'],
+    );
+    const warnings = s.check();
+    expect(kindsOn(warnings, 'inside')).toEqual([]);
+    expect(messageOn(warnings, 'other')).toBe('變數「i」只在建立它的那條腳本裡面有效');
+  });
+
+  it('腳本的 `這次` 穿不過函式呼叫——那個名字在函式的畫面上不存在', () => {
+    const s = scene(
+      {
+        h: { opcode: 'event.when_flag_clicked', next: 'local' },
+        local: { opcode: 'data.set_local', parent: 'h', fields: { name: '暫存' } },
+        d: { opcode: 'procedure.definition', next: 'peek', fields: { proc: 'p_peek' } },
+        peek: { opcode: 'data.change', parent: 'd', fields: { name: '暫存' } },
+      },
+      ['h'],
+      { p_peek: { name: '偷看', params: [], returns: null, definitionBlock: 'd', body: 'peek' } },
+    );
+    // 與 catch 的 `error` 同一條規則（D29 第 2 條）。
+    expect(kindsOn(s.check(), 'peek')).toEqual(['variable']);
   });
 
   it('`設定` 建立的名字仍然是扁平的——第 3 層是整個 Run 共用', () => {

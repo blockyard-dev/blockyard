@@ -90,7 +90,7 @@ class Frame:
     def __init__(self, proc_id: str, params: dict[str, Any], depth: int, thread_base: int) -> None:
         self.proc_id = proc_id
         self.params = params
-        # §16 Q6：`本次呼叫 [x] 為 ()` 寫這裡。與 `params` 分開而不是合成一個
+        # §16 Q6：`這次 [x] 為 ()` 在函式裡寫這裡。與 `params` 分開而不是合成一個
         # dict，因為 `procedure.param` 讀的必須**只有**參數——那顆膠囊說的是
         # 「這次呼叫傳進來的值」，讓它讀得到一個同名的暫存變數，膠囊就在函式體
         # 中段開始說謊。兩者撞名是存檔期錯誤，所以這裡不必決定誰贏。
@@ -111,8 +111,16 @@ class ThreadScope:
     的那幾層則被 frame 遮蔽（D29 第 2 條）。
     """
 
+    #: layer 0 = hat 的 `yields`（永不遮蔽）；layer 1 = 這條腳本的 `這次` 變數。
+    SCRIPT_LAYER = 1
+
     def __init__(self, yields: dict[str, Any] | None = None) -> None:
-        self._layers: list[dict[str, Any]] = [dict(yields or {})]
+        # **兩層，不是一層。** layer 1 是「這條腳本這一次執行」的暫存變數
+        # （§16 Q6 的 `這次` 放在 hat 底下時）。它與 layer 0 分開，是因為兩者
+        # 對 frame 的態度相反：`yields` 穿得過函式呼叫（函式體不在任何 hat 底下，
+        # 遮了等於讓函式讀不到任何 hat 欄位），而腳本的暫存變數**要**被遮——
+        # 那個名字在函式的畫面上不存在，同 `error`（D29 第 2 條）。
+        self._layers: list[dict[str, Any]] = [dict(yields or {}), {}]
 
     def push(self, values: dict[str, Any]) -> None:
         self._layers.append(dict(values))
@@ -150,6 +158,13 @@ class ThreadScope:
 
     def names(self, *, floor: int = 0) -> list[str]:
         return sorted({n for layer in self._visible(floor) for n in layer})
+
+    def has_script_local(self, name: str) -> bool:
+        return name in self._layers[self.SCRIPT_LAYER]
+
+    def set_script_local(self, name: str, value: Any) -> None:
+        """寫「這條腳本這一次執行」那一層。迴圈與 catch 推的層在它上面，不影響。"""
+        self._layers[self.SCRIPT_LAYER][name] = value
 
     def hidden_names(self, *, floor: int) -> set[str]:
         """被 frame 遮掉的那些名字（D29 第 2 條）。
@@ -265,7 +280,7 @@ class Scope:
     def set(self, name: str, value: Any) -> None:
         """§5.4：`data.set` **一律寫入全域層**。
 
-        第 2 層唯讀（D29），第 1 層只有 `本次呼叫` 寫得到（Q6）——而那顆積木撞
+        第 2 層唯讀（D29），第 1 層只有 `這次` 寫得到（Q6）——而那顆積木撞
         到這裡的名字是存檔期錯誤，所以這一行不必問「現在有沒有 frame」。
         """
         self.run.set(name, value)
@@ -275,7 +290,7 @@ class Scope:
 
         `data.set` 說的是「建立一個全域變數」，所以它一律寫第 3 層；`data.change`
         說的是「把既有的那個變大」——它先讀，而讀到哪一層，寫就該回哪一層。寫死
-        第 3 層才是那個讀寫分家的 bug：函式裡 `本次呼叫 [總和] 為 (0)` 之後
+        第 3 層才是那個讀寫分家的 bug：`這次 [總和] 為 (0)` 之後
         `改變 [總和]` 會讀 frame、寫全域，於是那個累加**永遠加不上去**。
 
         **對既有專案是同一個行為。** 在這顆積木之前，第 1 層只有參數、第 2 層
@@ -286,29 +301,32 @@ class Scope:
         在存檔期就擋掉了，理由是讀寫指到兩個不同的東西。
         """
         f = self.current_frame
-        if f is not None and name in f.locals:
-            f.locals[name] = value
+        if f is not None:
+            if name in f.locals:
+                f.locals[name] = value
+                return
+            # frame 遮住了腳本那一層（D29），所以在函式裡不看它——`get` 也沒看。
+        elif self.thread.has_script_local(name):
+            self.thread.set_script_local(name, value)
             return
         self.run.set(name, value)
 
-    def set_local(self, name: str, value: Any, *, block_id: str | None = None) -> None:
-        """§16 Q6：`本次呼叫 [x] 為 ()` 寫進當前 frame（第 1 層）。
+    def set_local(self, name: str, value: Any) -> None:
+        """§16 Q6：`這次 [x] 為 ()` 寫進**最近的那一層 body**。
 
-        遞迴與並行各自一份——這是它存在的全部理由：`data.set` 寫全域，而全域是
-        同一個 Run 的所有 thread 共用的，兩條腳本各呼叫一次同一個函式，函式體裡
-        的暫存變數就互相踩。
+        在函式裡是那個 frame（遞迴各自一份），在 hat 底下是這條 thread 的腳本層
+        （兩條腳本各自一份）。那不是兩條規則——D29 說的是「範圍 = 綁它那顆積木
+        的 body」，而 hat 的 body 就是整條腳本。**thread 是最外面的那一個 frame**，
+        這一行只是照著這句話寫。
 
-        「不在函式體裡」是**存檔期**擋下的（§16 Q6 規則 3），所以走到這裡代表
-        IR 是手寫或別的版本產生的。仍然給一句看得懂的話，不是 IndexError。
+        迴圈與 `如果` 推的層不算：它們不是一次「執行」，而且綁進迴圈體的話，那顆
+        積木最常見的用法（迴圈外面宣告、迴圈裡累加）整個不能寫。
         """
         f = self.current_frame
-        if f is None:
-            raise UndefinedVariableError(
-                f"「本次呼叫 {name}」只能放在函式定義裡面",
-                block_id=block_id,
-                hint="這裡沒有「這次呼叫」——頂層的腳本要用「設定」。",
-            )
-        f.locals[name] = value
+        if f is not None:
+            f.locals[name] = value
+        else:
+            self.thread.set_script_local(name, value)
 
     def known_names(self) -> list[str]:
         names = set(self.run.vars) | set(self.thread.names(floor=self.thread_floor))

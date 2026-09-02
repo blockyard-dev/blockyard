@@ -70,7 +70,7 @@ def scoped_binds(spec: BlockSpec | None) -> list[tuple[str, str]]:
 
 
 def frame_binds(spec: BlockSpec | None) -> list[str]:
-    """這顆積木上「綁一個名字進 frame」的格子（§16 Q6 的 `本次呼叫`）。
+    """這顆積木上「綁一個名字進 frame」的格子（§16 Q6 的 `這次`）。
 
     範圍是**所在的函式體**，而函式體不是一疊 stack——它掛在定義積木的 `next`
     上。所以它不能像 `scope: body` 那樣指一格，宣告用的是保留字 `frame`。
@@ -95,7 +95,7 @@ def writes_existing(spec: BlockSpec | None) -> list[str]:
     """「**寫**一個已經存在的名字」的欄位（`writes: true`，即 `data.change`）。
 
     與 `creates_global` 分開，因為它們撞到函式暫存變數時的答案**相反**：`改變`
-    寫回它讀到的那一層（§16 Q6），所以 `本次呼叫 [總和] 為 (0)` 之後
+    寫回它讀到的那一層（§16 Q6），所以 `這次 [總和] 為 (0)` 之後
     `改變 [總和] 增加 (x)` 是對的——那正是累加最自然的寫法。擋它才是誤報。
 
     唯讀的那幾層（參數、迴圈變數、錯誤變數）兩者一起擋，理由一樣。
@@ -178,9 +178,9 @@ def binder_index(
     值是一整句而不是一個標籤，因為兩種綁定端的說法本來就不一樣：
 
         那顆「對 ⋯ 的每一項 水果」     C block 綁的（第 2 層）
-        函式「加總」                   `本次呼叫` 綁的（第 1 層，§16 Q6）
+        函式「加總」                   `這次` 綁的（第 1 層，§16 Q6）
 
-    第二種指的是函式而不是那顆 `本次呼叫` 積木：範圍是整個函式體，而使用者要
+    第二種指的是那次執行而不是那顆 `這次` 積木：範圍是整條 body，而使用者要
     回去的地方是那個函式，不是某一顆積木。
 
     給的是**整份專案**的答案而不是「這一刻堆疊上有什麼」，因為那句話要說的正是
@@ -207,29 +207,36 @@ def binder_index(
             name = fields.get(field_name) if isinstance(fields, dict) else None
             if not isinstance(name, str) or not name:
                 continue
-            owner = _enclosing_definition(blocks, bid, params_by_definition)
-            # 不在函式裡是存檔期錯誤，所以這裡幾乎不會發生；真發生了就退回
-            # 那顆積木自己，總比一句話裡有個空洞好。
-            phrase = f"函式「{owner[1][0]}」" if owner else f"那顆「{block_label(block, spec)}」"
+            _owner_id, phrase = _invocation_of(blocks, bid, params_by_definition)
             found.setdefault(name, set()).add(phrase)
 
     return {name: sorted(phrases)[0] for name, phrases in found.items()}
 
 
-def _enclosing_definition(
+def _invocation_of(
     blocks: dict[str, Any],
     block_id: str,
     params_by_definition: dict[str, tuple[str, set[str]]],
-) -> tuple[str, tuple[str, set[str]]] | None:
-    """這顆積木在哪個函式定義底下。不在任何函式裡就是 None。
+) -> tuple[str, str]:
+    """這顆積木屬於哪一次「執行」：`(那顆外層積木的 id, 說出來是什麼)`。
+
+    兩種答案，同一條規則（D29：範圍 = 綁它那顆積木的 body）：
+
+        函式定義底下   → 那次呼叫       `函式「加總」`
+        其餘（頂層）   → 這條腳本這一次  `建立它的那條腳本`
+
+    **迴圈與 `如果` 不算**：它們不是一次執行。走到頂就是那條腳本，所以這個函式
+    永遠有答案——`thread` 是最外面的那一個 frame。
 
     函式體掛在定義積木的 `next` 上（不是一格 stack），所以這裡不看是從哪一格
-    進來的——與 `_validate_structure` 對 `回傳` 位置的判斷同一條規則。
+    進來的，與 `_validate_structure` 對 `回傳` 位置的判斷同一條規則。
     """
+    top = block_id
     for ancestor_id, _ancestor, _via in ancestors(blocks, block_id):
         if (found := params_by_definition.get(ancestor_id)) is not None:
-            return ancestor_id, found
-    return None
+            return ancestor_id, f"函式「{found[0]}」"
+        top = ancestor_id
+    return top, "建立它的那條腳本"
 
 
 # --------------------------------------------------------------------------
@@ -257,7 +264,7 @@ def validate_blocks(
     if not isinstance(blocks, dict):
         return
     params_by_definition = _params_by_definition(procedures)
-    locals_by_definition = _locals_by_definition(blocks, params_by_definition, resolve)
+    locals_by_invocation = _locals_by_invocation(blocks, params_by_definition, resolve)
 
     for bid, block in blocks.items():
         if not isinstance(block, dict):
@@ -265,24 +272,18 @@ def validate_blocks(
         spec = resolve(str(block.get("opcode", "")))
         fields = block.get("fields") if isinstance(block.get("fields"), dict) else {}
 
-        # `本次呼叫 [x]`（§16 Q6）——它自己的兩條規則。
+        # `這次 [x]`（§16 Q6）。
         for field_name in frame_binds(spec):
             name = fields.get(field_name)
             if not isinstance(name, str) or not name:
                 continue
             label = block_label(block, spec)
-            # 規則 3：只准放在函式體內。頂層堆疊沒有 frame，而且「粉紅 = 函式」
-            # （§8.5 唯一能用眼睛掃出來的規則）只有在這條成立時才不說謊。
-            if _enclosing_definition(blocks, bid, params_by_definition) is None:
-                raise ValidationError(
-                    f"「{label}」只能放在函式定義裡面；"
-                    "這裡沒有「這次呼叫」，頂層的腳本要用「設定」",
-                    block_id=bid,
-                )
-            # 規則 2：與參數同名擋下，不是覆寫。§4.6 的「參數唯讀、只活在這個
-            # frame」正撐著帽子上那顆膠囊「看到的就是拿到的」；開放覆寫，膠囊在
-            # 函式體中段就開始說謊。換來的只有「不必換個名字」。
-            # 順帶也擋掉撞到迴圈變數／錯誤變數的情形——同一個 `_readonly_owner`。
+            # 與參數／hat 欄位／迴圈變數同名擋下，不是覆寫。§4.6 的「參數唯讀、
+            # 只活在這個 frame」正撐著帽子上那顆膠囊「看到的就是拿到的」；開放
+            # 覆寫，膠囊在函式體中段就開始說謊。換來的只有「不必換個名字」。
+            #
+            # **「只准放在函式體內」那條沒有了**（v0.33）：範圍是最近的那一層
+            # body，而 hat 的 body 就是整條腳本——同一條規則自己給出了答案。
             if owner := _readonly_owner(blocks, bid, name, params_by_definition, {}, resolve):
                 raise ValidationError(
                     f"「{name}」已經是{owner}的名字，唯讀；"
@@ -296,7 +297,7 @@ def validate_blocks(
             if not isinstance(name, str) or not name:
                 continue
             owner = _readonly_owner(
-                blocks, bid, name, params_by_definition, locals_by_definition, resolve
+                blocks, bid, name, params_by_definition, locals_by_invocation, resolve
             )
             if owner:
                 raise ValidationError(
@@ -306,7 +307,7 @@ def validate_blocks(
                 )
 
         # `改變 [x]`：只擋唯讀的那幾層。它寫回讀到的那一層，所以撞到函式的暫存
-        # 變數是**對的**——`本次呼叫 [總和] 為 (0)` 之後 `改變 [總和]` 正是累加
+        # 變數是**對的**——`這次 [總和] 為 (0)` 之後 `改變 [總和]` 正是累加
         # 最自然的寫法，擋它是誤報。
         for field_name in writes_existing(spec):
             name = fields.get(field_name)
@@ -323,15 +324,15 @@ def validate_blocks(
                 )
 
 
-def _locals_by_definition(
+def _locals_by_invocation(
     blocks: dict[str, Any],
     params_by_definition: dict[str, tuple[str, set[str]]],
     resolve: SpecResolver,
 ) -> dict[str, set[str]]:
-    """definitionBlock → 那個函式體裡 `本次呼叫` 建立的名字。
+    """那次執行（函式定義或腳本頂端）→ 底下 `這次` 建立的名字。
 
-    要這張表是因為 `設定 [總和]` 與 `本次呼叫 [總和]` 之間是**兄弟**關係，不是
-    祖先關係——祖先鏈走不到它。而那兩顆湊在同一個函式裡，讀的是第 1 層、寫的是
+    要這張表是因為 `設定 [總和]` 與 `這次 [總和]` 之間是**兄弟**關係，不是祖先
+    關係——祖先鏈走不到它。而那兩顆湊在同一次執行裡，讀的是第 1／2 層、寫的是
     第 3 層，又是一個「值對了一半」。
     """
     out: dict[str, set[str]] = {}
@@ -342,10 +343,9 @@ def _locals_by_definition(
         fields = block.get("fields") if isinstance(block.get("fields"), dict) else {}
         for field_name in frame_binds(spec):
             name = fields.get(field_name)
-            if not isinstance(name, str) or not name:
-                continue
-            if found := _enclosing_definition(blocks, bid, params_by_definition):
-                out.setdefault(found[0], set()).add(name)
+            if isinstance(name, str) and name:
+                owner_id, _ = _invocation_of(blocks, bid, params_by_definition)
+                out.setdefault(owner_id, set()).add(name)
     return out
 
 
@@ -374,7 +374,7 @@ def _readonly_owner(
     block_id: str,
     name: str,
     params_by_definition: dict[str, tuple[str, set[str]]],
-    locals_by_definition: dict[str, set[str]],
+    locals_by_invocation: dict[str, set[str]],
     resolve: SpecResolver,
 ) -> str | None:
     """這顆積木身上的名字，撞到了哪個唯讀的東西。回傳「那是什麼」的那一句。
@@ -395,14 +395,23 @@ def _readonly_owner(
             if fields.get(field_name) == name:
                 return f"那顆「{block_label(ancestor, spec)}」綁"
 
+        # hat 提供的欄位（§5.4 第 2 層 layer 0）。`設定 [body]` 在一顆 webhook
+        # 帽子底下讀的是那個欄位、寫的是全域——同一個「值對了一半」，而這一條
+        # 原本沒有人擋。
+        for y in getattr(spec, "yields", ()) or ():
+            if y.name == name:
+                return f"那顆「{block_label(ancestor, spec)}」提供"
+
         if (found := params_by_definition.get(ancestor_id)) is not None:
             proc_name, params = found
             if name in params:
                 return f"函式「{proc_name}」的參數"
-            # 同一個函式裡的 `本次呼叫`。這一格是**兄弟**不是祖先，所以它不在
-            # 上面那條祖先鏈上，要靠預先掃出來的那張表。
-            if name in locals_by_definition.get(ancestor_id, ()):
-                return f"函式「{proc_name}」裡「本次呼叫」建立"
+
+    # 同一次執行裡的 `這次`。它是**兄弟**不是祖先，所以不在上面那條鏈上，要靠
+    # 預先掃出來的那張表——而「哪一次執行」的答案函式與腳本共用同一個算法。
+    owner_id, phrase = _invocation_of(blocks, block_id, params_by_definition)
+    if name in locals_by_invocation.get(owner_id, ()):
+        return f"{phrase}裡「這次」建立"
     return None
 
 

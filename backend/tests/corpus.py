@@ -841,7 +841,7 @@ _LOCAL_SUM = {
         "body": [
             # `本次呼叫` 而不是 `設定`：後者寫全域，而全域是同一個 Run 的所有
             # thread 共用的。
-            blk("procedure.set_local", fields={"name": "總和"}, value=0),
+            blk("data.set_local", fields={"name": "總和"}, value=0),
             blk("control.for_each", fields={"name": "x"}, list=var("清單"), body=Stack([
                 # 迴圈體裡有一個 await——沒有它兩條 thread 不會交錯，這一題就
                 # 永遠是綠的（而 bug 還在）。真實情況是這裡有一顆 http 積木。
@@ -897,10 +897,10 @@ case(
                     # 因為 §4.6 的求值順序是由左而右：`前一項` 在內層那次呼叫
                     # 把它蓋掉**之前**就讀完了。這一題要抓的正是那個覆蓋，所以
                     # 讀取必須排在會蓋掉它的呼叫後面。
-                    blk("procedure.set_local", fields={"name": "前一項"},
+                    blk("data.set_local", fields={"name": "前一項"},
                         value=blk("procedure.call", mutation={"proc": "p_fib"},
                                   a1=blk("operator.subtract", a=var("n"), b=1))),
-                    blk("procedure.set_local", fields={"name": "前兩項"},
+                    blk("data.set_local", fields={"name": "前兩項"},
                         value=blk("procedure.call", mutation={"proc": "p_fib"},
                                   a1=blk("operator.subtract", a=var("n"), b=2))),
                     blk("procedure.return",
@@ -913,18 +913,60 @@ case(
     tags=["procedure", "variables", "Q6"],
 )
 
+def _counter(label, times):
+    """一條數自己的腳本。`這次` 在 hat 底下 = 這條腳本這一次執行。"""
+    return hat(
+        blk("data.set_local", fields={"name": "i"}, value=0),
+        blk("control.repeat", times=times, body=Stack([
+            blk("control.wait", seconds=0),   # 真實情況是一顆 http 積木
+            blk("data.change", fields={"name": "i"}, value=1),
+        ])),
+        log(Tpl(label + "${i}")),
+    )
+
+
 case(
-    "errors/set_local_outside_a_function",
-    "「本次呼叫」放在頂層腳本 → 存檔期擋下（這裡沒有「這次呼叫」）",
-    "§16 Q6 規則 3",
-    one(blk("procedure.set_local", fields={"name": "暫存"}, value=1)),
-    {"status": "load_error", "load_error": "只能放在函式定義裡面"},
-    tags=["procedure", "validation", "Q6"],
+    "control/script_locals_do_not_collide_across_scripts",
+    "兩條腳本各跑一個同名計數器 → 互不干擾（`這次` 在 hat 底下 = 這條腳本）",
+    "§5.4 第 1 層 / §16 Q6",
+    build(scripts=[_counter("A 數到 ", 3), _counter("B 數到 ", 5)]),
+    # 用 `設定` 寫全域的話這裡是「A 數到 5 / B 數到 8」——第 3 層是同一個 Run 的
+    # 所有 thread 共用的。這是同一個 bug 的第三個實例（迴圈變數、函式暫存、這個）。
+    {"status": "ok", "logs": ["A 數到 3", "B 數到 5"]},
+    tags=["control", "variables", "threads", "Q6"],
+)
+
+case(
+    "procedure/a_function_cannot_see_the_callers_script_local",
+    "腳本的 `這次` 變數穿不過函式呼叫——那個名字在函式的畫面上不存在",
+    "§5.4 第 1 層 / D29 第 2 條",
+    build(
+        scripts=[hat(
+            blk("data.set_local", fields={"name": "暫存"}, value="腳本的"),
+            log(blk("procedure.call", mutation={"proc": "p_peek"})),
+        )],
+        procedures={
+            "p_peek": {
+                "name": "偷看", "params": [], "returns": "string",
+                "body": [blk("procedure.return", value=var("暫存"))],
+            }
+        },
+    ),
+    # 與 catch 的 `error` 同一條規則（D29 第 2 條）：要用它就用參數傳進來。
+    {
+        "status": "error",
+        "logs": [],
+        "error": {
+            "code": "undefined_variable",
+            "message_contains": "只在建立它的那條腳本裡面有效",
+        },
+    },
+    tags=["procedure", "variables", "Q6"],
 )
 
 case(
     "errors/set_local_shadowing_a_param",
-    "「本次呼叫」與參數同名 → 存檔期擋下，不是覆寫",
+    "「這次」與參數同名 → 存檔期擋下，不是覆寫",
     "§16 Q6 規則 2",
     build(
         scripts=[hat(log(blk("procedure.call", mutation={"proc": "p_x"}, a1=1)))],
@@ -933,7 +975,7 @@ case(
                 "name": "跳", "params": [{"id": "a1", "name": "次數", "type": "number"}],
                 "returns": "number",
                 "body": [
-                    blk("procedure.set_local", fields={"name": "次數"}, value=99),
+                    blk("data.set_local", fields={"name": "次數"}, value=99),
                     blk("procedure.return", value=var("次數")),
                 ],
             }
