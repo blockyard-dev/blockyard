@@ -27,6 +27,12 @@ import {
 } from '../blockly/define';
 import { FieldText } from '../blockly/fields/FieldText';
 import {
+  PLACEHOLDER_MUTATION,
+  definePlaceholders,
+  isPlaceholderType,
+  markPlaceholders,
+} from '../blockly/placeholder';
+import {
   callType,
   definitionType,
   isCallType,
@@ -47,6 +53,10 @@ export function loadProject(
   workspace: Blockly.Workspace,
   ctx: ConversionContext,
 ): void {
+  // §13.3：認不得的 opcode 先變成佔位符，**在 `append` 之前**——Blockly 對一個
+  // 沒註冊的 type 直接丟例外，而那個例外會穿過 React 樹讓整個編輯器變成白畫面。
+  definePlaceholders(project, ctx);
+
   for (const script of project.scripts ?? []) {
     const state = buildBlockState(script.top, project, ctx);
     state.x = script.x ?? 0;
@@ -67,6 +77,7 @@ export function loadProject(
   }
 
   applyUi(project, workspace);
+  markPlaceholders(workspace);
 }
 
 /**
@@ -111,6 +122,12 @@ function buildBlockState(id: string, project: ProjectIR, ctx: ConversionContext)
   // 順序反過來的話，一份存得好好的專案會打不開。
   const repeat = block.mutation?.[REPEAT_KEY];
   if (typeof repeat === 'number' && repeat > 0) state.extraState = { [REPEAT_KEY]: repeat };
+
+  // §13.3：佔位符把原始 `mutation` 整包帶著走。Blockly 不認識那個欄位，而不帶
+  // 的話，存回去的時候它就沒了——「保留該積木」保留到一半是最糟的一種。
+  if (isPlaceholderType(type) && block.mutation != null) {
+    state.extraState = { ...(state.extraState ?? {}), [PLACEHOLDER_MUTATION]: block.mutation };
+  }
 
   const fields = buildFields(block, type, ctx);
   if (fields) state.fields = fields;

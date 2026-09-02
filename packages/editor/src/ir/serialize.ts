@@ -28,6 +28,11 @@ import {
   paramRefFromType,
   procIdFromType,
 } from '../blockly/procedures';
+import {
+  PLACEHOLDER_MUTATION,
+  isPlaceholderType,
+  placeholderVersion,
+} from '../blockly/placeholder';
 import type { ConversionContext } from './context';
 import { hasInterpolation, isWholeTemplate } from './template';
 import type {
@@ -158,6 +163,16 @@ function usedExtensions(
 ): ProjectIR['extensions'] {
   const used = new Map<string, string>();
   for (const block of workspace.getAllBlocks(false)) {
+    // §13.3：佔位符**照定義就查不到 manifest**（那個包沒裝）。照一般規則走的
+    // 話它的宣告會在存檔時安靜消失，於是那份專案從此忘了自己需要哪個包——
+    // 「一鍵安裝」沒有東西可以裝，而在裝了那個包的機器上打開也不會載入它。
+    // 版本用載入時宣告的那一份，因為我們沒有第二個來源——而猜一個版本比
+    // 留著原本那個危險。
+    if (isPlaceholderType(block.type)) {
+      const id = block.type.split('.', 1)[0]!;
+      if (!used.has(id)) used.set(id, placeholderVersion(id) ?? '0.0.0');
+      continue;
+    }
     const manifest = ctx.blockOf(block.type)?.manifest;
     // 內建沒有 `main.py` 也沒有資料夾，不進宣告（`manifest.py` 的 `builtin`）。
     if (!manifest || manifest.builtin) continue;
@@ -232,7 +247,16 @@ function flattenBlock(
  * Blockly 內部的欄位悄悄變成 IR 的一部分，而 IR 是要能手寫的（D1）。
  */
 function repeatMutationOf(state: BlockState): Record<string, unknown> | null {
-  const raw = (state.extraState as Record<string, unknown> | undefined)?.[REPEAT_KEY];
+  const extra = state.extraState as Record<string, unknown> | undefined;
+
+  // §13.3：佔位符原封不動把它帶回去。這裡刻意**不看內容**——那個 mutation 是
+  // 某個我們不認得的積木包的東西，看得懂它的只有那個包。
+  if (isPlaceholderType(state.type)) {
+    const kept = extra?.[PLACEHOLDER_MUTATION];
+    return kept && typeof kept === 'object' ? (kept as Record<string, unknown>) : null;
+  }
+
+  const raw = extra?.[REPEAT_KEY];
   return typeof raw === 'number' && raw > 0 ? { [REPEAT_KEY]: raw } : null;
 }
 
@@ -298,7 +322,7 @@ function readInputs(
 
   for (const [name, conn] of Object.entries(raw)) {
     if (conn.block) {
-      const isStack = argSpecOf(registered?.spec, name)?.type === 'stack';
+      const isStack = isStackInput(state, name, registered, workspace);
       result[name] = isStack
         ? { kind: 'stack', id: conn.block.id! }
         : { kind: 'block', id: conn.block.id! };
@@ -321,6 +345,28 @@ function readInputs(
  *
  * 只有文字影子會走到 `template`：數字、布林、空值都不插值（§4.7 的生效範圍表）。
  */
+/**
+ * 這個孔是 C 型積木的嘴巴（`kind: stack`）還是可求值的孔（`kind: block`）？
+ *
+ * 一般積木問宣告就好。**佔位符沒有宣告**（那正是它是佔位符的原因），所以改問
+ * 那顆積木身上真的接線是什麼型——而那條線是 `placeholder.ts` 依原本的 IR 建出
+ * 來的，答案因此仍然來自那份 IR。
+ *
+ * 少了這一段，一顆認不得的 C 型積木存回去會變成 `kind: block`，於是那疊積木
+ * 下次載入時掛在一個求值的孔上——**存檔本身把專案改壞了**，而畫面上什麼都沒說。
+ */
+function isStackInput(
+  state: BlockState,
+  name: string,
+  registered: RegisteredBlock | undefined,
+  workspace: Blockly.Workspace,
+): boolean {
+  if (registered) return argSpecOf(registered.spec, name)?.type === 'stack';
+  if (!isPlaceholderType(state.type)) return false;
+  const input = state.id ? workspace.getBlockById(state.id)?.getInput(name) : null;
+  return input?.connection?.type === Blockly.ConnectionType.NEXT_STATEMENT;
+}
+
 function readShadowValue(
   shadow: BlockState,
   registered: RegisteredBlock | undefined,
