@@ -40,6 +40,7 @@ import { displayName } from './blockly/signature';
 import { applyProcedure } from './blockly/apply';
 import { watchOrphans } from './blockly/reshape';
 import { glideToBlock } from './blockly/motion';
+import { blocksUsing } from './blockly/usage';
 import { syncTrashedProcedures } from './blockly/lifecycle';
 import { fillDefinitionParams, watchDefinitionParams } from './blockly/params';
 import { buttonCallbackKey, configTarget, type ToolboxGroup } from './blockly/toolbox';
@@ -51,6 +52,9 @@ import { serializeWorkspace } from './ir/serialize';
 import { RunDecorator } from './run/decorate';
 import { useRunStore } from './run/store';
 import { ExtensionsEntry } from './components/ExtensionsEntry';
+import { ExtensionsGallery } from './components/ExtensionsGallery';
+import { ExtensionMenu, useExtensionMenu } from './components/ExtensionMenu';
+import { useExtensionsUi } from './components/extensionsStore';
 import { KeysEntry } from './components/KeysPanel';
 import { configuredIds, useKeysUi, type KeysTarget } from './components/keysStore';
 import { RunBubbles } from './components/RunBubbles';
@@ -181,28 +185,51 @@ export function App() {
   const configuredRef = useRef(configured);
   configuredRef.current = configured;
   /**
-   * 手上這份工具箱是用哪一份名單畫的。
+   * 手上這份工具箱是用**哪兩份名單**畫的（金鑰、積木包）。
    *
    * 開場那一份**已經是用新名單畫好的**（載入 effect 先問過金鑰才畫），而下面
    * 那個 effect 在名單第一次從空的變成真的那一刻還是會醒來——沒有這個 ref，它
    * 會再畫一份一模一樣的工具箱，而 `updateToolbox` 會把 flyout 捲回頂端。
    */
-  const toolboxFor = useRef(configured);
+  const toolboxFor = useRef({ configured, enabled: null as ReadonlySet<string> | null });
 
-  // 名單變了就重畫工具箱：按鈕就是在這一步消失（設定好了）或回來（刪掉了）的。
+  /**
+   * 工具箱上有哪幾個積木包（`extensionsStore`、D31）。
+   *
+   * 與金鑰名單走同一條路，因為它們對工具箱做的是同一件事：**改變上架的東西**。
+   * 兩份名單合成一個 ref 而不是各記各的，是為了讓「這份工具箱是用什麼畫的」
+   * 只有一個答案——兩個 ref 就有兩個「畫過了嗎」，而它們會在不同的時刻各自
+   * 說對一半。
+   */
+  const enabled = useExtensionsUi((s) => s.enabled);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+  const galleryOpen = useExtensionsUi((s) => s.open);
+  /** 工具箱分類上的右鍵選單（面板裡那張卡自己有一份，同一個元件）。 */
+  const { menu: extMenu, openMenu: openExtMenu, closeMenu: closeExtMenu } = useExtensionMenu();
+
+  // 名單變了就重畫工具箱：`open_config` 的按鈕在這一步消失（設定好了）或回來
+  // （刪掉了），積木包的分類在這一步上架或收起來。
   // 只換 toolbox，畫布不動——`WorkspaceView` 走的是 `updateToolbox`。
   useEffect(() => {
-    if (toolboxFor.current === configured) return;
-    toolboxFor.current = configured;
+    if (toolboxFor.current.configured === configured && toolboxFor.current.enabled === enabled) {
+      return;
+    }
+    toolboxFor.current = { configured, enabled };
     setState((prev) =>
       prev.status === 'ready'
         ? {
             ...prev,
-            toolbox: buildProjectToolbox(prev.registration, prev.procedureBlocks, configured),
+            toolbox: buildProjectToolbox(
+              prev.registration,
+              prev.procedureBlocks,
+              configured,
+              enabled,
+            ),
           }
         : prev,
     );
-  }, [configured]);
+  }, [configured, enabled]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -225,11 +252,21 @@ export function App() {
         return [];
       });
       useKeysUi.getState().setConfigured(configuredIds(keys));
-      // 從 store 讀回來，不是用剛剛那一份：這份工具箱是用**哪一個 Set 物件**
-      // 畫的，下面 `toolboxFor` 那個 ref 要比對得起來。
+      // **這個專案用到的積木包一定要在名單裡**（D31）：IR 的 `extensions` 是從
+      // 畫布上的積木算出來的（§13.3），所以打開一份用了 `http` 的專案時，那個
+      // 分類必須跟著回來——不然畫布上有積木，而工具箱裡沒有任何地方生得出它。
+      useExtensionsUi.getState().initEnabled((project.extensions ?? []).map((e) => e.id));
+      // 從 store 讀回來，不是用剛剛那一份：這份工具箱是用**哪兩個 Set 物件**
+      // 畫的，上面 `toolboxFor` 那個 ref 要比對得起來。
       const keysConfigured = useKeysUi.getState().configured;
-      toolboxFor.current = keysConfigured;
-      const toolbox = buildProjectToolbox(registration, procedureBlocks, keysConfigured);
+      const packsEnabled = useExtensionsUi.getState().enabled;
+      toolboxFor.current = { configured: keysConfigured, enabled: packsEnabled };
+      const toolbox = buildProjectToolbox(
+        registration,
+        procedureBlocks,
+        keysConfigured,
+        packsEnabled,
+      );
       setState({ status: 'ready', registration, project, ctx, procedureBlocks, toolbox });
     })().catch((error: unknown) => {
       if (controller.signal.aborted) return;
@@ -478,6 +515,7 @@ export function App() {
           state.registration,
           applied.procedureBlocks,
           configuredRef.current,
+          enabledRef.current,
         ),
       });
     },
@@ -516,6 +554,40 @@ export function App() {
 
   // 按鈕**清單**變了才要重新註冊，而它只在載入完 manifest 那一刻變一次。
   const groups = state.status === 'ready' ? state.registration.groups : null;
+
+  /**
+   * 工具箱分類上的右鍵（D31）。**這是刪除一個積木包的主要入口**——分類欄上那顆
+   * 色圓點才是使用者每天看得到這個包的地方，而「對著它按右鍵」與「對著函式的
+   * 定義帽子按右鍵」是同一個手勢。
+   *
+   * 掛在 injection div 上做委派，而不是逐格掛：分類的 DOM 是 Blockly 畫的，
+   * 工具箱一重建（加了一個包、多了一顆函式）那些節點就換人了，逐格掛的 listener
+   * 會安靜地留在被丟掉的節點上。
+   *
+   * **哪一格 = 哪一個命名空間**由 Blockly 自己回答：`buildToolbox` 把
+   * `toolboxitemid` 設成 group 的 id，所以這裡不必去讀分類名的文字（名字是
+   * manifest 寫的，可以重複，而且會被 i18n 換掉）。
+   *
+   * 內建分類不接（`!group.builtin`）：它們沒有「刪掉」這個選項，攔下右鍵只會
+   * 給出一個兩條都不能點的選單。
+   */
+  useEffect(() => {
+    if (!workspace || !groups) return;
+    const div = workspace.getInjectionDiv();
+    const onContextMenu = (e: MouseEvent) => {
+      const toolbox = workspace.getToolbox() as Blockly.Toolbox | null;
+      const target = e.target as Element | null;
+      if (!toolbox || !target) return;
+      const item = toolbox.getToolboxItems().find((entry) => entry.getDiv()?.contains(target));
+      const group = item ? groups.find((g) => g.id === item.getId() && !g.builtin) : undefined;
+      if (!group) return;
+      e.preventDefault();
+      openExtMenu(group, e.clientX, e.clientY);
+    };
+    div.addEventListener('contextmenu', onContextMenu);
+    return () => div.removeEventListener('contextmenu', onContextMenu);
+  }, [workspace, groups, openExtMenu]);
+
   useEffect(() => {
     if (!workspace || !groups) return;
     for (const group of groups) {
@@ -610,9 +682,71 @@ export function App() {
       project: { ...state.project, procedures },
       ctx: buildContext([...state.registration.blocks, ...procedureBlocks]),
       procedureBlocks,
-      toolbox: buildProjectToolbox(state.registration, procedureBlocks, configuredRef.current),
+      toolbox: buildProjectToolbox(
+        state.registration,
+        procedureBlocks,
+        configuredRef.current,
+        enabledRef.current,
+      ),
     });
     setToast(`已刪除函式「${label}」。`);
+  };
+
+  /**
+   * 「刪除這個擴充功能」（D31）。**與刪除一個函式定義是同一條規則**：
+   *
+   * | 畫布上還有它的積木 | **不准刪**，關掉面板、捲到其中一顆、說還有幾顆 |
+   * | 沒有 | 從名單裡拿掉，工具箱當場少一個分類 |
+   *
+   * 為什麼要擋：刪掉之後那個分類就不在工具箱上了，而畫布上那些積木還在跑
+   * （註冊沒有被拿掉，D31）——使用者會有一批**改得動、卻再也生不出第二顆**的
+   * 積木，而畫面上沒有任何地方說得出那是為什麼。函式那條路擋的是同一件事。
+   *
+   * 它同時把 D31 的兩條規則變成一致的：載入專案時「這個專案用到的包一定要在
+   * 名單裡」會把包加回來——如果刪除不擋，使用者刪掉一個正在用的包，下次開專案
+   * 它又自己回來了，而那看起來就是「刪除沒有用」。
+   *
+   * **不刪磁碟上的任何東西。** `extensions/` 底下那個資料夾還在，面板上那張卡
+   * 也還在（只是回到「＋ 加入」）。真的卸載要等 P3 第 2 步——裝得進來才談得上
+   * 拔得掉。
+   *
+   * **擋下來時是逐顆走訪，不是永遠停在第一顆**（`usageWalkRef`）：使用者被擋住
+   * 之後要做的事是「把它們一顆一顆刪掉」，而畫面上一次只看得到一顆。再按一次
+   * 刪除就跳下一顆——那讓這條擋規則同時是一份清單，而不只是一句拒絕。
+   */
+  const usageWalkRef = useRef<Record<string, number>>({});
+  const deleteExtensionRef = useRef<(group: ToolboxGroup) => void>(null!);
+  deleteExtensionRef.current = (group: ToolboxGroup) => {
+    const ws = workspaceRef.current;
+    if (!ws) return;
+    const closeGallery = useExtensionsUi.getState().closeGallery;
+    const used = blocksUsing(ws, group);
+    const first = used[0];
+
+    // 兩條路都先關掉面板：畫布在它底下，捲到哪一顆、少了哪一個分類，
+    // 面板開著的時候一件都看不見（那條提示也在它底下）。
+    closeGallery();
+
+    if (first) {
+      // 「還有 3 顆」如果找不到那三顆，等於沒說——滑過去，不是跳過去
+      // （`blockly/motion.ts`，同 `deleteRef` 的理由）。
+      //
+      // 走訪的位置記在 id 上而不是積木上：使用者刪掉的那一顆會從 `used` 裡
+      // 消失，所以只有「第幾個」活得過下一次點擊，`% used.length` 讓它在名單
+      // 縮短時自己回到範圍內。
+      const at = ((usageWalkRef.current[group.id] ?? -1) + 1) % used.length;
+      usageWalkRef.current[group.id] = at;
+      glideToBlock(ws, (used[at] ?? first).id);
+      setToast(
+        `畫布上還有 ${used.length} 顆「${group.name}」的積木，要先把它們刪掉才能刪掉這個擴充功能。` +
+          `已經捲到第 ${at + 1} 顆——再按一次刪除會跳到下一顆。`,
+      );
+      return;
+    }
+
+    delete usageWalkRef.current[group.id];
+    useExtensionsUi.getState().remove(group.id);
+    setToast(`已刪除擴充功能「${group.name}」。它還在面板上，隨時可以再加回來。`);
   };
 
   /**
@@ -659,7 +793,12 @@ export function App() {
       project: { ...state.project, procedures },
       ctx: buildContext([...state.registration.blocks, ...procedureBlocks]),
       procedureBlocks,
-      toolbox: buildProjectToolbox(state.registration, procedureBlocks, configuredRef.current),
+      toolbox: buildProjectToolbox(
+        state.registration,
+        procedureBlocks,
+        configuredRef.current,
+        enabledRef.current,
+      ),
     });
     syncingRef.current = true;
     try {
@@ -771,10 +910,14 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <span className="brand">Blocky Workflow</span>
+        {/* 「已加入 N」是這一行唯一會動的數字（D31）。少了它，標頭說的是
+            「載入了 12 個命名空間」而工具箱上只有 10 個——兩句話都對，中間那個
+            差額沒有人負責解釋。 */}
         {state.status === 'ready' && (
           <span className="summary">
             {state.registration.groups.length} 個命名空間（內建{' '}
-            {state.registration.groups.filter((g) => g.builtin).length}）·{' '}
+            {state.registration.groups.filter((g) => g.builtin).length} · 已加入積木包{' '}
+            {state.registration.groups.filter((g) => !g.builtin && enabled.has(g.id)).length}）·{' '}
             {state.registration.blocks.length} 顆積木
           </span>
         )}
@@ -911,7 +1054,24 @@ export function App() {
         <div className="stage">
           <WorkspaceView toolbox={state.toolbox} onReady={handleWorkspaceReady} />
           <FlyoutResizer workspace={workspace} />
-          <ExtensionsEntry groups={state.registration.groups} />
+          <ExtensionsEntry />
+          {extMenu && (
+            <ExtensionMenu
+              target={extMenu}
+              installed={enabled.has(extMenu.group.id)}
+              onDelete={(group) => {
+                closeExtMenu();
+                deleteExtensionRef.current(group);
+              }}
+            />
+          )}
+          {galleryOpen && (
+            <ExtensionsGallery
+              groups={state.registration.groups}
+              onChanged={setToast}
+              onDelete={(group) => deleteExtensionRef.current(group)}
+            />
+          )}
           <RunBubbles workspace={workspace} />
           <RunPanel />
           {toast !== null && (

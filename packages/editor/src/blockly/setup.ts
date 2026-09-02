@@ -10,6 +10,7 @@ import { defineManifest, defineShadowBlocks, type RegisteredBlock } from './defi
 import {
   buildToolbox,
   groupByManifest,
+  visibleGroups,
   type ToolboxGroup,
 } from './toolbox';
 import { isCallType } from './procedures';
@@ -44,9 +45,12 @@ export function buildProjectToolbox(
   procedureBlocks: RegisteredBlock[],
   /** 已經設定好的金鑰（`keyId`）——`open_config` 的按鈕設定完就不再上架。 */
   configured?: ReadonlySet<string>,
+  /** 已經加進來的積木包（D31）。內建不看這份名單；`undefined` = 全部都上架。 */
+  enabled?: ReadonlySet<string>,
 ): Record<string, unknown> {
   const calls = procedureBlocks.filter((block) => isCallType(block.type));
-  return buildToolbox(groupByManifest([...registration.blocks, ...calls]), configured);
+  const groups = groupByManifest([...registration.blocks, ...calls]);
+  return buildToolbox(visibleGroups(groups, enabled), configured);
 }
 
 export function registerManifests(manifests: Manifest[]): Registration {

@@ -13,6 +13,12 @@ export interface ToolboxGroup {
   name: string;
   colour: string;
   builtin: boolean;
+  /** manifest 的 `version` 與 `description`。**擴充功能面板要它們**——那張卡片
+   * 上除了名字與顏色之外的全部文字都是這兩個欄位，而面板手邊只有分類。
+   * 從 `blocks[0].manifest` 撈也拿得到，但那是「這個分類某一顆積木的 manifest」
+   * ——一個分類的版本不是它第一顆積木的性質（同 `secrets` 放在這裡的理由）。 */
+  version: string;
+  description: string | null;
   /** 這個分類註冊得出來的積木（`dynamic` 的不在裡面）。 */
   blocks: RegisteredBlock[];
   /** manifest 的 `palette`：積木、按鈕、分段的**順序**（§7.2）。 */
@@ -71,6 +77,8 @@ export function groupByManifest(blocks: RegisteredBlock[]): ToolboxGroup[] {
         name: manifest.name,
         colour: manifest.color ?? DEFAULT_COLOUR,
         builtin: manifest.builtin === true,
+        version: manifest.version,
+        description: manifest.description ?? null,
         blocks: [],
         palette: manifest.palette ?? [],
         buttons: (manifest.palette ?? []).filter(isButtonEntry),
@@ -111,6 +119,26 @@ export function findVariableReader(blocks: RegisteredBlock[]): { type: string; a
 }
 
 /**
+ * 工具箱上**這一刻該有的**那幾個分類（D31）。
+ *
+ * 內建的永遠在——它們是這個語言本身，沒有「要不要裝」這個問題。積木包則要
+ * 先在擴充功能面板裡加進來：後端 `discover()` 到的每一個包都會被註冊（舊專案
+ * 才載得進來，§13.3），但**註冊不等於上架**。
+ *
+ * `enabled` 是 `undefined` 時全部都在。那不是「預設全開」的偏好，是**這個函式
+ * 的呼叫者還沒有名單**：`registerManifests` 在載入專案之前就先畫一份工具箱，
+ * 而那一份的用途只是讓 `Registration` 的形狀完整，畫面上那份永遠是
+ * `buildProjectToolbox` 重畫的。
+ */
+export function visibleGroups(
+  groups: ToolboxGroup[],
+  enabled?: ReadonlySet<string>,
+): ToolboxGroup[] {
+  if (!enabled) return groups;
+  return groups.filter((group) => group.builtin || enabled.has(group.id));
+}
+
+/**
  * @param configured 已經設定好的金鑰（`keyId`）。`open_config` 的按鈕**設定完
  *   就收起來**（見 `categoryEntries`）。
  */
@@ -125,6 +153,10 @@ export function buildToolbox(
         kind: 'category',
         name: group.name,
         colour: group.colour,
+        // Blockly 認得這個 key（`toolboxitemid || genUid()`），它讓一個分類的
+        // DOM 問得回**是哪一個命名空間**——右鍵選單要的就是這件事。沒有它就
+        // 只能拿分類名去比對文字，而名字是 manifest 寫的、可以重複。
+        toolboxitemid: group.id,
         // `container` 會**取代**掉 Blockly 的預設 class，而不是加上去。Blockly
         // 自己那條「鍵盤導覽時把瀏覽器的預設焦點框關掉」的規則正好掛在
         // `.blocklyToolboxCategoryContainer:focus-visible` 上——只寫

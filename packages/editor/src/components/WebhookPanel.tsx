@@ -70,7 +70,7 @@ export function WebhookPanel({
         if (items.length === 0) return;
         e.preventDefault();
         const at = items.indexOf(document.activeElement as HTMLElement);
-        items[nextFocusIndex(at, items.length, action === 'focus-prev')]?.focus();
+        items[nextFocusIndex(items.length, at, action === 'focus-prev')]?.focus();
       }
     },
     [editing, onClose],

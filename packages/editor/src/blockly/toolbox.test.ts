@@ -5,6 +5,7 @@
  * 新增的 `buttons` 是宣告，複製一份 fixture 的話，哪天 `procedure.yaml` 少了
  * 那顆「創建積木」，測試會繼續綠著而畫布上生不出任何函式。
  */
+import * as Blockly from 'blockly/core';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
@@ -18,6 +19,7 @@ import {
   buttonCallbackKey,
   findVariableReader,
   groupByManifest,
+  visibleGroups,
 } from './toolbox';
 import { defineManifest } from './define';
 import type { Manifest } from '../types/manifest';
@@ -337,5 +339,59 @@ describe('變數讀取器來自宣告，不是寫死的 opcode', () => {
     const withoutGet = registration.blocks.filter((b) => b.type !== 'data.get');
     expect(withoutGet.some((b) => b.type === 'data.list_length')).toBe(true);
     expect(findVariableReader(withoutGet)).toBeNull();
+  });
+});
+
+describe('積木包要先加進來才上工具箱（D31）', () => {
+  /** 一個第三方包（`builtin` 沒宣告 = 不是內建）。 */
+  function pack() {
+    return defineManifest({
+      manifestVersion: 1,
+      id: 'demo_gate',
+      name: '閘門示範',
+      version: '2.1.0',
+      description: '驗證上架這條路',
+      palette: [{ opcode: 'a', type: 'command', text: 'a' }],
+    } as unknown as Manifest);
+  }
+
+  function toolboxWith(enabled?: ReadonlySet<string>) {
+    const merged: Registration = { ...registration, blocks: [...registration.blocks, ...pack()] };
+    return buildProjectToolbox(merged, [], undefined, enabled);
+  }
+
+  it('沒加進來就沒有那個分類——但積木仍然註冊著（舊專案要載得進來）', () => {
+    expect(categories(toolboxWith(new Set())).map((c) => c.name)).not.toContain('閘門示範');
+    expect(Blockly.Blocks['demo_gate.a']).toBeDefined();
+  });
+
+  it('加進來就上架', () => {
+    expect(categories(toolboxWith(new Set(['demo_gate']))).map((c) => c.name)).toContain('閘門示範');
+  });
+
+  it('內建不看那份名單——它們是這個語言本身，沒有「要不要裝」這個問題', () => {
+    const builtins = categories(toolboxWith(new Set())).map((c) => c.name);
+    expect(builtins).toContain('控制');
+    expect(builtins).toContain('函式');
+  });
+
+  it('沒有名單（`undefined`）時全部都在——那是「還沒問過」，不是「預設全開」', () => {
+    expect(categories(toolboxWith()).map((c) => c.name)).toContain('閘門示範');
+  });
+
+  it('每個分類帶著自己的 `toolboxitemid`——右鍵選單靠它問「這一格是哪一個包」', () => {
+    // Blockly 認得這個 key（`toolboxitemid || genUid()`）。沒有它就只能拿分類名
+    // 去比對文字，而名字是 manifest 寫的、可以重複，也會被 i18n 換掉。
+    const found = categories(toolboxWith(new Set(['demo_gate']))).find(
+      (c) => c.name === '閘門示範',
+    );
+    expect(found).toMatchObject({ toolboxitemid: 'demo_gate' });
+    // 內建也要有：右鍵落在它們身上時，那條規則要問得出「這是內建，不給選單」。
+    expect(category(toolboxWith(new Set()), '控制')).toMatchObject({ toolboxitemid: 'control' });
+  });
+
+  it('分類帶著版本與說明——那是卡片上除了名字之外的全部文字', () => {
+    const [group] = visibleGroups(groupByManifest(pack()), new Set(['demo_gate']));
+    expect(group).toMatchObject({ version: '2.1.0', description: '驗證上架這條路' });
   });
 });

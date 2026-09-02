@@ -324,12 +324,12 @@ body,
 .blocky-run-running>.blocklyPath,
 .blocky-run-hot>.blocklyPath {
   stroke: #fff;
-  stroke-width: 3px;
+  stroke-width: 2px;
 }
 
 .blocky-run-running,
 .blocky-run-hot {
-  filter: drop-shadow(0 0 3px #ffbf00) drop-shadow(0 0 6px #ffa000);
+  filter: drop-shadow(0 0 2px #f3bc17) drop-shadow(0 0 5px #f3bc17);
 }
 
 .blocky-run-hot {
@@ -724,57 +724,291 @@ body,
   line-height: 1;
 }
 
-.ext-panel {
-  width: 15rem;
-  max-height: 20rem;
+/* ------------------------------------------------------------------ *
+ * 擴充功能面板（D31）。TurboWarp 的「選擇擴充功能」那一頁：整頁蓋掉編輯器，
+ * 一張一張的卡。
+ *
+ * `position: fixed` + `inset: 0` 而不是塞在 `.stage` 裡：這一頁連工具列一起
+ * 蓋掉，因為它自己有一條標頭（「返回」就是出口）。z-index 排在對話框
+ * （`.modal-backdrop` 是 200）底下——真的疊起來時，上面那一層才是使用者剛剛
+ * 按出來的東西。
+ * ------------------------------------------------------------------ */
+
+.gallery {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  background: #fff;
-  box-shadow: 0 4px 14px rgb(20 20 40 / 16%);
-  font-size: 0.75rem;
+  background: #eef2f8;
 }
 
-.ext-panel h2 {
-  margin: 0 0 0.5rem;
-  font-size: 0.75rem;
-  color: var(--muted);
+/* 標頭。三欄：返回、置中的標題、右邊的匯入。標題用 `grid` 置中而不是靠兩側
+   等寬的留白——左右兩顆按鈕的寬度不一樣（而且「從電腦(.zip)」的字數會變），
+   flex 的置中會跟著它們一起飄。 */
+.gallery-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: #e8574a;
+  color: #fff;
 }
 
-.ext-list {
-  margin: 0 0 0.6rem;
-  padding: 0;
-  list-style: none;
+.gallery-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  text-align: center;
+  white-space: nowrap;
 }
 
-.ext-list li {
+.gallery-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-self: start;
+  font: inherit;
+  font-size: 0.9375rem;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: 0.35rem;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.gallery-back:hover {
+  background: rgb(255 255 255 / 16%);
+}
+
+/* 匯入按鈕。暗的時候仍然看得出是一顆按鈕（`.button:disabled` 只降透明度），
+   而它為什麼按不下去由 title 交代。 */
+.gallery-import {
+  justify-self: end;
+  border-color: rgb(255 255 255 / 45%);
+  background: rgb(255 255 255 / 18%);
+  color: #fff;
+}
+
+/* 搜尋與膠囊那一列。底色比標頭淺一階：它屬於標頭那一組（都是「找東西」的
+   工具），但它不是標題。 */
+.gallery-filters {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.75rem 1.25rem;
+  background: #f4b6b0;
+}
+
+.gallery-search {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.15rem 0;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  min-width: 12rem;
 }
 
-.ext-dot {
-  width: 0.6rem;
-  height: 0.6rem;
+.gallery-search input {
+  font: inherit;
+  font-size: 0.875rem;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--fg);
+  width: 100%;
+}
+
+.gallery-chips {
+  display: flex;
+  gap: 0.5rem;
+  /* 膠囊與搜尋框之間那條分隔線：兩者做的是不同的事（打字 vs 選一類），
+     而它們在同一列。 */
+  padding-left: 1.25rem;
+  border-left: 1px solid rgb(255 255 255 / 60%);
+}
+
+.gallery-chip {
+  padding: 0.35rem 1.1rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: rgb(255 255 255 / 45%);
+  color: #fff;
+}
+
+.gallery-chip.is-on {
+  background: #f5a623;
+}
+
+.gallery-empty {
+  margin: 0;
+  padding: 2.5rem 1.25rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1.25rem;
+  margin: 0;
+  padding: 1.5rem 1.25rem 3rem;
+  list-style: none;
+}
+
+/* 一張卡。整張是一顆按鈕——卡上沒有第二個可以點的東西，所以「點卡片」與
+   「點加入」不該是兩個判定範圍。 */
+.ext-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 0.6rem;
+  background: #fff;
+  color: inherit;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgb(20 20 40 / 10%);
+}
+
+.ext-card:hover {
+  box-shadow: 0 4px 14px rgb(20 20 40 / 16%);
+}
+
+.ext-card.is-on {
+  border-color: #4c97ff;
+}
+
+/* 圖案那一格。色底是 manifest 的 `color`（inline style），所以它與分類欄上
+   那顆圓點永遠是同一個顏色；同心圓與中間那個字是這裡畫的——**積木包不提供
+   圖片**（D21 的同一條線：前端不認識任何一個包的 id）。 */
+.ext-card-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  background-image: repeating-radial-gradient(circle at 50% 50%,
+      rgb(255 255 255 / 10%) 0 1.25rem,
+      rgb(255 255 255 / 0%) 1.25rem 2.5rem);
+}
+
+.ext-card-initial {
+  font-size: 2.75rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
+/* 「已加入」的勾。在圖案的角上而不是名字旁邊：一眼掃過去要數的是「哪幾張已經
+   加了」，而卡片的圖案是這一頁裡最先被看到的東西。 */
+.ext-card-check {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
   border-radius: 50%;
-  flex: none;
+  background: #fff;
+  color: #2f9e57;
 }
 
-.ext-name {
+.ext-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+  padding: 0.75rem 0.9rem 0.85rem;
+}
+
+.ext-card-name {
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 
-.ext-meta {
-  margin-left: auto;
+.ext-card-desc {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.ext-card-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.ext-card-meta {
   color: var(--muted);
 }
 
-.ext-note {
-  margin: 0.5rem 0 0;
+.ext-card-action {
+  font-weight: 600;
+  color: #4c97ff;
+  white-space: nowrap;
+}
+
+.ext-card.is-on .ext-card-action {
   color: var(--muted);
-  line-height: 1.6;
+}
+
+/* 已經加進來的卡，左鍵不做事（拿掉走右鍵）——所以游標也不該說它可以按。 */
+.ext-card.is-on {
+  cursor: default;
+}
+
+/* 一張卡的右鍵選單。`position: fixed` 因為座標來自 `clientX/clientY`，而
+   `.gallery` 自己會捲。 */
+.ext-menu {
+  position: fixed;
+  z-index: 195;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: #fff;
+  box-shadow: 0 6px 20px rgb(20 20 40 / 20%);
+}
+
+.ext-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  padding: 0.4rem 0.55rem;
+  border: none;
+  border-radius: 0.3rem;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ext-menu-item:hover:not(:disabled) {
+  background: #eef2f8;
+}
+
+.ext-menu-item:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1496,6 +1730,7 @@ body,
   box-shadow: 0 4px 16px rgb(20 20 40 / 18%);
   cursor: pointer;
 }
+
 /* 執行紀錄裡錯誤那一列附帶的補救按鈕（`BlockError.action`）。跟在訊息後面而
    不是自成一列：它是那句話的結局，不是另一則訊息。 */
 .log-action {
