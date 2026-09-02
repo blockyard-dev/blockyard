@@ -127,6 +127,26 @@ class ArgSpec(Strict):
     # opcode），而它得先知道哪一顆積木是那個「取得」。沒有這個宣告，前端只能
     # 寫死 `data.get`——那正是 D21 要消滅的東西。
     reads: bool = False
+    # D29：`binds` 綁進來的名字，**看得見的範圍是哪一疊 stack**——寫的是同一顆
+    # 積木上某個 `type: stack` 參數的名字（`for_each` 是 `body`，`try_catch` 是
+    # `catch`）。沒寫這一格的 `binds` 寫的是全域層（§5.4 第 3 層，`data.set`）。
+    #
+    # 分辨這兩種綁定端**只有宣告答得出來**：`data.set.name` 與
+    # `control.for_each.name` 在 manifest 裡長得一模一樣（`type: variable` +
+    # `binds: true`），差別是前者建立的名字整個 Run 都看得見、後者只在自己那
+    # 張嘴巴裡看得見。沒有這一格，「範圍是哪一疊」就得靠一份寫死的 opcode
+    # 名單——那正是 D21 要消滅的東西，而積木包哪天有了自己的 C 型綁定積木，
+    # 那份名單就是錯的。
+    scope: str | None = None
+    # §5.4：這一格指名的變數會被**寫進全域層**，但這顆積木不建立它
+    # （`data.change`：§4.5 要求變數已存在）。`binds` 的第三面。
+    #
+    # 存在的理由是 D29 的存檔期檢查：`改變 [item] 增加 1` 在 `item` 是迴圈變數
+    # 時，讀的是第 2 層、寫的是第 3 層——一個「值對了一半」的結果。而
+    # `把 (x) 加到 [item]` **不是**這種形狀（它就地改那個清單、不呼叫 set），
+    # 所以「所有沒宣告 reads 的 variable 欄位」不是這條規則的範圍：那會把一顆
+    # 正確的積木標成錯的，而 §8.5 對誤報的態度很明白。
+    writes: bool = False
     multiline: bool = False            # string / code：渲染成 textarea（§7.2）
     rows: int | None = None
     interpolate: bool | None = None    # 覆寫 §4.7 的預設
@@ -190,6 +210,12 @@ class ArgSpec(Strict):
             raise ValueError("reads 只適用於 variable：它說的是「這顆積木回傳這個名字的值」")
         if self.reads and self.binds:
             raise ValueError("binds 與 reads 互斥：一格不會同時是建立與讀出")
+        if self.writes and self.type != "variable":
+            raise ValueError("writes 只適用於 variable：它說的是「這顆積木寫這個名字」")
+        if self.writes and (self.binds or self.reads):
+            raise ValueError("writes 與 binds / reads 互斥：建立、讀出、寫入是三件事")
+        if self.scope is not None and not self.binds:
+            raise ValueError("scope 只適用於 binds：它說的是「綁進來的名字看得見多遠」")
         if self.min is not None and self.max is not None and self.min > self.max:
             raise ValueError(f"min（{self.min}）大於 max（{self.max}）")
         return self
@@ -374,6 +400,26 @@ class BlockSpec(Strict):
             raise ValueError("alsoCommand 只適用於 reporter：它說的是「這一顆也可能沒有輸出孔」")
 
         for name, arg in self.args.items():
+            # D29：`scope` 指的必須是同一顆積木上一疊真的 stack。指錯的症狀是
+            # 一個**永遠看不見的名字**（範圍是一疊不存在的積木），而那在畫面上
+            # 長得跟「打錯變數名」一模一樣。
+            if arg.scope is not None:
+                # 指進重複群組：那一疊在份數是 0 的時候根本不存在，而且它有幾份
+                # 是每顆積木自己的事——一個基底的名字不可能同時在那幾疊裡。
+                if self.repeat is not None and arg.scope in self.repeat.args:
+                    raise ValueError(
+                        f"參數 {name} 的 scope 指到重複群組裡的 {arg.scope}："
+                        "那一疊在份數是 0 的時候不存在"
+                    )
+                target = self.args.get(arg.scope)
+                if target is None:
+                    raise ValueError(f"參數 {name} 的 scope 指到不存在的參數 {arg.scope}")
+                if not target.is_stack:
+                    raise ValueError(
+                        f"參數 {name} 的 scope 指到 {arg.scope}，但那不是 stack："
+                        "綁定的範圍只能是一疊積木"
+                    )
+
             for dep in arg.depends or ():
                 # 指到不存在的那一格，症狀是前端送出一個永遠是 undefined 的值，
                 # 而積木包收到的是一個空字串——「清單是空的」看起來像服務沒東西
@@ -399,6 +445,22 @@ class BlockSpec(Strict):
                         )
             if self.repeat.before is not None and self.repeat.before not in self.args:
                 raise ValueError(f"repeat.before 指到不存在的參數 {self.repeat.before}")
+            # D29 × Q19：範圍不能跨出自己那一份。群組裡的 `scope` 指到基底的
+            # 一疊，意思會變成「每一份綁的名字都在同一張嘴巴裡有效」；基底的
+            # `scope` 指進群組更糟——那一疊在份數是 0 的時候根本不存在。
+            for name, arg in self.repeat.args.items():
+                if arg.scope is None:
+                    continue
+                target = self.repeat.args.get(arg.scope)
+                if target is None:
+                    raise ValueError(
+                        f"重複群組的參數 {name} 的 scope 指到 {arg.scope}，"
+                        "但那不在同一個群組裡：範圍不能跨出自己那一份"
+                    )
+                if not target.is_stack:
+                    raise ValueError(
+                        f"重複群組的參數 {name} 的 scope 指到 {arg.scope}，但那不是 stack"
+                    )
         return self
 
     def repeat_arg_name(self, arg: str, index: int) -> str:
@@ -422,6 +484,13 @@ class BlockSpec(Strict):
             return out
         for i in range(count):
             for name, arg in self.repeat.args.items():
+                # D29：`scope` 指的是**這一份**的那一疊，不是基底那一疊。原樣搬
+                # 過來的話，第 2 份 catch 綁的名字會宣稱自己在第 1 份 catch 裡
+                # 有效——存檔期擋錯一顆積木、放行另一顆，而兩顆長得一模一樣。
+                if arg.scope is not None:
+                    arg = arg.model_copy(
+                        update={"scope": self.repeat_arg_name(arg.scope, i)}
+                    )
                 out[self.repeat_arg_name(name, i)] = arg
         return out
 

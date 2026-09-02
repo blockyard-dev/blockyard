@@ -175,6 +175,26 @@ describe('展開後的參數宣告查得到（§16 Q19）', () => {
     expect(argSpecOf(ifElseSpec, 'nope_1')).toBeUndefined();
   });
 
+  it('`scope` 跟著那一份走，不是指回基底那一疊（D29 × Q19）', () => {
+    // 原樣回傳的話，第 2 份 catch 綁的名字會宣稱自己在**第 1 份** catch 裡
+    // 有效——祖先鏈於是標錯一顆積木，而畫面上那兩顆長得一模一樣。
+    const spec: BlockSpec = {
+      opcode: 'multi_catch',
+      type: 'command',
+      text: '嘗試 %(try)',
+      args: { try: { type: 'stack' } },
+      repeat: {
+        label: '出錯時把錯誤存進 %(error_name)',
+        args: {
+          error_name: { type: 'variable', binds: true, scope: 'catch' },
+          catch: { type: 'stack' },
+        },
+      },
+    } as BlockSpec;
+    expect(argSpecOf(spec, 'error_name_1')?.scope).toBe('catch_1');
+    expect(argSpecOf(spec, 'error_name_2')?.scope).toBe('catch_2');
+  });
+
   it('展開的命名規則與後端同一條', () => {
     expect(repeatArgName('condition', 0)).toBe('condition_1');
   });

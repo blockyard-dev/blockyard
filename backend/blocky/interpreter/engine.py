@@ -19,6 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from blocky.bindings import binder_index
 from blocky.errors import (
     BlockyError,
     ControlSignal,
@@ -31,7 +32,13 @@ from blocky.errors import (
 )
 from blocky.interpreter.declarations import SHAPE_HAT, SHAPE_VALUE
 from blocky.interpreter.events import EventSink, clip_value
-from blocky.interpreter.registry import COMMANDS, HAT_OPCODES, VALUES, resolve_shape
+from blocky.interpreter.registry import (
+    COMMANDS,
+    HAT_OPCODES,
+    VALUES,
+    resolve_shape,
+    resolve_spec,
+)
 from blocky.interpreter.scope import (
     MAX_FRAME_DEPTH,
     InMemoryPersistStore,
@@ -188,6 +195,13 @@ class Interpreter:
         # 分辨「點的是 reporter（求值）還是 command（執行整條堆疊）」，而那必須
         # 與載入期形狀驗證用的是**同一張表**，否則畫布上合法的東西會跑不動。
         self._shapes = resolve_shape(extensions)
+        # D29：name → 「綁它的那顆積木叫什麼」。**整份專案掃一次**，不是執行期
+        # 的堆疊——那句話要說的正是範圍外的情形，而那時候綁它的那一層早就被
+        # pop 掉了。算一次就好：專案在一個 Run 裡不會變。
+        self._binders = binder_index(
+            {bid: b.model_dump() for bid, b in project.blocks.items()},
+            resolve_spec(extensions),
+        )
 
     # ---- 執行 ----
 
@@ -320,8 +334,12 @@ class Interpreter:
         return stopped
 
     async def _run_thread(self, thread_id: str, entry: Entry, payload: dict[str, Any]) -> str:
-        # hat 的 yields 綁成 thread-local（§5.4 第 2 層，唯讀）
-        scope = Scope(self.run_scope, ThreadScope(payload), self.persist)
+        # hat 的 yields 綁成 thread-local（§5.4 第 2 層，唯讀）。hat 的 body 是
+        # 整條腳本，所以它推的是 layer 0——D29 底下「整條 thread 看得見」不是
+        # 一條特例，是那顆積木的嘴巴剛好就是整條腳本。
+        scope = Scope(
+            self.run_scope, ThreadScope(payload), self.persist, binder=self._binders.get
+        )
         thread = Thread(self, thread_id, entry.script_id, scope)
 
         self.sink.emit("thread.start", threadId=thread_id, scriptId=entry.script_id)

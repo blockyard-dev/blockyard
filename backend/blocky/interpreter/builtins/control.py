@@ -80,10 +80,22 @@ async def _for_each(t: Thread, b: Block) -> None:
         )
     body = t.stack(b, "body")
     # 迭代前先複製：迴圈體修改原清單不該改變迭代範圍
-    for item in list(items):
-        t.scope.set(name, item)
-        t.interp.sink.emit("var.set", threadId=t.id, name=name, value=item)
-        await t.exec_stack(body)
+    #
+    # **迴圈變數推的是 thread-local 的一層，不是 `t.scope.set`**（D29 第 1 條）。
+    # 寫全域是一個真的 bug：全域層是同一個 Run 的所有 thread 共用的，兩條腳本
+    # 各跑一個 `對每一項 item`、迴圈體裡有任何一個 await，兩邊就互相踩——而
+    # manifest 早就宣告了 `binds`，只有執行期沒有跟上。
+    #
+    # 一層撐完整個迴圈、每一輪覆寫那一格，而不是每輪 push／pop：巢狀的深度該
+    # 等於畫面上的巢狀深度，一個跑一萬輪的迴圈不該讓堆疊長一萬層。
+    t.scope.thread.push({})
+    try:
+        for item in list(items):
+            t.scope.thread.assign(name, item)
+            t.interp.sink.emit("var.set", threadId=t.id, name=name, value=item)
+            await t.exec_stack(body)
+    finally:
+        t.scope.thread.pop()
 
 
 @command("control.wait")

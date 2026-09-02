@@ -21,7 +21,7 @@ from blocky.extensions import discover, open_registry, secret_store
 from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
 from blocky.interpreter.declarations import expression_fields
 from blocky.interpreter.events import EventSink
-from blocky.interpreter.registry import resolve_shape, resolve_terminal
+from blocky.interpreter.registry import resolve_shape, resolve_spec, resolve_terminal
 from blocky.ir.schema import LoadedProject, load
 from blocky.repeat import validate_blocks as validate_repeat_blocks
 from blocky.webhook import validate_blocks as validate_webhook_blocks
@@ -77,12 +77,14 @@ async def open_project(
             raise ValidationError(f"載入積木包時失敗：{e}") from None
 
     try:
+        spec_of = resolve_spec(registry)
         loaded = load(
             data,
             strict_refs=True,
             shapes=resolve_shape(registry),
             expressions=expression_fields,
             terminals=resolve_terminal(registry),
+            specs=spec_of,
         )
         # §9.1／§4.9：`when_cron` 的排程與時區在**存檔期**就解析。留到執行期的
         # 話，一顆設錯的 cron 可以安靜地不觸發好幾個月（同 §4.7b 的運算式）。
@@ -97,7 +99,7 @@ async def open_project(
         validate_webhook_blocks(data.get("blocks") or {})
         # §16 Q19：份數與孔的數量對不對得起來。少的那一格在執行期是「沒填」，
         # 而 `如果` 少了條件會安靜地走 false 那一邊——一個看不出來的錯。
-        validate_repeat_blocks(data.get("blocks") or {}, _spec_resolver(registry))
+        validate_repeat_blocks(data.get("blocks") or {}, spec_of)
         return loaded, registry
     except PydanticError as e:
         if registry is not None:
@@ -115,25 +117,6 @@ async def validate_project(data: Any, *, extensions_root: Path) -> LoadedProject
     if registry is not None:
         await registry.unload_all()
     return project
-
-
-def _spec_resolver(registry: ExtensionRegistry | None) -> Any:
-    """`opcode` → 宣告。內建走 `declarations`，積木包走 registry。
-
-    合成在這裡而不是在 `repeat.py`：那個模組不該知道「宣告有兩個來源」這件事，
-    同 `load()` 的 `shapes` / `terminals` 是注進去的而不是它自己去查（D21）。
-    """
-    from blocky.interpreter import declarations
-
-    def resolve(opcode: str) -> Any:
-        if (builtin := declarations.block(opcode)) is not None:
-            return builtin
-        if registry is None:
-            return None
-        found = registry.lookup(opcode)
-        return getattr(found, "spec", None)
-
-    return resolve
 
 
 def _first_error(e: PydanticError) -> str:

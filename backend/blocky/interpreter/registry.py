@@ -87,6 +87,26 @@ def resolve_terminal(extensions: Any = None) -> Callable[[str], bool]:
     return resolve
 
 
+def resolve_spec(extensions: Any = None) -> Callable[[str], Any]:
+    """組出「opcode → 宣告」的查詢函式，內建與積木包共用一個入口。
+
+    §16 Q19 的份數檢查與 D29 的作用域都要問「這顆積木宣告了什麼」，而那個問題
+    的答案有兩個來源。合成在這裡而不是在各自的模組：`repeat.py` 與
+    `bindings.py` 都不該知道「宣告有兩個來源」這件事，同 `resolve_shape` /
+    `resolve_terminal`（D21）。
+
+    認不得的 opcode 回 None——§13.3 的佔位符。
+    """
+
+    def resolve(opcode: str) -> Any:
+        if (builtin := declarations.block(opcode)) is not None:
+            return builtin
+        found = extensions.lookup(opcode) if extensions is not None else None
+        return found[1] if found is not None else None
+
+    return resolve
+
+
 def resolve_shape(extensions: Any = None) -> Callable[[str], frozenset[str]]:
     """組出「opcode → 形狀」的查詢函式，內建與積木包共用一個入口。
 

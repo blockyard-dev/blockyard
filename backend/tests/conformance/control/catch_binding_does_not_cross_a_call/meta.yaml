@@ -1,0 +1,15 @@
+title: catch 裡呼叫的函式讀不到 error——C block 綁的名字不穿過函式呼叫
+spec: §5.4 綁定的作用範圍（D29）
+tags:
+- try_catch
+- procedure
+- variables
+- D29
+expect:
+  status: error
+  logs:
+  - 爆了
+  error:
+    code: undefined_variable
+    message_contains: 只在那顆「嘗試 ⋯ 出錯時把錯誤存進 錯誤」裡面有效
+    hint_contains: 用參數傳進來

@@ -1,0 +1,14 @@
+title: 迴圈變數只在迴圈體裡有效；迴圈外面讀它是錯誤，而且訊息指名是哪顆積木綁的
+spec: §5.4 綁定的作用範圍（D29）
+tags:
+- control
+- variables
+- D29
+expect:
+  status: error
+  logs:
+  - '1'
+  - '2'
+  error:
+    code: undefined_variable
+    message_contains: 只在那顆「對 ⋯ 的每一項 x」裡面有效

@@ -107,6 +107,23 @@
           "title": "Reads",
           "type": "boolean"
         },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "writes": {
+          "default": false,
+          "title": "Writes",
+          "type": "boolean"
+        },
         "multiline": {
           "default": false,
           "title": "Multiline",

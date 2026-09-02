@@ -28,6 +28,21 @@ def spec(**over: Any) -> BlockSpec:
     return BlockSpec.model_validate(base)
 
 
+CATCH_SPEC: dict[str, Any] = {
+    "opcode": "multi_catch",
+    "type": "command",
+    "text": "嘗試 %(try)",
+    "args": {"try": {"type": "stack"}},
+    "repeat": {
+        "label": "出錯時把錯誤存進 %(error_name)",
+        "args": {
+            "error_name": {"type": "variable", "binds": True, "scope": "catch"},
+            "catch": {"type": "stack"},
+        },
+    },
+}
+
+
 # --------------------------------------------------------------------------
 # 宣告
 # --------------------------------------------------------------------------
@@ -218,3 +233,47 @@ def test_a_chain_with_a_missing_socket_is_422(client: TestClient) -> None:
     res = client.put("/api/projects/p1", json=chain_project(repeat=1, complete=False))
     assert res.status_code == 422
     assert res.json()["detail"]["blockId"] == "if"
+
+
+# --------------------------------------------------------------------------
+# D29 × Q19：範圍不能跨出自己那一份
+# --------------------------------------------------------------------------
+
+
+def test_scope_is_renumbered_with_its_own_copy() -> None:
+    """第 2 份 catch 綁的名字，範圍是**第 2 份**那一疊。
+
+    原樣搬過來的話它會宣稱自己在第 1 份 catch 裡有效——存檔期於是擋錯一顆積木、
+    放行另一顆，而畫面上那兩顆長得一模一樣。
+    """
+    args = BlockSpec.model_validate(CATCH_SPEC).repeat_args(2)
+    assert args["error_name_1"].scope == "catch_1"
+    assert args["error_name_2"].scope == "catch_2"
+    # 宣告是共用的：展開一次不能改到別顆積木看到的那一份
+    assert BlockSpec.model_validate(CATCH_SPEC).repeat.args["error_name"].scope == "catch"
+
+
+def test_a_group_scope_must_stay_inside_its_group() -> None:
+    bad = {**CATCH_SPEC, "args": {"try": {"type": "stack"}, "base": {"type": "stack"}}}
+    bad["repeat"] = {
+        **CATCH_SPEC["repeat"],
+        "args": {
+            "error_name": {"type": "variable", "binds": True, "scope": "base"},
+            "catch": {"type": "stack"},
+        },
+    }
+    with pytest.raises(ValueError, match="不能跨出自己那一份"):
+        BlockSpec.model_validate(bad)
+
+
+def test_a_base_scope_must_not_point_into_the_group() -> None:
+    """那一疊在份數是 0 的時候根本不存在。"""
+    bad = {
+        **CATCH_SPEC,
+        "args": {
+            "try": {"type": "stack"},
+            "name": {"type": "variable", "binds": True, "scope": "catch"},
+        },
+    }
+    with pytest.raises(ValueError, match="份數是 0 的時候不存在"):
+        BlockSpec.model_validate(bad)

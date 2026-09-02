@@ -1,0 +1,10 @@
+title: 迴圈體裡的「設定 [迴圈變數]」是存檔期錯誤，訊息指名那顆 for each
+spec: §5.4 綁定的作用範圍（D29）
+tags:
+- control
+- variables
+- validation
+- D29
+expect:
+  status: load_error
+  load_error: 「x」是那顆「對 ⋯ 的每一項 x」綁的名字

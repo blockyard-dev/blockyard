@@ -1,0 +1,34 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3", "value": [1, 2]}
+{"op": "var.set", "threadId": "t1", "name": "items", "value": [1, 2]}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "items", "value": [1, 2]}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "var.set", "threadId": "t1", "name": "items", "value": [1, 2]}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_7", "value": [1, 2]}
+{"op": "var.set", "threadId": "t1", "name": "x", "value": 1}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_8"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_9"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_9", "value": 1}
+{"op": "log", "threadId": "t1", "level": "info", "text": "1", "blockId": "blk_8"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_8"}
+{"op": "var.set", "threadId": "t1", "name": "x", "value": 2}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_8"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_9"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_9", "value": 2}
+{"op": "log", "threadId": "t1", "level": "info", "text": "2", "blockId": "blk_8"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_8"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_10"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_11"}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_11", "error": {"type": "UndefinedVariableError", "code": "undefined_variable", "message": "變數「x」只在那顆「對 ⋯ 的每一項 x」裡面有效", "blockId": "blk_11", "hint": "綁進來的名字只在那顆積木的嘴巴裡看得見。要在外面用，先用「設定」把值存起來。"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

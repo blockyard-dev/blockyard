@@ -63,7 +63,12 @@ export function argSpecOf(spec: BlockSpec | undefined, name: string): ArgSpec | 
   const base = match?.[1];
   const index = Number(match?.[2]);
   if (base === undefined || !Number.isInteger(index) || index < 1) return undefined;
-  return spec.repeat.args[base];
+  const arg = spec.repeat.args[base];
+  // D29：`scope` 指的是**這一份**的那一疊。原樣回傳的話，第 2 份 catch 綁的
+  // 名字會宣稱自己在第 1 份 catch 裡有效——祖先鏈於是標錯一顆積木，而兩顆
+  // 長得一模一樣。與後端 `repeat_args` 的同一句改寫。
+  if (!arg?.scope) return arg;
+  return { ...arg, scope: repeatArgName(arg.scope, index - 1) };
 }
 
 /** 一個 block type 要用的 extension 名字。一個 type 一個，因為宣告不一樣。 */

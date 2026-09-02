@@ -67,8 +67,11 @@ palette:
     type: command
     text: "對 %(list) 的每一項 %(name)"
     args:
-      # binds：迴圈變數由這顆積木建立（§5.4 第 1 層之外的第 3 層寫入）。
-      name: { type: variable, default: "item", label: "項目變數", binds: true }
+      # binds + scope：迴圈變數由這顆積木建立，而它**只在迴圈體裡看得見**
+      # （§5.4 第 2 層，D29）。原本沒有 scope，於是它寫的是全域層——而全域層是
+      # 同一個 Run 的所有 thread 共用的，兩條腳本各跑一個 `對每一項 item`、
+      # 迴圈體裡有任何一個 await，兩邊就互相踩。
+      name: { type: variable, default: "item", label: "項目變數", binds: true, scope: body }
       list: { type: list }
       body: { type: stack }
 
@@ -122,6 +125,8 @@ palette:
     text: "嘗試 ⋯ 出錯時把錯誤存進 %(error_name)"
     args:
       try: { type: stack }
-      # binds：錯誤變數由 catch 綁定（§5.4 第 2 層 thread-local）。
-      error_name: { type: variable, default: "error", label: "錯誤變數", binds: true }
+      # binds + scope：錯誤變數由 catch 綁定（§5.4 第 2 層 thread-local），
+      # 範圍是 `catch` 那一疊——**不是 `try`**（那時候還沒有錯誤），也不是
+      # try_catch 之後（D29：那會讓同一個位置的值取決於這次有沒有出錯）。
+      error_name: { type: variable, default: "error", label: "錯誤變數", binds: true, scope: catch }
       catch: { type: stack }

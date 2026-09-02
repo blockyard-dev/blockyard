@@ -37,7 +37,9 @@ palette:
     # §4.5：同樣要求變數已存在。少打一顆 set，換來的是打錯字被靜默當成新變數。
     text: "改變 %(name) 增加 %(value)"
     args:
-      name: { type: variable, default: "" }
+      # writes：它讀第 1/2/3 層、但寫的一定是第 3 層（§5.4）。D29 的存檔期檢查
+      # 靠這個宣告認出它——`改變 [迴圈變數]` 讀的與寫的不是同一個東西。
+      name: { type: variable, default: "", writes: true }
       value: { type: number, default: 1 }
 
   - opcode: get

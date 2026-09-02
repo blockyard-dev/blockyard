@@ -204,6 +204,158 @@ describe('沒有被設定過的變數（§4.5）', () => {
   });
 });
 
+// -------------------------------------------------------------------- //
+// §5.4 D29：綁定的作用範圍 = 綁它那顆積木的 body
+// -------------------------------------------------------------------- //
+
+describe('綁定的作用範圍（D29）', () => {
+  it('迴圈變數在迴圈**後面**讀要被標', () => {
+    const s = scene(
+      {
+        h: { opcode: 'event.when_flag_clicked', next: 'each' },
+        each: {
+          opcode: 'control.for_each',
+          parent: 'h',
+          next: 'after',
+          fields: { name: 'item' },
+          inputs: { body: { kind: 'stack', id: 'inside' } },
+        },
+        inside: { opcode: 'data.change', parent: 'each', fields: { name: 'item' } },
+        after: { opcode: 'data.change', parent: 'each', fields: { name: 'item' } },
+      },
+      ['h'],
+    );
+    const warnings = s.check();
+    expect(kindsOn(warnings, 'inside')).toEqual([]);
+    expect(kindsOn(warnings, 'after')).toEqual(['variable']);
+  });
+
+  it('範圍外那句話要**指名是哪顆積木綁的**，不是「還沒有被設定過」', () => {
+    const s = scene(
+      {
+        h: { opcode: 'event.when_flag_clicked', next: 'each' },
+        each: {
+          opcode: 'control.for_each',
+          parent: 'h',
+          next: 'after',
+          fields: { name: '水果' },
+          inputs: { body: { kind: 'stack', id: 'noop' } },
+        },
+        noop: { opcode: 'debug.log', parent: 'each' },
+        after: { opcode: 'data.change', parent: 'each', fields: { name: '水果' } },
+      },
+      ['h'],
+    );
+    // 「沒有人建立過」與「建立過、只是這裡看不見」是兩件事，補救也不同——
+    // 一句「你是不是要 X？」會讓人去改一個根本沒打錯的字。
+    expect(messageOn(s.check(), 'after')).toBe('變數「水果」只在那顆「對 ⋯ 的每一項 水果」裡面有效');
+  });
+
+  it('錯誤變數在 `try` 那一疊裡讀要被標——那時候還沒有錯誤', () => {
+    const s = scene(
+      {
+        h: { opcode: 'event.when_flag_clicked', next: 'tc' },
+        tc: {
+          opcode: 'control.try_catch',
+          parent: 'h',
+          fields: { error_name: 'err' },
+          inputs: {
+            try: { kind: 'stack', id: 'inTry' },
+            catch: { kind: 'stack', id: 'inCatch' },
+          },
+        },
+        inTry: { opcode: 'data.change', parent: 'tc', fields: { name: 'err' } },
+        inCatch: { opcode: 'data.change', parent: 'tc', fields: { name: 'err' } },
+      },
+      ['h'],
+    );
+    const warnings = s.check();
+    expect(kindsOn(warnings, 'inTry')).toEqual(['variable']);
+    expect(kindsOn(warnings, 'inCatch')).toEqual([]);
+  });
+
+  it('巢狀：內圈看得到外圈綁的名字', () => {
+    const s = scene(
+      {
+        h: { opcode: 'event.when_flag_clicked', next: 'outer' },
+        outer: {
+          opcode: 'control.for_each',
+          parent: 'h',
+          fields: { name: 'a' },
+          inputs: { body: { kind: 'stack', id: 'inner' } },
+        },
+        inner: {
+          opcode: 'control.for_each',
+          parent: 'outer',
+          fields: { name: 'b' },
+          inputs: { body: { kind: 'stack', id: 'deep' } },
+        },
+        deep: { opcode: 'data.change', parent: 'inner', fields: { name: 'a' } },
+      },
+      ['h'],
+    );
+    expect(s.check()).toEqual([]);
+  });
+
+  it('hat 的 yields 只在**那顆 hat 底下**看得見', () => {
+    const s = scene(
+      {
+        h: { opcode: 'event.when_webhook', next: 'here', fields: { path: 'hook' } },
+        here: { opcode: 'data.change', parent: 'h', fields: { name: 'body' } },
+        h2: { opcode: 'event.when_flag_clicked', next: 'there' },
+        there: { opcode: 'data.change', parent: 'h2', fields: { name: 'body' } },
+      },
+      ['h', 'h2'],
+    );
+    const warnings = s.check();
+    expect(kindsOn(warnings, 'here')).toEqual([]);
+    expect(kindsOn(warnings, 'there')).toEqual(['variable']);
+  });
+
+  it('函式參數在函式外面讀要被標', () => {
+    const s = scene(
+      {
+        d: { opcode: 'procedure.definition', next: 'inside', fields: { proc: 'p_sum' } },
+        inside: { opcode: 'data.change', parent: 'd', fields: { name: '清單' } },
+        h: { opcode: 'event.when_flag_clicked', next: 'outside' },
+        outside: { opcode: 'data.change', parent: 'h', fields: { name: '清單' } },
+      },
+      ['h'],
+      {
+        p_sum: {
+          name: '加總',
+          params: [{ id: 'a1', name: '清單' }],
+          returns: null,
+          definitionBlock: 'd',
+          body: 'inside',
+        },
+      },
+    );
+    const warnings = s.check();
+    expect(kindsOn(warnings, 'inside')).toEqual([]);
+    expect(kindsOn(warnings, 'outside')).toEqual(['variable']);
+  });
+
+  it('`設定` 建立的名字仍然是扁平的——第 3 層是整個 Run 共用', () => {
+    const s = scene(
+      {
+        h: { opcode: 'event.when_flag_clicked', next: 'each' },
+        each: {
+          opcode: 'control.for_each',
+          parent: 'h',
+          fields: { name: 'item' },
+          inputs: { body: { kind: 'stack', id: 'set' } },
+        },
+        set: { opcode: 'data.set', parent: 'each', fields: { name: '總和' } },
+        h2: { opcode: 'event.when_flag_clicked', next: 'read' },
+        read: { opcode: 'data.change', parent: 'h2', fields: { name: '總和' } },
+      },
+      ['h', 'h2'],
+    );
+    expect(s.check()).toEqual([]);
+  });
+});
+
 describe('`${}` 引用（§4.7 + §4.5）', () => {
   it('文字欄位裡打錯的 root 也要標，警告掛在父積木上', () => {
     const s = scene(

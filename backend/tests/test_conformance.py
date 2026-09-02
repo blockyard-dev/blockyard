@@ -52,6 +52,8 @@ def test_corpus_covers_spec_table() -> None:
         "shape", "unknown_block",
         # §4.1 落單堆疊 + §5.1 點一下就跑
         "manual_run",
+        # §5.4 綁定的作用範圍 = 綁它那顆積木的 body
+        "D29",
     }
     seen: set[str] = set()
     for d in _dirs():

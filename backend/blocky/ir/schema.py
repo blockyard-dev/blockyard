@@ -11,6 +11,7 @@ from typing import Annotated, Any, Callable, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from blocky.bindings import validate_blocks as validate_bindings
 from blocky.errors import ValidationError
 from blocky.ir import expression as expr
 from blocky.ir import template as tpl
@@ -278,6 +279,9 @@ ShapeResolver = Callable[[str], frozenset[str]]
 ExpressionResolver = Callable[[str], frozenset[str]]
 #: opcode → 是不是 cap block（§4.6）。同上：只有宣告層答得出來。
 TerminalResolver = Callable[[str], bool]
+#: opcode → 那顆積木的宣告（D29 的作用域要問「哪一格綁名字、範圍是哪一疊」）。
+#: 同上：由呼叫端傳 `interpreter.registry.resolve_spec(...)` 進來。
+SpecResolver = Callable[[str], Any]
 
 
 def load(
@@ -287,6 +291,7 @@ def load(
     shapes: ShapeResolver | None = None,
     expressions: ExpressionResolver | None = None,
     terminals: TerminalResolver | None = None,
+    specs: SpecResolver | None = None,
 ) -> LoadedProject:
     """從 dict 載入並驗證專案。
 
@@ -303,6 +308,9 @@ def load(
 
     `terminals` 同理（§4.6）：哪些積木是 cap block。沒給就不檢查「下面接了
     東西」——與 `shapes` 一樣，那是一個要問過擴充系統才答得出來的問題。
+
+    `specs` 同理（§5.4、D29）：哪一格綁一個名字、範圍是哪一疊。沒給就不檢查
+    `設定 [唯讀的名字]`。
     """
     project = Project.model_validate(data)
     templates: dict[tuple[str, str], tpl.Template] = {}
@@ -345,6 +353,10 @@ def load(
     _validate_structure(project, terminals)
     if shapes is not None:
         _validate_shapes(project, shapes)
+    if specs is not None:
+        # §5.4／D29：`設定 [迴圈變數]`、`設定 [參數名]`。**排在最後**：它要走
+        # 積木的祖先鏈，而那條鏈的完整性是 `_validate_structure` 驗過的。
+        validate_bindings(data.get("blocks") or {}, data.get("procedures") or {}, specs)
     return LoadedProject(project, templates, exprs)
 
 

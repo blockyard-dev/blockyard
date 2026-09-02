@@ -831,6 +831,117 @@ case(
     tags=["control"],
 )
 
+# ---- §5.4 D29：綁定的作用範圍 = 綁它那顆積木的 body ----
+
+case(
+    "control/for_each_var_dies_with_the_loop",
+    "迴圈變數只在迴圈體裡有效；迴圈外面讀它是錯誤，而且訊息指名是哪顆積木綁的",
+    "§5.4 綁定的作用範圍（D29）",
+    one(
+        blk("data.set", fields={"name": "items"}, value=blk("data.new_list")),
+        blk("data.list_add", fields={"name": "items"}, item=1),
+        blk("data.list_add", fields={"name": "items"}, item=2),
+        blk("control.for_each", fields={"name": "x"}, list=var("items"), body=Stack([
+            log(var("x")),
+        ])),
+        log(var("x")),
+    ),
+    {
+        "status": "error",
+        "logs": ["1", "2"],
+        "error": {
+            "code": "undefined_variable",
+            # 這句話是 D29 唯一會被使用者看到的地方：既有專案在迴圈後讀迴圈
+            # 變數，會從「拿得到最後一項」變成錯誤。一句 `未知變數 "x"` 會讓
+            # 人去找一個根本沒打錯的字。
+            "message_contains": "只在那顆「對 ⋯ 的每一項 x」裡面有效",
+        },
+    },
+    tags=["control", "variables", "D29"],
+)
+
+case(
+    "control/for_each_vars_do_not_collide_across_threads",
+    "兩條 thread 各跑一個同名迴圈變數的 for each、迴圈體裡有 await → 互不干擾",
+    "§5.4 綁定的作用範圍（D29）",
+    build(scripts=[
+        hat(
+            blk("data.set", fields={"name": "a"}, value=blk("data.new_list")),
+            blk("data.list_add", fields={"name": "a"}, item=1),
+            blk("data.list_add", fields={"name": "a"}, item=2),
+            blk("control.for_each", fields={"name": "x"}, list=var("a"), body=Stack([
+                # 讓出 event loop：沒有這個 await，兩條 thread 不會交錯，
+                # 這一題就永遠是綠的（而 bug 還在）。
+                blk("control.wait", seconds=0),
+                log(Tpl("A${x}")),
+            ])),
+        ),
+        hat(
+            blk("data.set", fields={"name": "b"}, value=blk("data.new_list")),
+            blk("data.list_add", fields={"name": "b"}, item=10),
+            blk("data.list_add", fields={"name": "b"}, item=20),
+            blk("control.for_each", fields={"name": "x"}, list=var("b"), body=Stack([
+                blk("control.wait", seconds=0),
+                log(Tpl("B${x}")),
+            ])),
+        ),
+    ]),
+    # 迴圈變數寫全域時這裡會是 A10 / B10 / A20 / B20 ——兩邊互相踩，而
+    # 「值對了一半」正是這種 bug 唯一的樣子。
+    {"status": "ok", "logs": ["A1", "B10", "A2", "B20"]},
+    tags=["control", "threads", "variables", "D29"],
+)
+
+case(
+    "control/catch_binding_does_not_cross_a_call",
+    "catch 裡呼叫的函式讀不到 error——C block 綁的名字不穿過函式呼叫",
+    "§5.4 綁定的作用範圍（D29）",
+    build(
+        scripts=[hat(
+            blk("control.try_catch", fields={"error_name": "錯誤"},
+                **{"try": Stack([blk("control.throw", message="爆了")]),
+                   "catch": Stack([
+                       # 同一顆積木在 catch 裡直接讀得到（下一行證明）
+                       log(Tpl("${錯誤.message}")),
+                       log(blk("procedure.call", mutation={"proc": "p_peek"})),
+                   ])}),
+        )],
+        procedures={
+            "p_peek": {
+                "name": "偷看錯誤",
+                "params": [],
+                "returns": "string",
+                "body": [blk("procedure.return", value=var("錯誤"))],
+            }
+        },
+    ),
+    {
+        "status": "error",
+        "logs": ["爆了"],
+        "error": {
+            "code": "undefined_variable",
+            "message_contains": "只在那顆「嘗試 ⋯ 出錯時把錯誤存進 錯誤」裡面有效",
+            "hint_contains": "用參數傳進來",
+        },
+    },
+    tags=["try_catch", "procedure", "variables", "D29"],
+)
+
+case(
+    "control/set_a_bound_name_is_a_load_error",
+    "迴圈體裡的「設定 [迴圈變數]」是存檔期錯誤，訊息指名那顆 for each",
+    "§5.4 綁定的作用範圍（D29）",
+    one(
+        blk("data.set", fields={"name": "items"}, value=blk("data.new_list")),
+        blk("control.for_each", fields={"name": "x"}, list=var("items"), body=Stack([
+            # 讀的是第 2 層、寫的是第 3 層，而畫面上這兩顆積木長得一模一樣。
+            blk("data.set", fields={"name": "x"}, value="蓋掉"),
+        ])),
+    ),
+    {"status": "load_error", "load_error": "「x」是那顆「對 ⋯ 的每一項 x」綁的名字"},
+    tags=["control", "variables", "validation", "D29"],
+)
+
 case(
     "control/repeat_evaluates_count_once",
     "repeat 的次數只在進入迴圈前求值一次",

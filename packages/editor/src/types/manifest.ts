@@ -47,6 +47,8 @@ export type Depends = string[] | null;
 export type Field = boolean;
 export type Binds = boolean;
 export type Reads = boolean;
+export type Scope = string | null;
+export type Writes = boolean;
 export type Multiline = boolean;
 export type Rows = number | null;
 export type Interpolate = boolean | null;
@@ -138,6 +140,8 @@ export interface ArgSpec {
   field?: Field;
   binds?: Binds;
   reads?: Reads;
+  scope?: Scope;
+  writes?: Writes;
   multiline?: Multiline;
   rows?: Rows;
   interpolate?: Interpolate;
