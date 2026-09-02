@@ -11,7 +11,14 @@
  * 訂閱它的元件只重繪一次。
  */
 import { create } from 'zustand';
-import type { BlockError, BlockErrorAction, RunEndStatus, RunFrame, RunSummary } from '../api/runs';
+import type {
+  BlockError,
+  BlockErrorAction,
+  ProjectFrame,
+  RunEndStatus,
+  RunFrame,
+  RunSummary,
+} from '../api/runs';
 
 /** §8.3 的積木狀態。同一顆積木同時只會是其中一種。 */
 export type BlockPhase = 'running' | 'hot' | 'done' | 'error';
@@ -58,6 +65,7 @@ interface RunState {
   attach(run: RunSummary): void;
   fail(message: string): void;
   apply(frame: RunFrame): void;
+  applyProject(frame: ProjectFrame): void;
   finish(status: RunEndStatus, message?: string): void;
 }
 
@@ -74,7 +82,7 @@ function emptyRun() {
 
 let logSeq = 0;
 
-export const useRunStore = create<RunState>((set) => ({
+export const useRunStore = create<RunState>((set, get) => ({
   runId: null,
   status: 'idle',
   ...emptyRun(),
@@ -85,6 +93,23 @@ export const useRunStore = create<RunState>((set) => ({
   attach: (run) => set({ runId: run.runId, status: 'running' }),
 
   fail: (message) => set({ status: 'error', message }),
+
+  /**
+   * 專案通道送來的一批（§9）。`runId` 換人就先清空再套用。
+   *
+   * **編輯器同時只顯示一個 Run**（一份高亮、一份 log），而這條通道上會有好幾個
+   * ——每一則 Discord 訊息一個。所以「換 Run」在這裡是一個明確的動作，而不是讓
+   * 兩次執行的高亮疊在同一張畫布上：那樣的畫面說不出哪一顆是這一次亮的。
+   *
+   * 判斷只看 `runId`，不看 `run.start` 在不在這一批裡：慢客戶端的第一批有可能
+   * 是被丟過的（§6.2），而那時候 `run.start` 已經不在裡面了。
+   */
+  applyProject: (frame) => {
+    if (frame.runId !== get().runId) {
+      set({ runId: frame.runId, status: 'running', ...emptyRun() });
+    }
+    get().apply(frame);
+  },
 
   finish: (status, message) =>
     set((s) => ({

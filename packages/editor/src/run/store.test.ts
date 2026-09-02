@@ -149,3 +149,63 @@ describe('變數與輸出', () => {
     expect(state.status).toBe('starting');
   });
 });
+
+/**
+ * 專案通道（§9）。這一段的來歷是兩個實測抓到的症狀，接連發生：
+ *
+ * 1. 一顆 `* * * * *` 的 cron 正常跑完，編輯器卻跳出**「執行失敗：事件連線
+ *    中斷」**——輪詢問到那個 Run 時它已經結束了，而對結束的 Run 開 WebSocket
+ *    會被拒絕，前端把「非正常關閉」翻成一句執行失敗。
+ * 2. 修法是「跑完的就不接」，於是換成**畫面一片安靜**：帽子底下放一顆 `記錄`、
+ *    Discord 傳一則訊息，後端真的跑了、log 也落地了，而畫面上什麼都沒有。
+ *
+ * 兩次都在補同一個洞的兩邊：**先問再接，追不上一個零點幾毫秒的 Run**。專案
+ * 通道把順序反過來（Run 開始之前就接著），這裡守的是它多出來的那一條規則
+ * ——同一條通道上會有好幾個 Run。
+ */
+describe('專案通道（§9）', () => {
+  it('runId 換人就清空上一個 Run 的畫面', () => {
+    useRunStore.getState().applyProject({
+      runId: 'r_1',
+      events: [{ op: 'block.exit', threadId: 't_1', blockId: 'b1', value: 1 }],
+    });
+    expect(useRunStore.getState().blocks.get('b1')?.value).toBe(1);
+
+    useRunStore.getState().applyProject({
+      runId: 'r_2',
+      events: [{ op: 'log', level: 'info', text: '第二則訊息' }],
+    });
+    const s = useRunStore.getState();
+    expect(s.runId).toBe('r_2');
+    // 上一個 Run 的高亮不留在畫面上——兩次執行的高亮疊在同一張畫布上，說不出
+    // 哪一顆是這一次亮的。
+    expect(s.blocks.size).toBe(0);
+    expect(s.logs.map((l) => l.text)).toEqual(['第二則訊息']);
+  });
+
+  it('同一個 Run 的下一批是接續，不是重來', () => {
+    useRunStore.getState().applyProject({
+      runId: 'r_1',
+      events: [{ op: 'log', level: 'info', text: '一' }],
+    });
+    useRunStore.getState().applyProject({
+      runId: 'r_1',
+      events: [{ op: 'log', level: 'info', text: '二' }],
+    });
+    expect(useRunStore.getState().logs.map((l) => l.text)).toEqual(['一', '二']);
+  });
+
+  it('第一批被丟過（少了 run.start）也照樣認得出是新的 Run', () => {
+    // 慢客戶端的第一批有可能是被丟過的（§6.2），那時候 `run.start` 已經不在
+    // 裡面了——所以判斷只看 runId。
+    useRunStore.getState().applyProject({
+      runId: 'r_9',
+      events: [{ op: 'var.set', name: 'json', value: { content: '嗨' } }],
+      dropped: 12,
+    });
+    const s = useRunStore.getState();
+    expect(s.runId).toBe('r_9');
+    expect(s.variables.get('json')).toEqual({ content: '嗨' });
+    expect(s.dropped).toBe(12);
+  });
+});

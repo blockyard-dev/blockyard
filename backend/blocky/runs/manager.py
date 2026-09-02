@@ -24,7 +24,7 @@ from blocky.errors import ValidationError
 from blocky.interpreter.engine import DEFAULT_TRIGGER, Entry, Interpreter
 from blocky.interpreter.events import Event, EventSink
 from blocky.interpreter.scope import InMemoryPersistStore
-from blocky.runs.broker import RunBroker
+from blocky.runs.broker import ProjectHub, RunBroker
 from blocky.runs.recorder import RunRecorder
 from blocky.storage import ProjectStore
 from blocky.storage.runs import RUN_LIMIT_PER_PROJECT, RunStore, SqlitePersistStore
@@ -114,6 +114,9 @@ class RunManager:
         self._handoff_limit = handoff_limit
         self._broker_options = broker_options or {}
         self._runs: dict[str, RunHandle] = {}
+        # 專案 → 事件通道（§9）。與 `_runs` 分開的生命週期：一個專案的通道在
+        # 兩個 Run 之間仍然活著，因為訂閱它的人要等的正是**下一個** Run。
+        self._hubs: dict[str, ProjectHub] = {}
         # 沒有 `runs_store` 時的退路：`r_1`、`r_2`…，同落地之前的行為。給的是
         # 不需要歷史的呼叫端（題庫、單元測試）——有了 store 之後序號改從資料庫
         # 拿，因為 process 的計數器每次重啟都從 1 開始，會直接撞上昨天那一筆。
@@ -134,6 +137,11 @@ class RunManager:
         `events()`，不是一個已經關掉的 broker。
         """
         return self._runs.get(run_id)
+
+    def has_project(self, project_id: str) -> bool:
+        """這個專案存不存在。`/ws/project/{id}` 用它決定要不要收這條連線——
+        打錯 id 的話，那條 socket 會安靜地永遠等不到任何東西。"""
+        return self._store.get(project_id) is not None
 
     def has_running(self, project_id: str, trigger: str) -> bool:
         """這個專案的這個 trigger 現在有沒有還在跑的 Run（§5.1 的 `drop`）。
@@ -213,7 +221,12 @@ class RunManager:
             seq = self._seq
         run_id = f"r_{seq}"
 
-        broker = RunBroker(run_id, **self._broker_options)
+        hub = self.hub(project_id)
+        broker = RunBroker(
+            run_id,
+            on_frame=lambda batch: hub.publish(run_id, batch),
+            **self._broker_options,
+        )
         recorder = self._recorder
 
         def emit(e: Event) -> None:
@@ -280,6 +293,16 @@ class RunManager:
         handle.task = asyncio.create_task(self._drive(handle))
         self._runs[run_id] = handle
         return handle
+
+    def hub(self, project_id: str) -> ProjectHub:
+        """這個專案的事件通道（`/ws/project/{id}`）。第一次問到才建。
+
+        **不隨 Run 結束而消失**：訂閱它的人要等的是下一個 Run，而 hat 觸發的
+        Run 什麼時候發生沒有人知道——那正是這條通道存在的理由。
+        """
+        if (found := self._hubs.get(project_id)) is None:
+            found = self._hubs[project_id] = ProjectHub(project_id)
+        return found
 
     def _persist_for(self, project_id: str) -> InMemoryPersistStore | SqlitePersistStore:
         if (existing := self._persist.get(project_id)) is not None:

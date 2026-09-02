@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 
 from blocky.api.app import create_app
 from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
-from blocky.runs.broker import HOT_THRESHOLD, RunBroker, collapse
+from blocky.runs.broker import HOT_THRESHOLD, ProjectHub, RunBroker, collapse
 
 # --------------------------------------------------------------------------
 # 題材：§15 驗收 1 的那份專案
@@ -256,6 +256,100 @@ async def test_broker_drops_oldest_for_slow_subscriber() -> None:
 
     assert sum(f.get("dropped", 0) for f in received) > 0
     assert sum(len(f["events"]) for f in received) < 6
+
+
+async def test_project_hub_fans_out_every_run_of_that_project() -> None:
+    """專案通道拿的是**每一個** Run 的 frame，而且不必有人訂閱那個 Run。
+
+    這正是它存在的理由：hat 觸發的 Run 只有零點幾毫秒，沒有人來得及訂閱它。
+    """
+    hub = ProjectHub("p_1")
+    async with hub.subscribe() as frames:
+        broker = RunBroker("r_1", window_s=0.001, on_frame=lambda b: hub.publish("r_1", b))
+        broker.start()
+        broker.publish({"op": "run.start", "runId": "r_1"})
+        await asyncio.sleep(0.01)
+        broker.close()
+
+        first = await anext(frames)
+        assert first["runId"] == "r_1"
+        assert [e["op"] for e in first["events"]] == ["run.start"]
+
+        # 下一個 Run 走同一條通道——**它不會結束**，等的就是下一個。
+        second_broker = RunBroker(
+            "r_2", window_s=0.001, on_frame=lambda b: hub.publish("r_2", b)
+        )
+        second_broker.start()
+        second_broker.publish({"op": "run.start", "runId": "r_2"})
+        await asyncio.sleep(0.01)
+        second_broker.close()
+
+        assert (await anext(frames))["runId"] == "r_2"
+
+
+async def test_project_hub_does_not_steal_the_run_backlog() -> None:
+    """接了專案通道之後，`/ws/run` 的第一個訂閱者仍然拿得到 backlog。
+
+    做成 `on_frame` 而不是讓 hub 去 `subscribe()` 就是為了這件事：那個介面的
+    第一個訂閱者會把積壓的事件領走，而 backlog 是留給「POST 回來到 WS 接上」
+    那幾毫秒的——被領走的話，手動執行會固定看不到 `run.start`。
+    """
+    hub = ProjectHub("p_1")
+    broker = RunBroker("r_1", window_s=0.001, on_frame=lambda b: hub.publish("r_1", b))
+    broker.start()
+    async with hub.subscribe() as project_frames:
+        broker.publish({"op": "run.start", "runId": "r_1"})
+        await asyncio.sleep(0.01)
+        assert [e["op"] for e in (await anext(project_frames))["events"]] == ["run.start"]
+
+        async with broker.subscribe() as run_frames:
+            broker.close()
+            assert [e["op"] for e in (await anext(run_frames))["events"]] == ["run.start"]
+
+
+async def test_project_hub_drops_oldest_for_a_slow_subscriber() -> None:
+    """與 `RunBroker` 同一條丟棄策略——慢客戶端不能把後端拖垮。"""
+    hub = ProjectHub("p_1", queue_limit=2)
+    async with hub.subscribe() as frames:
+        for i in range(6):
+            hub.publish("r_1", [{"op": "log", "level": "info", "text": str(i)}])
+        received = [await anext(frames) for _ in range(2)]
+
+    assert sum(f.get("dropped", 0) for f in received) > 0
+
+
+def test_project_socket_sees_a_run_it_never_asked_for(client: TestClient) -> None:
+    """整條路：先接上通道，再從別的地方起一個 Run。
+
+    模擬的是 hat 觸發——前端沒有那個 runId，也沒有機會去要。
+    """
+    pid = save(client, counting_project(times=3, project_id="p_hub"))
+    with client.websocket_connect(f"/ws/project/{pid}") as ws:
+        run_id = client.post("/api/runs", json={"projectId": pid}).json()["runId"]
+
+        events: list[dict[str, Any]] = []
+        for _ in range(400):
+            frame = ws.receive_json()
+            assert frame["runId"] == run_id
+            events.extend(frame["events"])
+            if any(e["op"] == "run.end" for e in frame["events"]):
+                break
+        else:
+            raise AssertionError("等不到 run.end")
+
+    ops = [e["op"] for e in events]
+    assert ops[0] == "run.start" and ops[-1] == "run.end"
+    # 這條通道上的東西與 `/ws/run` 完全一樣——變數與高亮都在，這正是「跑完才
+    # 讀落地事件」那條路給不出來的（§6.3：var.set 與 block.enter/exit 不落地）。
+    assert any(e["op"] == "var.set" and e["name"] == "count" for e in events)
+    assert any(e["op"] == "block.enter" for e in events)
+
+
+def test_project_socket_rejects_an_unknown_project(client: TestClient) -> None:
+    """打錯 id 的話，那條 socket 會安靜地永遠等不到任何東西。"""
+    with pytest.raises(Exception):  # noqa: B017  starlette 把 close code 包成自己的例外
+        with client.websocket_connect("/ws/project/nope") as ws:
+            ws.receive_json()
 
 
 # --------------------------------------------------------------------------

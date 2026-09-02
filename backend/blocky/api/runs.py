@@ -28,6 +28,7 @@ ws_router = APIRouter()
 
 # WebSocket 沒有 404；用 close code 表達。4000+ 是應用自訂區間。
 WS_RUN_NOT_FOUND = 4404
+WS_PROJECT_NOT_FOUND = 4405
 
 
 class RunRequest(BaseModel):
@@ -154,6 +155,45 @@ async def run_events(websocket: WebSocket, run_id: str) -> None:
             reader.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await reader
+
+    with contextlib.suppress(RuntimeError, WebSocketDisconnect):
+        await websocket.close()
+
+
+@ws_router.websocket("/ws/project/{project_id}")
+async def project_events(websocket: WebSocket, project_id: str) -> None:
+    """一個**專案**的事件流：它每一個 Run 的 frame 都從這裡出去（§6.1、§9）。
+
+    `/ws/run/{runId}` 有一個接不到的縫：hat 觸發的 Run 是後端自己起的，前端沒有
+    那個 runId，只能先問——而一則 Discord 訊息的 Run 只有零點幾毫秒，所以問到它
+    時它一定已經結束了，而對結束的 Run 開 WebSocket 是接不上的。這條通道把順序
+    反過來：**在 Run 開始之前就接著**。
+
+    三個問題的答案（`App.tsx` 那段註解欠了很久的那三個）：
+
+      屬於哪個專案   路徑上就是專案 id，frame 帶 `runId`——一個專案同時可以有
+                     好幾個 Run（`concurrency: parallel`），客戶端靠它分辨。
+      斷線怎麼補     **不補**。這條是「現在怎麼了」的通道，不是稽核紀錄；斷線
+                     期間的那幾則在執行歷史裡（§6.3 的落地就是為此）。要補就得
+                     先回答下面那個，而那個答案是「不留」。
+      backlog 多久   **不留**。`RunBroker` 的 backlog 是為了「POST 回來到 WS
+                     接上」那幾毫秒，這條通道沒有那個空窗。
+
+    **單向**：停止一個 Run 仍然走 `/ws/run` 或 `DELETE /api/runs/{id}`——這裡送
+    得出好幾個 Run 的事件，一句沒有指名的 `stop` 說不出要停哪一個。
+    """
+    manager = _runs(websocket)
+    if not manager.has_project(project_id):
+        await websocket.close(code=WS_PROJECT_NOT_FOUND, reason=f"找不到專案 {project_id}")
+        return
+
+    await websocket.accept()
+    async with manager.hub(project_id).subscribe() as frames:
+        try:
+            async for frame in frames:
+                await websocket.send_json(frame)
+        except WebSocketDisconnect:
+            pass
 
     with contextlib.suppress(RuntimeError, WebSocketDisconnect):
         await websocket.close()

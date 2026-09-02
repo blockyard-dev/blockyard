@@ -11,8 +11,8 @@
 **P0、P1、P2 全部結案。P3 — 擴散進行中**（第 1 步：擴充功能面板，完成）。
 
 ```
-cd backend && .venv/bin/python -m pytest      # 1047 passed, 5 skipped
-cd packages/editor && npm run check           # 502 passed（25 檔）+ tsc 乾淨
+cd backend && .venv/bin/python -m pytest      # 1052 passed, 5 skipped
+cd packages/editor && npm run check           # 498 passed（24 檔）+ tsc 乾淨
 ```
 
 > **改了 `extensions/` 就要跑不帶參數的 `pytest`**（`testpaths` 同時收 `tests`
@@ -183,8 +183,11 @@ cd packages/editor && npm run check           # 502 passed（25 檔）+ tsc 乾�
   `object.get` 的 `default` 孔**刻意可以不存在**（不寫 = 找不到 key 就報錯），所以
   「IR 裡沒這個孔」不等於「這參數是新加的」。IR 目前分不出這兩件事，而那正是 Q21
   要先回答的。
-- **監聽中的 Run 靠輪詢**（1.5 秒），所以 hat 觸發之後畫面上的高亮最多晚一秒多。
-  壞掉的樣子是「慢了一秒」而不是「少了一則」——那是刻意選的。
+- **監聽中的 Run 走專案通道**（`/ws/project/{id}`，D33），不再輪詢。輪詢那條路
+  有一個修不掉的洞：一則 Discord 訊息的 Run 只有零點幾毫秒，所以「問到再接」永遠
+  追不上，而使用者看到的是一片安靜——他在帽子底下放的那顆 `記錄` 看起來沒有作用。
+  現在是**在 Run 開始之前就接著**，變數、高亮、log 一起回來。**斷線不補、不留
+  backlog**（理由見 D33），前端斷了 1 秒後自己重連。
 - **標頭在錯誤訊息很長時會擠成兩行**（按鈕跟著換行）。資訊都在，只是難看。
 - **`ui.multiline` 存不下「強制單行」**；`Shift+Enter 換行` 沒有提示；autocomplete 只補 root。
 - **字面值型別切換不進 undo 堆疊**（`literals.test.ts` 有一條測試釘住這個行為，

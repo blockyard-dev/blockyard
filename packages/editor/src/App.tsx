@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Ear, History, Link2, Play, Square } from 'lucide-react';
 import * as Blockly from 'blockly/core';
 import { ApiError, fetchExtensions, fetchKeys, fetchProject, saveProject } from './api/client';
-import { RunSocket, listRuns, runToAttach, startRun, stopRun } from './api/runs';
+import { ProjectSocket, RunSocket, startRun, stopRun } from './api/runs';
 import {
   NOT_LISTENING,
   activateProject,
@@ -819,44 +819,45 @@ export function App() {
    * 的 gesture 對欄位發的是 `doFieldClick`，不發 CLICK 事件。
    */
   /**
-   * 監聽中：把後端自己起的那些 Run 接過來。
+   * 監聽中：接上**專案**通道，後端自己起的那些 Run 就會自己送過來（§9）。
    *
-   * hat 觸發的 Run **前端沒有那個 runId**——它是外面發生一件事之後由後端起的。
-   * 不問就不知道它存在，而症狀是「Discord 有訊息進來、後端真的跑了、編輯器
-   * 一片安靜」。§6.1 的事件流是 per-run 的 WebSocket，所以這裡只能用問的。
+   * hat 觸發的 Run 前端沒有那個 runId——它是外面發生一件事之後由後端起的。
+   * 原本是每 1.5 秒問一次「有沒有新的 Run」，而那條路有一個修不掉的洞：一則
+   * Discord 訊息的 Run 只有零點幾毫秒，所以**問到它時它一定已經結束了**，而
+   * 結束的 Run 接不上 WebSocket。改讀它落地的事件只補得到 log 與錯誤——變數
+   * 與高亮不落地（§6.3），畫面上仍然是半個。
    *
-   * 輪詢而不是再開一條 WebSocket：一條「有新的 Run 了」的通道要先回答它屬於
-   * 哪個專案、斷線怎麼補、backlog 留多久——那三題是 P2 的 Trigger Manager 與
-   * §6.3 落地要一起回答的。1.5 秒的輪詢在那之前夠用，而且壞掉的樣子是「慢了
-   * 一秒」，不是「少了一則」。
+   * 所以順序反過來：**在 Run 開始之前就接著**。那條通道欠的三個答案寫在後端
+   * （`api/runs.py::project_events`）：專案 id 在路徑上、frame 帶 runId；斷線
+   * 不補；不留 backlog。
+   *
+   * 斷了就重連（1 秒）。監聽是一個會掛整天的狀態，而後端重啟是開發時每天都
+   * 會發生的事——不重連的話，畫面會從那一刻起安靜到使用者自己想到要重整。
    */
   useEffect(() => {
-    if (!listening.on || listening.hats.length === 0) return;
+    if (!listening.on) return;
     let cancelled = false;
-    let latest: string | null = null;
+    let socket: ProjectSocket | null = null;
+    let retry: number | null = null;
 
-    const tick = async () => {
-      try {
-        // `listRuns` 新的在前。哪一個值得接的規則在 `runToAttach`（見那裡的
-        // 註解：只接還在跑的，因為跑完的接不到，而接不到會被翻成一句
-        // 「執行失敗」貼在一個其實成功了的排程上）。
-        const runs = await listRuns({ projectId: PROJECT_ID });
-        if (cancelled) return;
-        const next = runToAttach(runs, listening.hats, latest);
-        latest = next.seen;
-        if (next.attach) attach(next.attach);
-      } catch {
-        // 後端暫時答不出來不該讓監聽看起來像壞了：下一輪再問。
-      }
+    const connect = () => {
+      if (cancelled) return;
+      socket = new ProjectSocket(PROJECT_ID, {
+        onFrame: (frame) => useRunStore.getState().applyProject(frame),
+        onClose: (clean) => {
+          if (cancelled || clean) return;
+          retry = window.setTimeout(connect, 1000);
+        },
+      });
     };
+    connect();
 
-    void tick();
-    const timer = window.setInterval(() => void tick(), 1500);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (retry !== null) window.clearTimeout(retry);
+      socket?.close();
     };
-  }, [attach, listening.on, listening.hats]);
+  }, [listening.on]);
 
   /**
    * 執行前的靜態檢查（§4.5、§4.6、§8.5）。載入完先跑一次，之後每次編輯節流重跑。

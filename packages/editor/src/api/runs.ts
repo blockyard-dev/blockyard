@@ -126,31 +126,6 @@ export async function listRuns(options: {
   return (await res.json()) as RunSummary[];
 }
 
-/**
- * 輪詢到的那批 Run 裡，**哪一個值得把 WebSocket 接過去**（§6.1、§9）。
- *
- * hat 觸發的 Run 是後端自己起的，前端沒有那個 runId——不問就不知道它存在。
- * 但「問到了」不等於「接得上」：
- *
- * - **只接還在跑的。** 一次 cron 的 Run 可以只有幾毫秒，而輪詢是 1.5 秒一次，
- *   所以絕大多數時候問到它時它已經結束了。對結束的 Run 開 WebSocket，後端回
- *   4404（broker 早就關了），而前端把非正常關閉翻成「執行失敗：事件連線中
- *   斷」——一個**成功跑完的**排程在畫面上看起來像壞了。
- * - **同一個 Run 只接一次。** `lastSeen` 擋掉重複。
- *
- * 跑完的那些要看做了什麼，是「執行紀錄」的事（§6.3 的落地就是為此）。
- */
-export function runToAttach(
-  runs: RunSummary[],
-  hats: string[],
-  lastSeen: string | null,
-): { attach: RunSummary | null; seen: string | null } {
-  const found = runs.find((r) => hats.includes(r.trigger));
-  if (!found || found.runId === lastSeen) return { attach: null, seen: lastSeen };
-  // 即使不接也要記下來——不然每 1.5 秒都會重新判斷同一個 Run 一次。
-  return { attach: found.endedAt == null ? found : null, seen: found.runId };
-}
-
 /** 一筆執行歷史的事件（§6.3）。`seq` 只保證遞增，**不保證連續**。 */
 export interface StoredEvent {
   seq: number;
@@ -204,6 +179,47 @@ export interface RunSocketHandlers {
  * WebSocket 的 URL 不能用相對路徑，所以這裡自己拼——dev server 會把 `/ws`
  * 一起代理過去（`vite.config.ts`），打包後前端與後端本來就同源。
  */
+/**
+ * 專案通道送來的一批（`/ws/project/{id}`）。與 `RunFrame` 同一個形狀——差別只在
+ * **它的 `runId` 會變**：一個專案同時可以有好幾個 Run，而且下一個隨時會來。
+ */
+export type ProjectFrame = RunFrame;
+
+export interface ProjectSocketHandlers {
+  onFrame(frame: ProjectFrame): void;
+  /** 斷了。呼叫端決定要不要重連——這條通道沒有「結束」這回事。 */
+  onClose(clean: boolean): void;
+}
+
+/**
+ * 一個**專案**的事件通道（§6.1、§9）。
+ *
+ * 與 `RunSocket` 的差別是**接的時機**：那一條要先有 runId，所以只接得到自己
+ * 起的 Run；這一條在 Run 開始**之前**就接著，所以 hat 觸發的 Run 也看得到——
+ * 而那種 Run 只有零點幾毫秒，先問再接是永遠追不上的。
+ *
+ * **單向。** 停止一個 Run 仍然走 `RunSocket` 或 `DELETE /api/runs/{id}`：這條
+ * 通道上同時有好幾個 Run 的事件，一句沒有指名的 `stop` 說不出要停哪一個。
+ */
+export class ProjectSocket {
+  private ws: WebSocket;
+  private closedByUs = false;
+
+  constructor(projectId: string, handlers: ProjectSocketHandlers) {
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    this.ws = new WebSocket(
+      `${scheme}://${location.host}/ws/project/${encodeURIComponent(projectId)}`,
+    );
+    this.ws.onmessage = (ev) => handlers.onFrame(JSON.parse(ev.data as string) as ProjectFrame);
+    this.ws.onclose = () => handlers.onClose(this.closedByUs);
+  }
+
+  close(): void {
+    this.closedByUs = true;
+    this.ws.close();
+  }
+}
+
 export class RunSocket {
   private ws: WebSocket;
   private closedByUs = false;
