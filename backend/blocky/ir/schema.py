@@ -379,9 +379,20 @@ def _validate_structure(p: Project, terminals: TerminalResolver | None = None) -
         if block.next is not None and block.next not in p.blocks:
             raise ValidationError(f"next 指向不存在的積木 {block.next}", block_id=bid)
 
+    seen_scripts: set[str] = set()
     for s in p.scripts:
         if s.top not in p.blocks:
             raise ValidationError(f"script {s.id} 的 top 指向不存在的積木 {s.top}")
+        # **id 必須唯一。** 這不是潔癖：`thread.start` 的 `scriptId`、
+        # `_script_of()` 與前端的執行高亮全部拿它當 key，兩條同 id 的腳本會宣稱
+        # 自己是同一條——而那在畫面上完全看不出來（兩條都在、都跑得動）。
+        #
+        # 來源是**複製一整條腳本**：id 記在 Blockly 的 `data` 上，而 `data` 會
+        # 跟著複製走。前端已經在存檔時補號（`serialize.ts::scriptIdOf`），這裡
+        # 是那條規則的權威版本——手寫的 IR 與別的版本產生的檔案也走這裡。
+        if s.id in seen_scripts:
+            raise ValidationError(f"有兩條腳本的 id 都是 {s.id}：腳本 id 必須唯一")
+        seen_scripts.add(s.id)
 
     for proc in p.procedures.values():
         _validate_signature(proc)

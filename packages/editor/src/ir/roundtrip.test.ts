@@ -283,3 +283,73 @@ describe('extensions 是從畫布算出來的（§13.3）', () => {
     }
   });
 });
+
+
+// -------------------------------------------------------------------- //
+// 腳本 id 必須唯一（複製一整條腳本會撞到）
+// -------------------------------------------------------------------- //
+
+describe('腳本 id', () => {
+  const ctx = () => buildContext(registerManifests(loadManifests()).blocks);
+
+  function twoScripts(): { workspace: Blockly.Workspace; ctx: ConversionContext } {
+    const c = ctx();
+    const workspace = new Blockly.Workspace();
+    const ir: ProjectIR = {
+      formatVersion: 1,
+      meta: { id: 'p', name: 'p' },
+      extensions: [],
+      variables: {},
+      procedures: {},
+      scripts: [
+        { id: 'sc_1', top: 'a', x: 0, y: 0 },
+        { id: 'sc_1', top: 'b', x: 0, y: 100 },
+      ],
+      blocks: {
+        a: { opcode: 'event.when_flag_clicked', parent: null, next: null, inputs: {}, fields: {}, mutation: null, ui: null },
+        b: { opcode: 'event.when_flag_clicked', parent: null, next: null, inputs: {}, fields: {}, mutation: null, ui: null },
+      },
+    };
+    loadProject(ir, workspace, c);
+    return { workspace, ctx: c };
+  }
+
+  it('兩條腳本撞到同一個 id → 存檔時補號，不是兩條都叫 sc_1', () => {
+    // id 記在 Blockly 的 `data` 上，而 `data` 會**跟著複製走**：把一條腳本整個
+    // 複製一份，兩條就有同一個 id。那不是一個看得出來的錯——兩條都在、都跑得動。
+    const { workspace, ctx: c } = twoScripts();
+    const out = serializeWorkspace(workspace, c);
+    const ids = (out.scripts ?? []).map((s) => s.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids).toContain('sc_1'); // 先來的那條留著原本的 id
+  });
+
+  it('成因確認：複製一條腳本會把 `data` 一起複製走', () => {
+    // 複製／貼上走的就是 `save` → `append`（Blockly 的 clipboard 是這樣做的），
+    // 所以這一題證的是那條路真的會產生兩個同 id 的 `data`——上面那兩題守的
+    // 「補號」才有對象。**沒有這一題，註解裡那句「來源是複製」只是猜測。**
+    const c = ctx();
+    const workspace = new Blockly.Workspace();
+    const original = workspace.newBlock('event.when_flag_clicked');
+    original.data = 'sc_1';
+
+    const state = Blockly.serialization.blocks.save(original, { addCoordinates: true })!;
+    expect(state.data).toBe('sc_1');
+    Blockly.serialization.blocks.append(state, workspace);
+
+    const datas = workspace.getTopBlocks(false).map((b) => b.data);
+    expect(datas).toEqual(['sc_1', 'sc_1']);
+
+    // 而存檔會把它們分開。
+    const ids = (serializeWorkspace(workspace, c).scripts ?? []).map((s) => s.id);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it('補過的 id 存得住——不然每存一次就換一次身分', () => {
+    // 執行紀錄與畫布高亮都是照 id 認人的。
+    const { workspace, ctx: c } = twoScripts();
+    const first = (serializeWorkspace(workspace, c).scripts ?? []).map((s) => s.id);
+    const second = (serializeWorkspace(workspace, c).scripts ?? []).map((s) => s.id);
+    expect(second).toEqual(first);
+  });
+});

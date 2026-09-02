@@ -262,3 +262,31 @@ def test_binder_index_only_collects_scoped_bindings() -> None:
         {"id": "s", "opcode": "data.set", "parent": None, "fields": {"name": "總和"}},
     )
     assert binder_index(b, {}, SPECS) == {"x": "那顆「對 ⋯ 的每一項 x」"}
+
+
+# --------------------------------------------------------------------------
+# 腳本 id 必須唯一
+# --------------------------------------------------------------------------
+
+
+def test_two_scripts_cannot_share_an_id() -> None:
+    """`thread.start` 的 `scriptId`、`_script_of()` 與前端的執行高亮都拿它當 key。
+
+    兩條同 id 的腳本在畫面上**完全看不出來**——兩條都在、都跑得動，只是它們會
+    宣稱自己是同一條。來源是複製一整條腳本（id 記在 Blockly 的 `data` 上，而
+    `data` 跟著複製走），在一份真實專案裡撞到過。
+    """
+    from blocky.ir.schema import load
+
+    data = {
+        "blocks": {
+            "a": {"opcode": "event.when_flag_clicked"},
+            "b": {"opcode": "event.when_flag_clicked"},
+        },
+        "scripts": [{"id": "sc_1", "top": "a"}, {"id": "sc_1", "top": "b"}],
+    }
+    with pytest.raises(ValidationError, match="都是 sc_1"):
+        load(data, strict_refs=False)
+
+    data["scripts"][1]["id"] = "sc_2"  # type: ignore[index]
+    load(data, strict_refs=False)

@@ -65,6 +65,7 @@ export function serializeWorkspace(
   const scripts: Script[] = [];
   const procedures: Record<string, Procedure> = {};
   const seenProcIds = new Set<string>();
+  const seenScriptIds = new Set<string>();
   const passthrough = opts.procedures ?? {};
 
   for (const top of workspace.getTopBlocks(true)) {
@@ -105,7 +106,7 @@ export function serializeWorkspace(
     // （D20），轉換層不重複那份規則（§8.4）。
     flattenBlock(state, null, blocks, ctx, workspace);
     scripts.push({
-      id: state.data ?? `sc_${Blockly.utils.idGenerator.genUid()}`,
+      id: scriptIdOf(top, state, seenScriptIds),
       top: state.id!,
       x: state.x ?? 0,
       y: state.y ?? 0,
@@ -146,6 +147,28 @@ export function serializeWorkspace(
     scripts,
     blocks,
   };
+}
+
+/**
+ * 這條腳本的 id。**保證在這份專案裡唯一。**
+ *
+ * id 記在 Blockly 的 `data` 上（`deserialize.ts` 載入時寫進去），而
+ * **`data` 會跟著複製走**——把一條腳本整個複製一份，兩條就有同一個 id。那不是
+ * 一個看得出來的錯：兩條腳本都在、都跑得動，但 `thread.start` 的 `scriptId`、
+ * 後端的 `_script_of()` 與前端的執行高亮全部拿它當 key，於是兩條 thread 會宣稱
+ * 自己是同一條腳本。實測在一份真實專案裡撞到過兩列 `sc_1`。
+ *
+ * **順手把新 id 寫回 `data`**：不寫的話每次存檔都重配一個，而執行紀錄與高亮
+ * 都是照 id 認人的——那會讓「同一條腳本」每存一次就換一次身分。這是這個函式
+ * 唯一的副作用，而它修的正是工作區自己的狀態。
+ */
+function scriptIdOf(top: Blockly.Block, state: BlockState, seen: Set<string>): string {
+  const claimed = state.data;
+  const id =
+    claimed && !seen.has(claimed) ? claimed : `sc_${Blockly.utils.idGenerator.genUid()}`;
+  if (id !== claimed) top.data = id;
+  seen.add(id);
+  return id;
 }
 
 /**
