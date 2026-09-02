@@ -1,0 +1,11 @@
+title: 函式在重試的嘴巴裡 `回傳` → 立刻回傳，不會被重跑
+spec: §5.6 錯誤重試策略
+tags:
+- control
+- retry
+- unwind
+- procedure
+expect:
+  status: ok
+  logs:
+  - '1'

@@ -831,6 +831,99 @@ case(
     tags=["control"],
 )
 
+# ---- §5.6 錯誤重試策略（P2） ----
+
+
+def _flaky(fail_until, message="連線失敗"):
+    """前 `fail_until - 1` 次丟錯，第 `fail_until` 次成功。靠一個全域計數器。
+
+    「重試不是新的 Run」就是**這個計數器讀得到自己上一次的值**——換成重播整個
+    Run 的話它每次都會從 0 開始，而那正是 D12 拒絕的形狀。
+    """
+    return Stack([
+        blk("data.change", fields={"name": "次數"}, value=1),
+        blk("control.if",
+            condition=blk("operator.lt", a=var("次數"), b=fail_until),
+            then=Stack([blk("control.throw", message=message)])),
+        log(Tpl("成功了，這是第 ${次數} 次")),
+    ])
+
+
+case(
+    "control/retry_reruns_the_whole_mouth",
+    "最多試 N 次：失敗就把整張嘴巴再跑一遍，成功了就不再試",
+    "§5.6 錯誤重試策略",
+    one(
+        blk("data.set", fields={"name": "次數"}, value=0),
+        blk("control.retry", times=5, seconds=0, body=_flaky(3)),
+    ),
+    {
+        "status": "ok",
+        # 前兩次的 warn log 是規格的一部分：沒有它，「試了三次前兩次失敗」與
+        # 「一次就成功」在畫面上長得一模一樣，而那正是加這顆積木的人想知道的事。
+        "logs": [
+            "第 1 次失敗（連線失敗），0 秒後再試（最多 5 次）",
+            "第 2 次失敗（連線失敗），0 秒後再試（最多 5 次）",
+            "成功了，這是第 3 次",
+        ],
+        "vars": {"次數": 3},
+    },
+    tags=["control", "retry", "errors"],
+)
+
+case(
+    "control/retry_rethrows_the_last_error_unwrapped",
+    "試完還是失敗 → 原樣丟出最後那個錯誤，外面的「出錯時」接得到真正的 code",
+    "§5.6 錯誤重試策略",
+    one(
+        blk("data.set", fields={"name": "次數"}, value=0),
+        blk("control.try_catch", fields={"error_name": "錯誤"},
+            **{"try": Stack([
+                   blk("control.retry", times=2, seconds=0, body=_flaky(99, "對方限流")),
+               ]),
+               "catch": Stack([log(Tpl("接到 ${錯誤.code}：${錯誤.message}"))])}),
+    ),
+    {
+        "status": "ok",
+        "logs": [
+            "第 1 次失敗（對方限流），0 秒後再試（最多 2 次）",
+            # **不包裝**：包起來的話這裡會是「重試失敗」，而使用者要處理的是
+            # 底下那個真正的錯。
+            "接到 thrown：對方限流",
+        ],
+        "vars": {"次數": 2},
+    },
+    tags=["control", "retry", "try_catch", "errors"],
+)
+
+case(
+    "control/retry_must_not_swallow_return",
+    "函式在重試的嘴巴裡 `回傳` → 立刻回傳，不會被重跑",
+    "§5.6 錯誤重試策略",
+    build(
+        scripts=[hat(log(blk("procedure.call", mutation={"proc": "p_once"})))],
+        procedures={
+            "p_once": {
+                "name": "只跑一次",
+                "params": [],
+                "returns": "number",
+                "body": [
+                    blk("data.set", fields={"name": "次數"}, value=0),
+                    blk("control.retry", times=3, seconds=0, body=Stack([
+                        blk("data.change", fields={"name": "次數"}, value=1),
+                        blk("procedure.return", value=var("次數")),
+                    ])),
+                ],
+            }
+        },
+    ),
+    # `回傳` 繼承 BaseException，所以 `except BlockyError` 天然攔不到它——與
+    # `try_catch` 是同一條界線，不是這顆積木自己的特例。
+    {"status": "ok", "logs": ["1"]},
+    tags=["control", "retry", "unwind", "procedure"],
+)
+
+
 # ---- §5.4 D29：綁定的作用範圍 = 綁它那顆積木的 body ----
 
 case(

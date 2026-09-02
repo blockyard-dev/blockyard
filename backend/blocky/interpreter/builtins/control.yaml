@@ -119,6 +119,20 @@ palette:
     args:
       message: { type: string, default: "出錯了" }
 
+  # §5.6 的另一半。`try_catch` 說的是「失敗了怎麼辦」，這顆說的是「再試一次」
+  # ——工作流碰到的失敗有一大半是暫時的（對方限流、連線斷了），而那種失敗的正確
+  # 處理不是走 catch，是等一下再打一次。
+  - opcode: retry
+    type: command
+    # **「最多試 N 次」不是「重試 N 次」。** 後者要讀的人自己決定 3 是總共三次
+    # 還是一次加三次重試，而那個差別在畫面上看不出來、只有超時的時候才發現。
+    # 這裡的 N 與 `重複 N 次` 的 N 是同一種東西：**跑幾遍**。
+    text: "最多試 %(times) 次 每次間隔 %(seconds) 秒"
+    args:
+      times: { type: number, default: 3, min: 1 }
+      seconds: { type: number, default: 1, min: 0 }
+      body: { type: stack }
+
   - opcode: try_catch
     type: command
     # §5.6：只捕捉積木層級的錯誤。return / stop / 取消必須穿透。

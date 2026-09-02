@@ -1,0 +1,14 @@
+title: 試完還是失敗 → 原樣丟出最後那個錯誤，外面的「出錯時」接得到真正的 code
+spec: §5.6 錯誤重試策略
+tags:
+- control
+- retry
+- try_catch
+- errors
+expect:
+  status: ok
+  logs:
+  - 第 1 次失敗（對方限流），0 秒後再試（最多 2 次）
+  - 接到 thrown：對方限流
+  vars:
+    次數: 2

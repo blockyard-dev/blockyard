@@ -1,0 +1,214 @@
+{
+  "formatVersion": 1,
+  "meta": {
+    "id": "prj_test",
+    "name": "題目"
+  },
+  "extensions": [],
+  "variables": {},
+  "procedures": {},
+  "scripts": [
+    {
+      "id": "sc_1",
+      "top": "blk_1",
+      "x": 0,
+      "y": 100
+    }
+  ],
+  "blocks": {
+    "blk_1": {
+      "opcode": "event.when_flag_clicked",
+      "parent": null,
+      "next": "blk_2",
+      "inputs": {},
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_2": {
+      "opcode": "data.set",
+      "parent": "blk_1",
+      "next": "blk_3",
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": 0
+        }
+      },
+      "fields": {
+        "name": "次數"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_3": {
+      "opcode": "control.try_catch",
+      "parent": "blk_2",
+      "next": null,
+      "inputs": {
+        "try": {
+          "kind": "stack",
+          "id": "blk_4"
+        },
+        "catch": {
+          "kind": "stack",
+          "id": "blk_11"
+        }
+      },
+      "fields": {
+        "error_name": "錯誤"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_4": {
+      "opcode": "control.retry",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "times": {
+          "kind": "literal",
+          "value": 2
+        },
+        "seconds": {
+          "kind": "literal",
+          "value": 0
+        },
+        "body": {
+          "kind": "stack",
+          "id": "blk_5"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_5": {
+      "opcode": "data.change",
+      "parent": "blk_4",
+      "next": "blk_6",
+      "inputs": {
+        "value": {
+          "kind": "literal",
+          "value": 1
+        }
+      },
+      "fields": {
+        "name": "次數"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_6": {
+      "opcode": "control.if",
+      "parent": "blk_5",
+      "next": "blk_10",
+      "inputs": {
+        "condition": {
+          "kind": "block",
+          "id": "blk_7"
+        },
+        "then": {
+          "kind": "stack",
+          "id": "blk_9"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_7": {
+      "opcode": "operator.lt",
+      "parent": "blk_6",
+      "next": null,
+      "inputs": {
+        "a": {
+          "kind": "block",
+          "id": "blk_8"
+        },
+        "b": {
+          "kind": "literal",
+          "value": 99
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_8": {
+      "opcode": "data.get",
+      "parent": "blk_7",
+      "next": null,
+      "inputs": {},
+      "fields": {
+        "name": "次數"
+      },
+      "mutation": null,
+      "ui": null
+    },
+    "blk_9": {
+      "opcode": "control.throw",
+      "parent": "blk_6",
+      "next": null,
+      "inputs": {
+        "message": {
+          "kind": "literal",
+          "value": "對方限流"
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_10": {
+      "opcode": "debug.log",
+      "parent": "blk_6",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "template",
+          "value": "成功了，這是第 ${次數} 次",
+          "refs": [
+            {
+              "root": "次數",
+              "path": []
+            }
+          ],
+          "whole": false
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    },
+    "blk_11": {
+      "opcode": "debug.log",
+      "parent": "blk_3",
+      "next": null,
+      "inputs": {
+        "text": {
+          "kind": "template",
+          "value": "接到 ${錯誤.code}：${錯誤.message}",
+          "refs": [
+            {
+              "root": "錯誤",
+              "path": [
+                "code"
+              ]
+            },
+            {
+              "root": "錯誤",
+              "path": [
+                "message"
+              ]
+            }
+          ],
+          "whole": false
+        }
+      },
+      "fields": {},
+      "mutation": null,
+      "ui": null
+    }
+  }
+}
