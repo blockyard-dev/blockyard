@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 版本 | Draft v0.38 |
+| 版本 | Draft v0.39 |
 | 日期 | 2026-09-03 |
 | 狀態 | 已審閱。**P0、P1、P2 全部完成**（P2 驗收句 2026-09-02 實測通過）。**P3 — 擴散進行中**：範圍重排成「積木包怎麼進來、怎麼出去」（擴充功能面板、`.zip` 匯入、匯出 Bundle 與分享），**AI 生成積木包與 Tauri 打包移到 P4**。P3 第 1 步（擴充功能面板，D31）完成 |
 | 代號 | `blocky`（暫定，套件名 `blocky-runtime`） |
@@ -10,6 +10,17 @@
 ---
 
 ## 0.0 變更摘要
+
+### v0.39
+
+**hat 的 `yields` 可以由使用者命名（D32）。** `當 Discord 收到訊息 (message)` 那一格與 `嘗試 ⋯ 出錯時把錯誤存進 (error)` 是同一格東西——§4.5 原本記著「`yields` 的名字是積木包作者取的，使用者從來沒有選過」，這一版把那句話的前提拿掉了。
+
+| 類別 | 變更 | 章節 |
+|---|---|---|
+| **決議** | **D32：hat 的 `yields` 由積木上的一格命名。** 宣告方式是同一顆 hat 上一格同名的 `type: variable` + `binds: true`，那一格填什麼、那個 yield 就綁成什麼；沒有那一格的 hat（`when_cron` 的 `scheduled_at`、`when_webhook` 的 `body`）照宣告走，一個字都不用改 | §4.5、§5.4、§7.2 |
+| **修訂** | **§7.5 的邊界開一道窄門**：積木包從此宣告得起 `type: variable`——**只有**這一種形狀（hat 上、`binds`、指到自己的一個 `yields`）。它剛好不碰那條邊界：那一格的值從不送給積木包（`start_trigger` 不吃參數），它只決定 host 把 yield 綁成哪個名字。`stack` 與 `expression` 照舊全擋 | §7.2、§7.5 |
+| **修訂** | **改名發生在綁的那一刻**（`engine._bound_payload`），不在 trigger 那一側：一條連線服務畫布上所有同 opcode 的腳本，同一則訊息可以同時落進兩顆 `on_message`，而那兩顆積木上填的名字本來就可以不一樣。同理那一格**不進 trigger 的 `spec`**——放進去的話，改一個變數名就會把 Discord 的 gateway 連線拆掉重接 | §9.2 |
+| **修訂** | `discord.on_message` 的四個 `yields`（`content`／`author`／`channel_id`／`message`）**收成一個 `message` 物件**。名字由作者取的時候，四個看不見的名字就是四次「我的全域變數 `content` 怎麼變成訊息內容了」；使用者取得起名字，要小心的就只剩下他自己寫在積木上的那一個。既有專案裡的 `${content}` 會變成未知變數——這是這條決議唯一的破壞性代價，認了 | §15 |
 
 ### v0.38
 
@@ -532,6 +543,7 @@ v0.2 經審閱後的修訂。原稿的整體結構與 D1～D11 全數保留，�
 | D29 | thread-local 的作用範圍 = **綁它那顆積木的 body**；C block 綁的名字不穿過函式呼叫，hat 的 `yields` 穿 | 反面（整條 thread 都看得見）有一個致命的形狀：`${錯誤.message}` 放在 `try_catch` **之後**，沒出錯是 `未知變數`、出錯則拿到剛剛那個錯誤——同一個位置的值取決於「這次有沒有走過那條路」。那正是 D12 拒絕「全域變數隱式跨 Run 存活」的同一件事：值取決於執行史，不可推理，也寫不進 §17 的題庫；C block 範圍讓它變成一個在同一個位置**永遠一樣**的錯誤。反過來「整條 thread」不必是第二條規則——hat 的 body 就是整條腳本，同一條規則自己會給出那個答案。第三個理由是畫面上本來就在講它：**C 形的嘴巴就是範圍**，那是積木唯一天生的隱喻，不必用文件教。穿不穿函式的那一半分開答：C block 推的層在 `push_frame` 時遮蔽（要 `error` 就用參數傳，同 §4.6 的態度），而 `yields` 不遮——§5.4 的表格寫的就是「該 Thread」，且函式體本來就不在任何一顆 hat 底下，遮了等於讓函式讀不到任何 hat 欄位。代價有兩個，都認：既有專案在迴圈後讀迴圈變數，會從「拿得到最後一項」變成錯誤（所以那句訊息必須指名是哪顆積木綁的）；而編輯器那條扁平的靜態檢查會從「大致對」變成漏報 |
 | D30 | **`try_catch` 不做多個 catch。** 要分辨「這個錯誤歸哪一個」，用 `如果 ${錯誤.code} = …` 否則如果 …` | 多個 catch 的前提是一套**配對規則**，而那套規則我們已經有了、而且更通用：`${錯誤.code}` 是 §5.6 對外承諾的欄位，`如果⋯否則如果⋯`（Q19 的第一個消費者）就是「由上往下、第一個成立的就停」——**那正是 catch 鏈的語意**。專用語法換來的是同一件事兩個入口，而新的那個還得自己發明「認不得的 code 落到哪裡」「要不要 catch-all」「積木包自訂的 code 怎麼進下拉」三個答案。這與 §4.6 否決「參數在分類裡再列一份」、D9／Q8 一路擋前綴命名空間是同一條理由：**一個機制能表達的東西，不為它再開一個文法**。代價認了：巢狀比並列的 catch 多一層縮排，而那一層縮排剛好誠實地畫出「這是在同一個 catch 裡分支」 |
 | D31 | 積木包要在**擴充功能面板**裡加進來才上工具箱；**註冊照舊全部註冊** | 分類欄是 60px 寬的一直排（§8.1），每一個沒人用的包都佔掉使用者每天要掃過的一格——而那一格永遠不會自己消失。Scratch 把「音樂」「畫筆」收進擴充頁、TurboWarp 那一整頁卡片牆，擋的都是這件事。**便宜的原因是註冊與上架分開**：`GET /api/extensions` 給什麼就註冊什麼，所以 §13.3 的舊專案照樣載得進來、畫布上已經有的積木照樣跑，名單只決定工具箱上有哪幾個分類。名單存 localStorage（§16 Q15），**不進 `project.json`**——它是「我這台機器上想看到什麼」，進了專案檔同一份專案在不同人手上就長得不一樣；而「這個專案用到哪些包」不必存，IR 的 `extensions` 已經是算出來的（§13.3），載入時聯集進名單就好，否則打開別人的專案會是「畫布上有積木、工具箱裡卻生不出它」。反過來**刪除走右鍵（分類欄上那顆色圓點是主要入口）、而且畫布上還有它的積木時不准刪**（與刪掉一個函式定義同一條規則，§8.5）：刪掉之後那個分類就不在工具箱上了，而畫布上那些積木還在跑——使用者會有一批改得動、卻再也生不出第二顆的積木，而畫面上沒有任何地方說得出為什麼。這條規則同時讓上面那條聯集不自相矛盾：不擋的話，刪掉一個正在用的包，下次開專案它又自己回來，看起來就是「刪除沒有用」。刪除**不刪磁碟上的任何東西**（那張卡還在，回到「＋ 加入」）——真的卸載要等裝得進來（P3 第 2 步）才談得上 |
+| D32 | hat 的 `yields` **由積木上的一格命名**（同名的 `type: variable` + `binds`）；積木包因此第一次宣告得起 `variable` 型參數 | §4.5 自己記著這條的前提：`yields` 的名字是**積木包作者**取的，而使用者從來沒有選過——專案裡有一個全域變數叫 `content`，畫布上又拖進一顆 `yields: content` 的 `on_message`，那個堆疊裡的 `${content}` 就靜悄悄變成訊息內容了。原本的解是「在那顆 hat 上標一次 info」，但那只是**把撞名說出來**，使用者手上仍然沒有第二個選項——他能做的只有去改自己那個全域變數的名字。讓他改帽子上那一格，撞名就從「要提醒的事」變成「不會發生的事」，而且畫面上本來就有那個位置：`嘗試 ⋯ 出錯時把錯誤存進 (error)` 已經是這個形狀，使用者不必學第二種東西。**宣告用同名的 `binds` 欄位而不是新的 key**，因為那條規則已經在了（§4.5「誰是建立端由 manifest 宣告」），前端與存檔期驗證要改的只是「名字從哪裡讀」——不是多一種機制。範圍不必也不能再指一疊：D29 那句「範圍 = 綁它那顆積木的 body」對 hat 已經給出答案（整條腳本），所以這一格宣告 `scope` 是載入期錯誤。代價有兩個，都認：§7.5 的邊界上多了一道窄門（窄在「只有 hat、只有指得到自己 `yields` 的那一格」，而且那一格的值從不離開 host），以及**既有專案讀舊名字會變成未知變數**——`discord.on_message` 那四個 yields 收成一個 `message` 的時候，`${content}` 就是那個代價 |
 | D20 | 積木**形狀**與位置在**載入期**驗證；認不得的 opcode 例外 | 形狀錯誤留到執行期，錯的那半邊可以躺著好幾個月不被走到，而且它是 ValidationError 而非 BlockyError，漏出來時發不出 `block.error`，Thread 只是安靜停掉。認不得的 opcode 反過來**必須**留到執行期，否則 §13.3 的佔位符就不成立 |
 
 ---
@@ -968,20 +980,38 @@ Scratch / Blockly 原生的變數模型是「id + 名稱對照表」，好處是
 
 > 註：hat 的 `yields` 欄位與 procedure 參數也算「已定義」的來源，見 §5.4 的名稱解析順序。
 
-**`yields` 遮蔽全域：標在 hat 上，一次就好（v0.23）。** 上面那條註有一個反面。hat 的
-`yields` 名稱是**積木包作者取的**，使用者從來沒有選過：專案裡有一個全域變數叫
+**`yields` 的名字由使用者取（D32，v0.39）。** 上面那條註原本有一個反面：hat 的
+`yields` 名稱是**積木包作者取的**，使用者從來沒有選過——專案裡有一個全域變數叫
 `content`，畫布上又拖進一顆 `yields: content` 的 `on_message`，那個堆疊裡的
-`${content}` 就靜悄悄變成訊息內容了。`try_catch` 綁的 `error` 同一類。
+`${content}` 就靜悄悄變成訊息內容了。
 
-偵測到同名時，在**那顆 hat 上**標一個 info icon（「這個堆疊裡的 `content` 是收到的訊息
-內容，不是你的全域變數」），**不是**在每一顆讀取積木上標——那是 §4.6 對誤報的同一條
-態度：一個在使用者還沒做完的那一刻就先開口的檢查，比沒有更糟。
+原本的解是「在那顆 hat 上標一次 info」。但那只是**把撞名說出來**，使用者手上仍然
+沒有第二個選項——他能做的只有去改自己那個全域變數的名字。所以現在那個名字寫在
+積木上：
 
-這是唯一一種**使用者沒得選**的撞名，也因此是唯一需要主動講的一種。函式參數遮蔽全域
-不標：那兩個名字都是使用者自己取的，§5.4 的解析順序把它定義得很清楚，該補的是可見性
-（§8.5 的 pill 依層著色），不是一個警告。
+```yaml
+- opcode: on_message
+  type: hat
+  text: "當 Discord 收到訊息 %(message)"
+  args:
+    message: { type: variable, binds: true, default: "message" }   # ← 使用者填的
+  yields:
+    - { name: message, type: object }
+```
 
-**「誰是建立端」由 manifest 宣告，不由編輯器寫死。** `data.set` 與 `data.get` 的名稱欄位在宣告裡都是 `type: variable`，差別靠 `binds: true`（§7.2）：目前是 `data.set.name`、`control.count_to.name`、`control.for_each.name`、`control.try_catch.error_name` 四處。前端因此**一個 opcode 的名字都不必知道**——這與 §8.1「新增積木不需要改前端一行程式碼」是同一條承諾（D21），靜態檢查不該是第一個破例的地方。**綁進來的名字看得到多遠由 D29 定**：只在綁它那顆積木的 body 裡（§5.4）。
+**與 `嘗試 ⋯ 出錯時把錯誤存進 (error)` 是同一格東西**，所以使用者不必學第二種
+概念；撞名也從「要提醒的事」變成「不會發生的事」——他看得到那個名字，改一下就好。
+宣告用的是既有的 `binds`（「誰是建立端由 manifest 說」的同一條規則），不是新的
+key：前端與存檔期驗證要改的只有「名字從哪一格讀」。範圍不必再指一疊，D29 對 hat
+已經給出答案（那顆 hat 的 body ＝ 整條腳本），所以這一格宣告 `scope` 是載入期錯誤。
+
+沒有那一格的 hat 照宣告走（`when_cron` 的 `scheduled_at`、`when_webhook` 的
+`body`）：那些名字目前還是作者取的，而上面那段 info icon 的理由對它們仍然成立。
+
+函式參數遮蔽全域一樣不標：那兩個名字都是使用者自己取的，§5.4 的解析順序把它定義得
+很清楚，該補的是可見性（§8.5 的 pill 依層著色），不是一個警告。
+
+**「誰是建立端」由 manifest 宣告，不由編輯器寫死。** `data.set` 與 `data.get` 的名稱欄位在宣告裡都是 `type: variable`，差別靠 `binds: true`（§7.2）：內建目前是 `data.set.name`、`control.count_to.name`、`control.for_each.name`、`control.try_catch.error_name` 四處，加上積木包 hat 的 `yields` 命名格（D32，`discord.on_message.message` 是第一個）。前端因此**一個 opcode 的名字都不必知道**——這與 §8.1「新增積木不需要改前端一行程式碼」是同一條承諾（D21），靜態檢查不該是第一個破例的地方。**綁進來的名字看得到多遠由 D29 定**：只在綁它那顆積木的 body 裡（§5.4）。
 
 **`data.change` 刻意不是 `binds`。** 它會寫，但上面那條規則要求變數已存在，所以它是讀取端。這個差別看實作看不出來（兩者都走同一個寫入路徑），只有這份宣告說得出來。
 
@@ -1469,7 +1499,7 @@ Scratch 以 30fps 為單位讓出控制權。本專案**不採用**：這裡沒�
 | 4 | **持久化儲存** | **永久（SQLite）** | `data.persist_set` | 跨 Run、跨後端重啟 |
 
 1. **Procedure 參數** — 呼叫時建立 frame，遞迴深度上限 200（超出拋錯，避免堆疊爆掉）。參數在 frame 內唯讀：函式體裡用參數名寫入是**存檔期錯誤**，見下（v0.23）。
-2. **Thread-local** — 綁定型積木（`binds: true`，§4.5）建立的名字：hat 提供的欄位（如 `on_message` 的 `content`、`author`）、`try_catch` 的 `error`、`for_each` 的迴圈變數與 `count_to` 的計數變數，唯讀。可見範圍見下（D29）。
+2. **Thread-local** — 綁定型積木（`binds: true`，§4.5）建立的名字：hat 提供的欄位（`on_message` 的 `message`——**名字寫在那顆帽子上**，D32）、`try_catch` 的 `error`、`for_each` 的迴圈變數與 `count_to` 的計數變數，唯讀。可見範圍見下（D29）。
 3. **全域變數** — 見下方生命週期。並發寫入以 asyncio 單執行緒語意保證原子性（不會有 torn read）。
 
 `data.set` **一律寫入全域層**——它說的是「建立一個全域變數」。另外有
@@ -1488,7 +1518,8 @@ Scratch 以 30fps 為單位讓出控制權。本專案**不採用**：這裡沒�
 第 2 層有四個建立端（`binds: true`，§4.5）：hat 的 `yields`、`try_catch` 的
 `error`、`for_each` 的迴圈變數、`count_to` 的計數變數。後三者靠 `scope`（§7.2）
 與 `data.set` 分開——它們在宣告裡都是 `variable` + `binds`，差別只有這一句話說
-得出來。四個共用**一條**規則：
+得出來；hat 那一個靠的是「它指到自己的一個 `yields`」（D32），而那也是它不必宣告
+`scope` 的原因。四個共用**一條**規則：
 
 > 綁進來的名字，只在**綁它那顆積木的 body** 裡看得見。
 
@@ -1746,11 +1777,13 @@ palette:
 
   - opcode: on_message
     type: hat
-    text: "當收到 Discord 訊息"
+    text: "當收到 Discord 訊息 %(message)"
+    args:
+      # 這個 yield 的名字由使用者填（D32）。與 `出錯時把錯誤存進 (error)` 同一格
+      # 東西；沒有這一格的 hat 就照 yields 宣告的名字綁。
+      message: { type: variable, binds: true, default: "message" }
     yields:                             # 綁進 thread-local 的變數
-      - { name: content, type: string }
-      - { name: author,  type: string }
-      - { name: channel, type: string }
+      - { name: message, type: object }
     concurrency: parallel
 
   # 工具箱裡的非積木條目（D25）。位置就是它在 palette 裡的位置。
@@ -1765,7 +1798,7 @@ palette:
     handler: check_token
 ```
 
-參數型別：`string` `number` `boolean` `dropdown` `secret` `object` `list` `json` `code`（多行文字）。內建另有 `variable` `stack` `expression`（D22）。
+參數型別：`string` `number` `boolean` `dropdown` `secret` `object` `list` `json` `code`（多行文字）。內建另有 `variable` `stack` `expression`（D22）——其中 `variable` 對積木包開了一道窄門：**hat 上、`binds: true`、指到自己的一個 `yields`** 的那一格（D32）。窄在它不碰 §7.5 的邊界：那一格的值從不送給積木包（`start_trigger` 不吃參數），它只決定 host 把 yield 綁成哪個名字。
 
 #### 動態下拉吃「同一顆積木上其他已填的參數」（`depends`）
 
@@ -2041,9 +2074,11 @@ async def check_token(ctx) -> dict:
 @trigger("discord.on_message")
 async def on_message(ctx):
     async for msg in ctx.state["client"].stream():
-        yield {"content": msg.content,
-               "author": msg.author.name,
-               "channel": str(msg.channel.id)}
+        # key 是 manifest 的 `yields` 名字。**積木包不知道使用者把它叫成什麼**
+        # ——改名是 host 在綁的那一刻做的（D32）。
+        yield {"message": {"content": msg.content,
+                           "author": msg.author.name,
+                           "channel_id": str(msg.channel.id)}}
 ```
 
 **Trigger 用 async generator**：每 `yield` 一次就啟動一個 Thread，yield 的 dict 綁成 hat 的 `yields` 變數。cron 與 webhook 是內建 trigger，用同一套介面實作，沒有特例。

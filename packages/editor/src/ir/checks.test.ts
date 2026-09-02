@@ -32,11 +32,32 @@ const BUILTINS = resolve(
 
 let builtinBlocks: RegisteredBlock[];
 
+/**
+ * 一個積木包，只為了 D32 那一格：**沒有任何內建 hat 的 `yields` 是使用者命名的**
+ * （`when_cron` 的 `scheduled_at`、`when_webhook` 的 `body` 都是宣告死的），
+ * 而那正是這條規則唯一會出現的地方。
+ */
+const CHAT_PACK = {
+  manifestVersion: 1,
+  id: 'chat',
+  name: '聊天室',
+  version: '0.1.0',
+  palette: [
+    {
+      opcode: 'on_message',
+      type: 'hat',
+      text: '當收到訊息 %(message)',
+      args: { message: { type: 'variable', binds: true, default: 'message' } },
+      yields: [{ name: 'message', type: 'object' }],
+    },
+  ],
+} as unknown as Manifest;
+
 beforeAll(() => {
   const manifests = readdirSync(BUILTINS)
     .filter((f) => f.endsWith('.yaml'))
     .map((f) => parseYaml(readFileSync(join(BUILTINS, f), 'utf8')) as Manifest);
-  builtinBlocks = registerManifests(manifests).blocks;
+  builtinBlocks = registerManifests([...manifests, CHAT_PACK]).blocks;
 });
 
 // -------------------------------------------------------------------- //
@@ -304,6 +325,37 @@ describe('綁定的作用範圍（D29）', () => {
         here: { opcode: 'data.change', parent: 'h', fields: { name: 'body' } },
         h2: { opcode: 'event.when_flag_clicked', next: 'there' },
         there: { opcode: 'data.change', parent: 'h2', fields: { name: 'body' } },
+      },
+      ['h', 'h2'],
+    );
+    const warnings = s.check();
+    expect(kindsOn(warnings, 'here')).toEqual([]);
+    expect(kindsOn(warnings, 'there')).toEqual(['variable']);
+  });
+
+  it('hat 的 yields 綁成積木上填的那個名字（D32）', () => {
+    const s = scene(
+      {
+        h: { opcode: 'chat.on_message', next: 'here', fields: { message: '訊息' } },
+        here: { opcode: 'data.change', parent: 'h', next: 'stale', fields: { name: '訊息' } },
+        // 宣告裡那個預設名字**沒有**被綁出來——使用者已經把它改掉了，而畫面上
+        // 那顆帽子寫的就是「訊息」。
+        stale: { opcode: 'data.change', parent: 'here', fields: { name: 'message' } },
+      },
+      ['h'],
+    );
+    const warnings = s.check();
+    expect(kindsOn(warnings, 'here')).toEqual([]);
+    expect(kindsOn(warnings, 'stale')).toEqual(['variable']);
+  });
+
+  it('hat 綁的名字不是全域：別的腳本讀它要被標（D32）', () => {
+    const s = scene(
+      {
+        h: { opcode: 'chat.on_message', next: 'here', fields: { message: '訊息' } },
+        here: { opcode: 'data.change', parent: 'h', fields: { name: '訊息' } },
+        h2: { opcode: 'event.when_flag_clicked', next: 'there' },
+        there: { opcode: 'data.change', parent: 'h2', fields: { name: '訊息' } },
       },
       ['h', 'h2'],
     );

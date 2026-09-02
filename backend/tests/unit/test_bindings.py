@@ -17,7 +17,13 @@ from typing import Any
 
 import pytest
 
-from blocky.bindings import binder_index, block_label, validate_blocks
+from blocky.bindings import (
+    binder_index,
+    block_label,
+    creates_global,
+    validate_blocks,
+    yields_of,
+)
 from blocky.errors import ValidationError, UndefinedVariableError
 from blocky.extensions.manifest import BlockSpec
 from blocky.interpreter import declarations
@@ -262,6 +268,100 @@ def test_binder_index_only_collects_scoped_bindings() -> None:
         {"id": "s", "opcode": "data.set", "parent": None, "fields": {"name": "總和"}},
     )
     assert binder_index(b, {}, SPECS) == {"x": "那顆「對 ⋯ 的每一項 x」"}
+
+
+# --------------------------------------------------------------------------
+# D32：hat 的 `yields` 由使用者命名
+# --------------------------------------------------------------------------
+
+
+def named_hat() -> BlockSpec:
+    """一顆「收到訊息」帽子：`message` 那個 yield 的名字寫在積木上。"""
+    return BlockSpec.model_validate({
+        "opcode": "on_message",
+        "type": "hat",
+        "text": "當聊天室收到訊息 %(message)",
+        "args": {"message": {"type": "variable", "binds": True, "default": "message"}},
+        "yields": [{"name": "message", "type": "object"}],
+    })
+
+
+def with_hat(spec: BlockSpec) -> Any:
+    """`SPECS` 再加上一顆積木包的 hat。"""
+    return lambda opcode: spec if opcode == "chat.on_message" else SPECS(opcode)
+
+
+def test_setting_the_name_a_hat_bound_is_a_load_error() -> None:
+    """`設定 [訊息]` 在那顆帽子底下讀第 2 層、寫第 3 層——又一個「值對了一半」。
+
+    要擋得住它，讀的必須是**那顆積木上填的名字**：宣告裡那個 `message` 只是
+    預設值，而使用者早就把它改掉了。
+    """
+    resolve = with_hat(named_hat())
+    b = blocks(
+        {"id": "hat", "opcode": "chat.on_message", "parent": None,
+         "fields": {"message": "訊息"}, "next": "s"},
+        {"id": "s", "opcode": "data.set", "parent": "hat", "fields": {"name": "訊息"}},
+    )
+    with pytest.raises(ValidationError, match="當聊天室收到訊息 訊息"):
+        validate_blocks(b, {}, resolve)
+
+    # 反過來：宣告裡那個名字**沒有**被綁出來，所以 `設定 [message]` 在這顆帽子
+    # 底下就是一顆普通的全域變數積木。擋它才是誤報。
+    b["s"]["fields"]["name"] = "message"
+    validate_blocks(b, {}, resolve)
+
+
+def test_a_hat_binding_is_not_a_global_binder() -> None:
+    """它與 `data.set` 在宣告上長得幾乎一樣（`binds`、沒有 `scope`），但綁的是
+    第 2 層。算成第 3 層的話，**別的腳本**裡的 `${訊息}` 會靜靜地不再被標成
+    未知變數——一個漏報，而且是在使用者最需要那句話的時候。"""
+    assert creates_global(named_hat()) == []
+    assert yields_of({"fields": {"message": "訊息"}}, named_hat()) == ["訊息"]
+    # 沒有命名格的 hat 照宣告走（`demo.on_tick`、`when_cron` 那種）
+    assert yields_of({}, declarations.block("event.when_webhook")) == [
+        "body", "headers", "query"
+    ]
+
+
+async def test_two_hats_bind_the_same_message_to_their_own_names() -> None:
+    """一條連線服務所有同 opcode 的腳本，所以改名發生在**綁的那一刻**。
+
+    同一則訊息同時落進兩顆帽子，而那兩顆積木上寫的名字本來就可以不一樣——
+    payload 在 trigger 那一側改名的話，第二顆就永遠拿不到值。
+    """
+    from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
+    from blocky.interpreter.engine import Interpreter
+    from blocky.interpreter.events import EventSink
+    from blocky.ir.schema import load
+    from blocky.testing import Tpl, blk, build
+
+    spec = named_hat()
+
+    class Pack:
+        """`resolve_spec` / `resolve_shape` 只問這兩個問題。"""
+
+        def lookup(self, opcode: str) -> Any:
+            return ("chat", spec) if opcode == "chat.on_message" else None
+
+        def shape(self, opcode: str) -> Any:
+            return frozenset({"hat"}) if opcode == "chat.on_message" else None
+
+    project = build(scripts=[
+        [blk("chat.on_message", fields={"message": "訊息"}),
+         blk("debug.log", text=Tpl("${訊息.content}"))],
+        [blk("chat.on_message", fields={"message": "m"}),
+         blk("debug.log", text=Tpl("${m.content}"))],
+    ])
+    sink = EventSink()
+    interp = Interpreter(load(project, strict_refs=False), sink=sink, extensions=Pack())
+    result = await interp.run(
+        trigger="chat.on_message", payload={"message": {"content": "哈囉"}}
+    )
+
+    assert result.status == "ok"
+    said = [e["text"] for e in sink.dicts() if e["op"] == "log"]
+    assert said == ["哈囉", "哈囉"]
 
 
 # --------------------------------------------------------------------------

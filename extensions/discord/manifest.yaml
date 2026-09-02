@@ -113,25 +113,31 @@ palette:
   # 前兩個包都只有 reporter，所以 §7.3 的 `@trigger` 到目前為止只有合約測試裡的
   # `demo` 用過。
   #
-  # **刻意沒有參數。** 「只聽某個頻道」很有用，但 hat 的參數要一路穿過
-  # `start_trigger` 才到得了 `@trigger` 函式，而 §9.2 的 trigger 生命週期
-  # （diff 新舊 hat 集合、只重啟有變動的那條長連線）本來就是 P2 的事——現在把
-  # 參數塞進去，等於在生命週期還沒有主人的時候先決定它怎麼變。過濾用 `如果
-  # ${channel_id} = …` 做得到，而且看得見。
+  # **收到的那則訊息綁成積木上寫著的那個名字**（D32），與 `嘗試 ⋯ 出錯時把錯誤
+  # 存進 (error)` 是同一格東西。原本四個 yields（`content`／`author`／
+  # `channel_id`／`message`）收成這一個物件：名字由積木包作者取的時候，四個看不
+  # 見的名字就是四次「我的全域變數 `content` 怎麼變成訊息內容了」（§4.5 那段自己
+  # 記著這件事）；使用者取得起名字，要小心的就只剩下他自己寫在積木上的那一個。
   #
-  # `content` 要靠 privileged 的 Message Content Intent 才有東西（Developer
+  # **那一格不是「參數」。** 「只聽某個頻道」才是參數，而它仍然沒有：hat 的參數
+  # 要一路穿過 `start_trigger` 才到得了 `@trigger` 函式，而 §9.2 的 trigger 生命
+  # 週期（diff 新舊 hat 集合、只重啟有變動的那條長連線）本來就是後面的事。這一格
+  # 從不離開 host——它只決定 yield 綁成哪個名字，所以那條路一步都不用先開。
+  # 過濾用 `如果 ${message.channel_id} = …` 做得到，而且看得見。
+  #
+  # `message.content` 要靠 privileged 的 Message Content Intent 才有東西（Developer
   # Portal → Bot → Privileged Gateway Intents）。沒開的話 connect 直接炸，
   # main.py 那句錯誤會把路徑寫出來。
   - opcode: on_message
     type: hat
-    text: "當 Discord 收到訊息"
+    text: "當 Discord 收到訊息 %(message)"
+    args:
+      # 物件而不是一串字：誰說的、在哪個頻道說的、什麼時候說的，是幾件不同的
+      # 事（`${message.content}`、`${message.author.bot}`、`${message.url}`）。
+      # `如果 ${message.author.bot}` 是這顆 hat 底下最常見的第一顆 if——不濾掉
+      # 別的 bot，兩隻互相回話的 bot 會打起來。
+      message: { type: variable, binds: true, default: "message", label: 訊息變數 }
     yields:
-      - { name: content, type: string }
-      # 物件而不是一個名字：`如果 ${author.bot}` 是這顆 hat 底下最常見的第一
-      # 顆 if——不濾掉別的 bot，兩隻互相回話的 bot 會打起來。
-      - { name: author, type: object }
-      - { name: channel_id, type: string }
-      # 整則訊息。要 jump url、要 id 回覆時在這裡拿，不必為了多一個欄位改宣告。
       - { name: message, type: object }
     # 一則訊息一條 Thread。收訊息是天生併發的，drop 會在連續兩則訊息之間漏掉
     # 第二則，而使用者看到的是「有時候有反應有時候沒有」。

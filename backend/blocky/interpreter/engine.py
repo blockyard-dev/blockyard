@@ -94,6 +94,10 @@ class Entry:
     stack: str | None = None
     #: 只求值這一顆（起點是 reporter / boolean 時）。與 stack 互斥。
     value: str | None = None
+    #: 觸發這條 thread 的那顆 hat（沒有 hat 的頂層堆疊是 None）。**hat 不被
+    #: 執行**，留著它是因為 `yields` 綁成什麼名字寫在那顆積木上（D32）——同一份
+    #: payload 進到兩顆 `on_message` 底下，可以綁成兩個不同的名字。
+    hat: str | None = None
 
 
 class Thread:
@@ -195,13 +199,16 @@ class Interpreter:
         # 分辨「點的是 reporter（求值）還是 command（執行整條堆疊）」，而那必須
         # 與載入期形狀驗證用的是**同一張表**，否則畫布上合法的東西會跑不動。
         self._shapes = resolve_shape(extensions)
+        # opcode → 宣告，同一個入口（D21）。`_bound_payload` 靠它問「這顆 hat
+        # 的 yields 綁成什麼名字」。
+        self._specs = resolve_spec(extensions)
         # D29：name → 「綁它的那顆積木叫什麼」。**整份專案掃一次**，不是執行期
         # 的堆疊——那句話要說的正是範圍外的情形，而那時候綁它的那一層早就被
         # pop 掉了。算一次就好：專案在一個 Run 裡不會變。
         self._binders = binder_index(
             {bid: b.model_dump() for bid, b in project.blocks.items()},
             {pid: p.model_dump() for pid, p in project.procedures.items()},
-            resolve_spec(extensions),
+            self._specs,
         )
 
     # ---- 執行 ----
@@ -256,7 +263,7 @@ class Interpreter:
         （§4.1）因此自動落選——一顆 `data.set` 不等於任何 trigger，不需要特例。
         """
         return [
-            Entry(script_id=s.id, stack=self.project.block(s.top).next)
+            Entry(script_id=s.id, stack=self.project.block(s.top).next, hat=s.top)
             for s in self.project.scripts
             if s.enabled and self.project.block(s.top).opcode == trigger
         ]
@@ -286,8 +293,12 @@ class Interpreter:
 
         top_id = self._top_of(block_id)
         top = self.project.block(top_id)
-        stack = top.next if SHAPE_HAT in self._shapes(top.opcode) else top_id
-        return Entry(script_id=self._script_of(top_id), stack=stack)
+        is_hat = SHAPE_HAT in self._shapes(top.opcode)
+        return Entry(
+            script_id=self._script_of(top_id),
+            stack=top.next if is_hat else top_id,
+            hat=top_id if is_hat else None,
+        )
 
     def _top_of(self, block_id: str) -> str:
         """沿 `parent` 走到頂層那顆積木。"""
@@ -334,12 +345,34 @@ class Interpreter:
                 stopped = True
         return stopped
 
+    def _bound_payload(self, entry: Entry, payload: dict[str, Any]) -> dict[str, Any]:
+        """payload 的 key（`yields` 宣告的名字）→ 那顆 hat 上真的綁出來的名字（D32）。
+
+        改名發生在**這裡**而不是 trigger 那一側，因為一條連線服務所有同 opcode
+        的腳本（`runs/triggers.py`）：同一則 Discord 訊息可以同時落進兩顆
+        `on_message`，而那兩顆積木上填的名字本來就可以不一樣。
+
+        沒有命名格的 hat（`when_cron`、`when_webhook`）拿回來的是同一份 dict
+        的內容——`yield_bindings` 對它們是恆等對應。
+        """
+        if entry.hat is None or not payload:
+            return payload
+        block = self.project.blocks.get(entry.hat)
+        spec = self._specs(block.opcode) if block is not None else None
+        if spec is None:
+            return payload
+        bound = spec.yield_bindings(block.fields)
+        return {bound.get(key, key): value for key, value in payload.items()}
+
     async def _run_thread(self, thread_id: str, entry: Entry, payload: dict[str, Any]) -> str:
         # hat 的 yields 綁成 thread-local（§5.4 第 2 層，唯讀）。hat 的 body 是
         # 整條腳本，所以它推的是 layer 0——D29 底下「整條 thread 看得見」不是
         # 一條特例，是那顆積木的嘴巴剛好就是整條腳本。
         scope = Scope(
-            self.run_scope, ThreadScope(payload), self.persist, binder=self._binders.get
+            self.run_scope,
+            ThreadScope(self._bound_payload(entry, payload)),
+            self.persist,
+            binder=self._binders.get,
         )
         thread = Thread(self, thread_id, entry.script_id, scope)
 

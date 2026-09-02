@@ -141,8 +141,8 @@ async def on_message(ctx):
     async def on_message(msg):
         # **濾掉這隻 bot 自己說的話。** 這是唯一一條寫死的過濾，因為「收到訊息
         # 就回一句」是這顆 hat 最直覺的第一個用法，而它會讓 bot 對著自己講到
-        # 被限流。別的 bot 不濾——`${author.bot}` 交給畫布判斷，那是使用者的
-        # 決定。
+        # 被限流。別的 bot 不濾——`${message.author.bot}` 交給畫布判斷，那是
+        # 使用者的決定。
         if client.user is not None and msg.author.id == client.user.id:
             return
         await inbox.put(msg)
@@ -191,26 +191,34 @@ def _raise_gateway_error(ctx, connection) -> None:
 
 
 def _event(m) -> dict:
-    """一則訊息在 hat 底下綁成的那幾個變數（manifest 的 `yields`）。"""
+    """一則訊息在 hat 底下綁成的那個變數（manifest 的 `yields`）。
+
+    **一個 key，不是四個**（D32）：那個名字現在是使用者寫在積木上的
+    （`當 Discord 收到訊息 (message)`），而他只寫得下一個。`content` 與
+    `author` 從第一層搬進這個物件裡，於是畫布上是 `${message.content}`
+    ——同一個字首，讀的人知道這些東西全部來自那顆帽子。
+
+    欄位與 `_message()`（`取得最近 N 則訊息` 回的那種）刻意排成一樣的形狀：
+    同一件東西在兩顆積木上長同一個樣子，`對每一項` 拆出來的那一則才接得上
+    這顆 hat 底下的寫法。
+    """
     return {
-        "content": m.content,
-        "author": {
-            "id": str(m.author.id),
-            "name": m.author.name,
-            "display_name": m.author.display_name,
-            "bot": m.author.bot,
-        },
-        "channel_id": str(m.channel.id),
         "message": {
             "id": str(m.id),
             "content": m.content,
+            "author": {
+                "id": str(m.author.id),
+                "name": m.author.name,
+                "display_name": m.author.display_name,
+                "bot": m.author.bot,
+            },
             "channel_id": str(m.channel.id),
             "created_at": m.created_at.isoformat(),
             # 這裡的 `jump_url` 是對的，不必像 REST 那條路自己組：gateway 有
             # `intents.guilds`，所以 guild 快取是滿的（`_jump_url` 的註解說的
             # 就是**沒有**這條連線時的情況）。
             "url": m.jump_url,
-        },
+        }
     }
 
 

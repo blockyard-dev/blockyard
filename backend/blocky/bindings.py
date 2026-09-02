@@ -85,10 +85,32 @@ def creates_global(spec: BlockSpec | None) -> list[str]:
 
     它撞到任何唯讀的名字**或函式的暫存變數**都是錯的：`設定` 建立的是全域，
     而同一個函式裡讀那個名字讀到的是第 1 層——寫出去的值永遠看不見。
+
+    **hat 的 `yields` 命名格不算**（D32）：它也是 `binds`、也沒有 `scope`，但它
+    綁的是第 2 層，範圍由那顆 hat 的 body 決定。算進來的話，`當 Discord 收到
+    訊息 (訊息)` 會宣稱自己建立了一個全域變數——於是**別的腳本**裡的
+    `${訊息}` 靜靜地不再被標成未知變數。
     """
     if spec is None:
         return []
-    return [name for name, arg in spec.args.items() if arg.binds and arg.scope is None]
+    return [
+        name
+        for name, arg in spec.args.items()
+        if arg.binds and arg.scope is None and not spec.binds_a_yield(name)
+    ]
+
+
+def yields_of(block: dict[str, Any], spec: BlockSpec | None) -> list[str]:
+    """這顆 hat 綁進 thread-local 的名字——**照那顆積木上填的**（D32）。
+
+    `yields` 宣告的是預設名字，同名的 `binds` 欄位讓使用者改掉它。讀宣告而不
+    是讀那一格的話，改過名的 hat 底下 `設定 [訊息]` 會被放行，而 `設定 [message]`
+    反而被擋——兩句話都對著一個畫面上不存在的名字。
+    """
+    if spec is None:
+        return []
+    fields = block.get("fields")
+    return list(spec.yield_bindings(fields if isinstance(fields, dict) else None).values())
 
 
 def writes_existing(spec: BlockSpec | None) -> list[str]:
@@ -397,10 +419,9 @@ def _readonly_owner(
 
         # hat 提供的欄位（§5.4 第 2 層 layer 0）。`設定 [body]` 在一顆 webhook
         # 帽子底下讀的是那個欄位、寫的是全域——同一個「值對了一半」，而這一條
-        # 原本沒有人擋。
-        for y in getattr(spec, "yields", ()) or ():
-            if y.name == name:
-                return f"那顆「{block_label(ancestor, spec)}」提供"
+        # 原本沒有人擋。名字照那顆積木上填的算（D32）。
+        if name in yields_of(ancestor, spec):
+            return f"那顆「{block_label(ancestor, spec)}」提供"
 
         if (found := params_by_definition.get(ancestor_id)) is not None:
             proc_name, params = found
@@ -425,4 +446,5 @@ __all__ = [
     "validate_blocks",
     "creates_global",
     "writes_existing",
+    "yields_of",
 ]

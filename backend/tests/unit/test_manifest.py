@@ -209,6 +209,61 @@ def test_packs_cannot_declare_builtin_only_arg_types() -> None:
         )
 
 
+# ---- D32：hat 的 `yields` 由使用者命名 ----
+
+
+def hat(**over) -> dict:
+    """一顆宣告了「訊息變數」那一格的 hat。"""
+    return mf(palette=[{
+        "opcode": "on_message",
+        "type": "hat",
+        "text": "當收到訊息 %(message)",
+        "args": {"message": {"type": "variable", "binds": True, "default": "message", **over}},
+        "yields": [{"name": "message", "type": "object"}],
+    }])
+
+
+def test_a_pack_may_let_the_user_name_a_yield() -> None:
+    """§7.5 邊界上唯一的窄門（D32）。
+
+    它剛好不碰那條邊界：這一格的值從不送給積木包（`start_trigger` 不吃參數），
+    它只決定 host 把 yield 綁成哪個名字。而那個名字原本是**積木包作者**取的，
+    於是使用者的全域變數 `content` 會在那顆帽子底下靜靜地變成別的東西（§4.5）。
+    """
+    m = parse_manifest(hat(), where="test")
+    spec = m.block("on_message")
+    assert spec is not None
+    assert spec.binds_a_yield("message")
+    assert spec.yield_bindings({"message": "訊息"}) == {"message": "訊息"}
+    # 空的那一格退回宣告的名字：一顆剛拉出來的積木照樣有東西可以綁
+    assert spec.yield_bindings({"message": ""}) == {"message": "message"}
+
+
+def test_a_hat_binding_must_point_at_a_yield() -> None:
+    """指不到任何 yield 的話，這一格建立的是一個**永遠沒有值**的名字——畫布上
+    讀它一律是未知變數，而積木上看起來一切正常。"""
+    broken = hat()
+    broken["palette"][0]["yields"] = [{"name": "content", "type": "string"}]
+    bad(broken, "不在 yields 裡")
+
+
+def test_a_hat_binding_cannot_declare_a_scope() -> None:
+    """範圍已經由那顆 hat 的 body 說完了（D29：hat 的 body 是整條腳本）。"""
+    bad(hat(scope="frame"), "不能再宣告 scope")
+
+
+def test_a_pack_still_cannot_name_a_yield_on_a_command() -> None:
+    """窄門只對 hat 開。`yields` 本來就只有 hat 有，所以一顆 command 上的
+    `type: variable` 仍然是在邊界上開洞。"""
+    bad(
+        mf(palette=[{
+            "opcode": "go", "type": "command", "text": "跑 %(name)",
+            "args": {"name": {"type": "variable", "binds": True}},
+        }]),
+        "不能宣告 variable 型參數",
+    )
+
+
 def test_packs_cannot_declare_fields_or_static_dropdowns() -> None:
     """積木包的參數一律是輸入孔；下拉一律是動態的（選項來自外部服務）。"""
     bad(

@@ -318,7 +318,12 @@ class SectionSpec(Strict):
 
 
 class YieldSpec(Strict):
-    """hat 綁進 thread-local 的變數（§5.4 第 2 層，唯讀）。"""
+    """hat 綁進 thread-local 的變數（§5.4 第 2 層，唯讀）。
+
+    **名字可以交給使用者取**（D32）：同一顆 hat 上宣告一格同名的
+    `type: variable` + `binds: true`，那一格填什麼，這個 yield 就綁成什麼。
+    沒有那一格就照這裡寫的名字綁——`when_cron` 的 `scheduled_at` 是那種。
+    """
 
     name: str
     type: str = "any"
@@ -416,6 +421,21 @@ class BlockSpec(Strict):
             raise ValueError("alsoCommand 只適用於 reporter：它說的是「這一顆也可能沒有輸出孔」")
 
         for name, arg in self.args.items():
+            # D32：hat 上的 `binds` 說的是「那個 yield 叫什麼」，不是別的東西。
+            # 指不到任何一個 yield 的話，這一格建立的是一個**永遠沒有值**的名字
+            # ——畫布上讀它一律是未知變數，而積木上看起來一切正常。
+            if arg.binds and self.type == "hat":
+                if not any(y.name == name for y in self.yields):
+                    raise ValueError(
+                        f"參數 {name} 在 hat 上綁一個名字，但 {name} 不在 yields 裡："
+                        "hat 上的綁定說的是「那個 yield 由使用者命名」"
+                    )
+                if arg.scope is not None:
+                    raise ValueError(
+                        f"參數 {name} 是 hat 的 yields 命名格，不能再宣告 scope："
+                        "範圍已經由那顆 hat 的 body 說完了（hat 的 body 是整條腳本）"
+                    )
+
             # D29：`scope` 指的必須是同一顆積木上一疊真的 stack。指錯的症狀是
             # 一個**永遠看不見的名字**（範圍是一疊不存在的積木），而那在畫面上
             # 長得跟「打錯變數名」一模一樣。
@@ -518,6 +538,35 @@ class BlockSpec(Strict):
                         update={"scope": self.repeat_arg_name(arg.scope, i)}
                     )
                 out[self.repeat_arg_name(name, i)] = arg
+        return out
+
+    def binds_a_yield(self, arg: str) -> bool:
+        """這一格是不是「hat 的某個 `yields` 由使用者命名」的那一格（D32）。
+
+        `data.set.name` 也是 `binds`、也沒有 `scope`，但它建立的是第 3 層的名字
+        （整個 Run 都看得見）。分辨這兩種只有宣告答得出來——而 hat 上的那一格
+        不必也不能再指一疊：範圍已經由那顆 hat 的 body 說完了（§5.4、D29）。
+        """
+        spec = self.args.get(arg)
+        return (
+            self.type == "hat"
+            and spec is not None
+            and spec.binds
+            and any(y.name == arg for y in self.yields)
+        )
+
+    def yield_bindings(self, fields: dict[str, Any] | None = None) -> dict[str, str]:
+        """`yields` 宣告的名字 → 這顆積木上**實際**綁出來的名字（D32）。
+
+        `fields` 是那顆積木在 IR 裡的 `fields`。沒給、那一格是空的、或那個 yield
+        根本沒有命名格時，綁的就是宣告的名字——一顆剛拉出來還沒改過的積木因此
+        仍然照宣告走，而 `when_cron` 那種沒有命名格的 hat 一個字都不必改。
+        """
+        out: dict[str, str] = {}
+        for y in self.yields:
+            picked = (fields or {}).get(y.name) if self.binds_a_yield(y.name) else None
+            chosen = picked.strip() if isinstance(picked, str) else ""
+            out[y.name] = chosen or y.name
         return out
 
     @property
@@ -756,6 +805,10 @@ class Manifest(Strict):
         這些不是型別檢查擋得住的東西——`type: variable` 對 pydantic 完全合法。
         但一個能綁變數名稱、能長 C 型堆疊的積木包，等於在 §7.5 的邊界上開洞：
         那些東西沒有值可以送過 process 邊界。
+
+        **唯一的窄門是 hat 的 `yields` 命名格（D32）**，而它剛好不碰那條邊界：
+        那一格的值從不送給積木包（`start_trigger` 不吃參數），它只決定 host 把
+        yield 綁成哪個名字。
         """
         if self.builtin:
             if self.id not in BUILTIN_NAMESPACES:
@@ -773,7 +826,7 @@ class Manifest(Strict):
             if b.dynamic:
                 raise ValueError(f"{b.opcode}：dynamic 積木由專案資料生成，只有內建有")
             for name, a in b.args.items():
-                if a.type in BUILTIN_ONLY_ARG_TYPES:
+                if a.type in BUILTIN_ONLY_ARG_TYPES and not b.binds_a_yield(name):
                     raise ValueError(f"{b.opcode}.{name}：積木包不能宣告 {a.type} 型參數")
                 if a.field:
                     raise ValueError(f"{b.opcode}.{name}：積木包的參數一律是輸入孔，不能是 field")

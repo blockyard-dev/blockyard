@@ -1,7 +1,7 @@
 # PROGRESS
 
 > 這份文件只做一件事：**交接**。它記「現在在哪裡、什麼還沒解決、下一步做什麼」。
-> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.38），實作經過在 `git log`
+> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.39），實作經過在 `git log`
 > （每個 commit 的訊息就是那一輪的長版理由）。**兩邊已經有的東西，這裡不重複。**
 
 最後更新：2026-09-03
@@ -11,8 +11,8 @@
 **P0、P1、P2 全部結案。P3 — 擴散進行中**（第 1 步：擴充功能面板，完成）。
 
 ```
-cd backend && .venv/bin/python -m pytest      # 1040 passed, 5 skipped
-cd packages/editor && npm run check           # 499 passed（25 檔）+ tsc 乾淨
+cd backend && .venv/bin/python -m pytest      # 1047 passed, 5 skipped
+cd packages/editor && npm run check           # 502 passed（25 檔）+ tsc 乾淨
 ```
 
 > **改了 `extensions/` 就要跑不帶參數的 `pytest`**（`testpaths` 同時收 `tests`
@@ -116,12 +116,20 @@ cd packages/editor && npm run check           # 499 passed（25 檔）+ tsc 乾�
   這條乾淨的路（自架相容端點是真的存在的東西，測試搭順風車）；Discord 沒有相容
   端點，所以一個 `base_url` 設定會是「為了測試而長在使用者面板上的一格」。代價是
   那份測試綁著 SDK 的一個內部名字，**換大版本時要複驗**。
-- **`discord` 的 hat 沒有參數**：「只聽某個頻道」很有用，但 hat 的參數要一路穿過
-  `start_trigger` 才到得了 `@trigger` 函式，而 §9.2 的 trigger 生命週期本來就是
-  P2 的事。現在塞進去等於在生命週期還沒有主人的時候先決定它怎麼變。
+- **`discord` 的 hat 仍然沒有參數**：「只聽某個頻道」很有用，但 hat 的參數要一路
+  穿過 `start_trigger` 才到得了 `@trigger` 函式，而 §9.2 的 trigger 生命週期本來
+  就是後面的事。現在塞進去等於在生命週期還沒有主人的時候先決定它怎麼變。
+  **積木上那格 `message` 不是參數**（D32）：它從不離開 host，只決定 yield 綁成
+  哪個名字，所以它也**不進 trigger 的 `spec`**——進去的話，改一個變數名就會把
+  gateway 連線拆掉重接。
+- **`discord.on_message` 的 yields 只有一個 `message` 物件**（D32，v0.39）：
+  `${message.content}`、`${message.author.bot}`、`${message.url}`。名字由使用者
+  在帽子上填。**既有專案裡的 `${content}` 會變成未知變數**，這是那條決議認下的
+  破壞性代價。
 - **`discord.on_message` 寫死濾掉自己那隻 bot 的訊息**。別的 bot 不濾
-  （`${author.bot}` 交給畫布判斷）。這是全包唯一一條寫死的過濾，理由是「收到訊息
-  就回一句」是這顆 hat 最直覺的第一個用法，而它會讓 bot 對著自己講到被限流。
+  （`${message.author.bot}` 交給畫布判斷）。這是全包唯一一條寫死的過濾，理由是
+  「收到訊息就回一句」是這顆 hat 最直覺的第一個用法，而它會讓 bot 對著自己講到
+  被限流。
 - **`openai` 沒有 `count_tokens`**：`tiktoken` 第一次用會自己去
   `openaipublic.blob.core.windows.net` 抓 BPE 檔（用 `requests`，不經 `ctx.http`）。
   要補回來就得先決定「包可以自己連網嗎」，並把 `TIKTOKEN_CACHE_DIR` 釘到

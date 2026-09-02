@@ -547,6 +547,11 @@ def _desired(data: Any, extensions_root: Path) -> dict[str, Want]:
             continue
         # 積木包的 hat：一條連線服務所有同 opcode 的腳本，所以 key 就是 opcode，
         # 而它不吃參數，所以 spec 是空的。
+        #
+        # **`yields` 的命名格（D32）不算參數**，這裡刻意不把它放進 spec：那一格
+        # 從不離開 host（改名只影響 payload 綁成什麼名字，見
+        # `engine._bound_payload`），而放進去的後果是改一個變數名就把 Discord
+        # 的 gateway 連線拆掉重接一次。
         out[opcode] = Want(
             opcode=opcode,
             spec=(),
