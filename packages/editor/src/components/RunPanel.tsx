@@ -6,7 +6,7 @@
  * 「這份專案用到哪些變數」（第 6 步的 autocomplete 要用），這裡回答的是
  * 「現在它們是多少」，而後者只有 Run 知道。
  */
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { readPref, writePref } from '../prefs';
 import { useRunStore, type LogLine } from '../run/store';
 import { JsonTree } from './JsonTree';
@@ -15,12 +15,33 @@ import { useKeysUi } from './keysStore';
 /** §8.3：變數面板預設開著，但要能關。開關記在偏好裡，**不進 IR**（§16 Q15）。 */
 const VARIABLES_OPEN = 'variables-panel-open';
 
+/** 面板寬度的偏好 key。跟 `flyoutWidth` 一樣是偏好，不是專案的一部分。 */
+const WIDTH_PREF = 'runPanelWidth';
+
+/** 預設寬度，對應原本寫死的 `17rem`。 */
+const DEFAULT_WIDTH = 272;
+
+/** 再窄下去 JSON 樹會逐字換行，讀不成句子。 */
+const MIN_WIDTH = 180;
+
+/** 拉太寬就不是「面板」了。畫布至少要留這麼多（跟 `FlyoutResizer` 同一個數）。 */
+const CANVAS_MIN_PX = 240;
+
 export function RunPanel() {
   const status = useRunStore((s) => s.status);
   const variables = useRunStore((s) => s.variables);
   const logs = useRunStore((s) => s.logs);
   const dropped = useRunStore((s) => s.dropped);
   const [varsOpen, setVarsOpen] = useState(() => readPref(VARIABLES_OPEN, true));
+  const [width, setWidth] = useState(() => readPref(WIDTH_PREF, DEFAULT_WIDTH));
+  const drag = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const apply = useCallback((next: number) => {
+    const max = Math.max(MIN_WIDTH, window.innerWidth - CANVAS_MIN_PX);
+    const clamped = Math.round(Math.min(Math.max(next, MIN_WIDTH), max));
+    setWidth(clamped);
+    return clamped;
+  }, []);
 
   const toggleVars = () => {
     setVarsOpen((open) => {
@@ -32,7 +53,36 @@ export function RunPanel() {
   if (status === 'idle') return null;
 
   return (
-    <aside className="run-panel">
+    <aside className="run-panel" style={{ width }}>
+      {/* 左緣的把手。跟積木面板那條（`FlyoutResizer`）是同一個手勢，方向相反：
+          這片貼右邊，所以往左拖是「變寬」。畫在 aside 裡面而不是 stage 上，
+          因為它的位置就是這片的左緣——沒有第二本帳要對。 */}
+      <div
+        className="run-panel-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="調整面板寬度"
+        title="拖曳調整寬度；雙擊回到預設"
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          drag.current = { startX: event.clientX, startWidth: width };
+        }}
+        onPointerMove={(event) => {
+          const start = drag.current;
+          if (!start) return;
+          apply(start.startWidth - (event.clientX - start.startX));
+        }}
+        onPointerUp={(event) => {
+          if (!drag.current) return;
+          drag.current = null;
+          event.currentTarget.releasePointerCapture(event.pointerId);
+          // 只在放開時寫偏好：拖曳中每一幀都寫 localStorage 是同步 I/O。
+          writePref(WIDTH_PREF, width);
+        }}
+        onDoubleClick={() => {
+          writePref(WIDTH_PREF, apply(DEFAULT_WIDTH));
+        }}
+      />
       <section className="run-section">
         {/* 執行中的即時數值對除錯很有用，但它同時是一個一直在動的東西；
             不除錯的時候它只是在旁邊閃。所以要能關（§8.3）。 */}

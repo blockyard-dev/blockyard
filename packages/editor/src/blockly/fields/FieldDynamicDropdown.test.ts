@@ -1,11 +1,12 @@
 /**
  * `FieldDynamicDropdown`（D22、§8.1）的非渲染行為。
  *
- * 三件事：①存檔讀回一個不在目前清單裡的值，欄位要接受它，不能被驗證悄悄
+ * 四件事：①存檔讀回一個不在目前清單裡的值，欄位要接受它，不能被驗證悄悄
  * 改回舊值；②抓到清單之後，顯示的文字要換成對應的 label；③60 秒內重用
  * 快取，不重新打 API（快取本身在 `dropdownCache.ts` 測，這裡只驗證欄位真的
- * 透過那層快取，不繞過它）。不測畫面（箭頭、選單開闔）——那是 `FieldDropdown`
- * 自己的責任，這裡只測換掉的那兩件事。
+ * 透過那層快取，不繞過它）；④**沒有選項的那三種狀態各說各的話**，不是同一
+ * 格空白。不測畫面（箭頭、選單開闔）——那是 `FieldDropdown` 自己的責任，
+ * 這裡只測換掉的那幾件事。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FieldDynamicDropdown } from './FieldDynamicDropdown';
@@ -263,5 +264,140 @@ describe('值還空著的時候（`default: \"\"` 的下拉）', () => {
       placeholder: '選擇伺服器',
     });
     expect(f.getText()).toBe('123');
+  });
+});
+
+describe('沒有選項的時候，選單裡那一行話（notice）', () => {
+  /** 選單真正會畫出來的東西。走 `getOptions(false)` 而不是直接讀 `notice()`，
+   * 因為壞掉的話壞的是**選單**，而選單問的是這個。 */
+  function menu(f: FieldDynamicDropdown): string[] {
+    return f.getOptions(false).map((opt) => String((opt as [string, string])[0]));
+  }
+
+  it('還在抓的時候是「載入中…」，不是一格空白', async () => {
+    stubFetchOnce([{ label: '我的伺服器', value: '777' }]);
+    const f = new FieldDynamicDropdown('', undefined, {
+      extId: 'discord',
+      source: 'notice-a',
+      value: '',
+      placeholder: '選擇伺服器',
+    });
+
+    // @ts-expect-error 私有方法，測試直接觸發非強制的那條路（跟 initView 一樣）
+    const pending = f.load(false) as Promise<void>;
+    expect(menu(f)).toEqual(['載入中…']);
+    // 關起來的那一格也要說同一件事——這一格點開來只有一行話，使用者有權在點
+    // 下去之前就知道。
+    expect(f.getText()).toBe('載入中…');
+
+    await pending;
+    expect(menu(f)).toEqual(['我的伺服器']);
+    expect(f.getText()).toBe('選擇伺服器');
+  });
+
+  it('抓失敗的時候顯示後端那句話——空白說不出 token 還沒設定', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        json: async () => ({ detail: { message: '還沒設定「Discord」的 Bot Token' } }),
+      }) as unknown as Response),
+    );
+    const f = new FieldDynamicDropdown('', undefined, {
+      extId: 'discord',
+      source: 'notice-b',
+      value: '',
+    });
+
+    // @ts-expect-error 私有方法
+    await f.load(false);
+
+    expect(menu(f)).toEqual(['還沒設定「Discord」的 Bot Token']);
+  });
+
+  it('依賴的那一格還空著，說的是下一步（「先選擇伺服器」）而不是「沒有東西」', async () => {
+    // 「還沒選伺服器」是使用者從左往右填的正常中間狀態。說「沒有可以選的項目」
+    // 會讓人以為自己的伺服器裡真的一個頻道都沒有。
+    stubFetchOnce([]);
+    const f = new FieldDynamicDropdown('', undefined, {
+      extId: 'discord',
+      source: 'notice-c',
+      value: '',
+      depends: ['server'],
+      dependsLabels: { server: '伺服器' },
+    });
+    attachTo(f, {
+      getInput: () => ({
+        connection: {
+          targetBlock: () => ({ isShadow: () => true, getField: () => ({ getValue: () => '' }) }),
+        },
+      }),
+    });
+
+    // @ts-expect-error 私有方法
+    await f.load(false);
+
+    expect(menu(f)).toEqual(['先選擇伺服器']);
+  });
+
+  it('該填的都填了、答案還是空的，才說「沒有可以選的項目」', async () => {
+    stubFetchOnce([]);
+    const f = makeDependentField({ server: '777' }, 'notice-d');
+
+    // @ts-expect-error 私有方法
+    await f.load(false);
+
+    expect(menu(f)).toEqual(['沒有可以選的項目']);
+  });
+
+  it('那一行選不中：點下去不會變成這一格的值', async () => {
+    // 它在 `FieldDropdown` 眼裡是一個正常的選項，點下去就是一次 setValue。
+    // 不擋的話，一個使用者從來沒選過的哨兵字串會被存進 IR。
+    stubFetchOnce([]);
+    const f = makeDependentField({ server: '777' }, 'notice-e');
+    f.setValue('10');
+
+    // @ts-expect-error 私有方法
+    await f.load(false);
+    const [, sentinel] = f.getOptions(false)[0] as [string, string];
+    f.setValue(sentinel);
+
+    expect(f.getValue()).toBe('10');
+  });
+
+  it('換了伺服器，上一個伺服器的頻道清單立刻不見（不是留著給人挑）', async () => {
+    // 一份屬於別人的頻道清單看起來完全正常——使用者會從裡面挑一個，然後拿到
+    // 「找不到這個頻道」。
+    stubFetchOnce([{ label: '#一般', value: '10' }]);
+    const deps: Record<string, string> = { server: 'A' };
+    const f = new FieldDynamicDropdown('', undefined, {
+      extId: 'discord',
+      source: 'notice-f',
+      value: '',
+      depends: ['server'],
+      dependsLabels: { server: '伺服器' },
+    });
+    attachTo(f, {
+      getInput: () => ({
+        connection: {
+          targetBlock: () => ({
+            isShadow: () => true,
+            getField: () => ({ getValue: () => deps.server }),
+          }),
+        },
+      }),
+    });
+
+    // @ts-expect-error 私有方法
+    await f.load(false);
+    expect(menu(f)).toEqual(['#一般']);
+
+    deps.server = 'B';
+    // 這一次還在飛的時候，舊清單就該已經不見了。
+    // @ts-expect-error 私有方法
+    const pending = f.load(false) as Promise<void>;
+    expect(menu(f)).toEqual(['載入中…']);
+    await pending;
   });
 });

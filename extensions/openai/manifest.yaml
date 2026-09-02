@@ -55,6 +55,12 @@ palette:
 
   # 說明按鈕放在完整版前面：要決定 model、要看懂 ${r.usage.total_tokens} 的
   # 那一刻就在這裡，而不是在分類的最上面（同 http 的作法）。
+  # 跳到金鑰面板，`api_key` 那一格已經填好（D28）——沒有金鑰的話，上面那顆
+  # 積木的 model 下拉問不出任何東西，而使用者第一次遇到這件事就是在這裡。
+  - button: api_key
+    label: "設定 API 金鑰"
+    action: open_config
+
   - button: api_docs
     label: "模型與參數說明"
     action: open_url

@@ -609,7 +609,7 @@ function collectShadows(
   for (const name of inputs) {
     const arg = args[name];
     if (!arg || arg.type === 'boolean') continue;
-    out[name] = shadowFor(blockType, name, arg, definitions, blockColour);
+    out[name] = shadowFor(blockType, name, arg, args, definitions, blockColour);
   }
 }
 
@@ -617,6 +617,9 @@ function shadowFor(
   blockType: string,
   name: string,
   arg: ArgSpec,
+  /** 同一顆積木上的**每一格**。動態下拉的 `depends` 指的就是其中幾格，而那句
+   * 「先選擇伺服器」要的是它們的 `label`（見下）。 */
+  siblings: Record<string, ArgSpec>,
   definitions: Record<string, unknown>[],
   blockColour: string,
 ): ShadowSpec {
@@ -664,7 +667,9 @@ function shadowFor(
           source: arg.source,
           // manifest 的 `depends`：這份選項要吃同一顆積木上哪幾格的值
           // （`discord.channels` 要先知道是哪個伺服器）。
-          ...(arg.depends ? { depends: arg.depends } : {}),
+          ...(arg.depends
+            ? { depends: arg.depends, dependsLabels: labelsOf(arg.depends, siblings) }
+            : {}),
           // 值還空著時顯示的字。從 `label` 導出而不是讓積木包自己寫一句：
           // 會忘記的包就是大多數，而忘記的代價是畫布上一格看不見的東西。
           placeholder: arg.label ? `選擇${arg.label}` : '選擇…',
@@ -705,6 +710,23 @@ function shadowFor(
     colour: SHADOW_COLOUR,
   });
   return { type, fields: { [SHADOW_FIELD]: value } };
+}
+
+/**
+ * `depends` 那幾格的參數名 → 標籤。
+ *
+ * 「還沒選伺服器」是動態下拉最常見的空狀態，而那句話要說得出「伺服器」三個
+ * 字——只有參數名的話它會變成「先選擇 server」，那是宣告裡的名字，不是使用者
+ * 在積木上看到的字。沒宣告 `label` 的那一格就退回參數名：那時候畫面上本來也
+ * 沒有別的字可以指。
+ */
+function labelsOf(depends: string[], siblings: Record<string, ArgSpec>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const dep of depends) {
+    const label = siblings[dep]?.label;
+    if (label) out[dep] = label;
+  }
+  return out;
 }
 
 /** `SHADOW_TEXT` 那顆共用影子帶的設定。與它相同就不必再生一顆。 */

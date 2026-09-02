@@ -27,6 +27,18 @@ export interface KeyEntry {
   suffix: string | null;
 }
 
+/**
+ * 一把金鑰在前端的身分：`extId.key`。
+ *
+ * 這個字串在三個地方要對得起來（面板鎖定哪一把、工具箱那顆按鈕該不該出現、
+ * store 裡那份「已經設定好的」名單），而三個地方各自寫一次 `${a}.${b}` 的
+ * 話，哪天格式要變就只會改到其中兩個——症狀是按鈕不消失，而沒有人會認為那
+ * 跟字串格式有關。
+ */
+export function keyId(entry: { extId: string; key: string }): string {
+  return `${entry.extId}.${entry.key}`;
+}
+
 export async function fetchKeys(signal?: AbortSignal): Promise<KeyEntry[]> {
   const res = await fetch('/api/keys', { signal });
   if (!res.ok) throw await toApiError(res, `GET /api/keys → ${res.status} ${res.statusText}`);

@@ -69,17 +69,46 @@ export async function fetchDropdownOptions(
     args && Object.keys(args).length > 0
       ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ args }) }
       : {};
-  const res = await fetch(
-    `/api/extensions/${encodeURIComponent(extId)}/dropdown/${encodeURIComponent(source)}`,
-    { method: 'POST', ...body },
-  );
-  if (!res.ok) {
-    throw new Error(
-      `POST /api/extensions/${extId}/dropdown/${source} → ${res.status} ${res.statusText}`,
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `/api/extensions/${encodeURIComponent(extId)}/dropdown/${encodeURIComponent(source)}`,
+      { method: 'POST', ...body },
     );
+  } catch (e) {
+    // `fetch` 自己 reject 的那一句是 `Failed to fetch`——它會被原樣顯示在選單
+    // 裡（見 `FieldDynamicDropdown` 的 notice），而那句話對使用者不說明任何
+    // 事情。原始例外留在 `cause` 裡給 console。
+    throw new Error('連不上後端，讀不到選項', { cause: e });
   }
+  if (!res.ok) throw new Error(await failureReason(res));
   const raw = (await res.json()) as DropdownOption[];
   const options: [string, string][] = raw.map((o) => [o.label, o.value]);
   cache.set(key, { options, at: Date.now() });
   return options;
+}
+
+/**
+ * 一次失敗的請求，翻成一句**直接顯示得出來**的話。
+ *
+ * 後端的錯誤形狀是 `{"detail": {"message": …}}`（`api/extensions.py`），而那句
+ * message 常常正是使用者現在最需要看到的東西——「還沒設定「Discord」的 Bot
+ * Token」。丟掉它、改丟一句 `POST … → 422`，症狀是下拉點開來是空的，而**空
+ * 白不會告訴任何人 token 沒設定**。
+ *
+ * body 讀不出來（不是 JSON、或這個 Response 根本沒有 `json`）就退回狀態碼那
+ * 一句：它至少說得出「不是你選錯了，是這一趟失敗了」。
+ */
+async function failureReason(res: Response): Promise<string> {
+  try {
+    const body: unknown = await res.json();
+    const detail = (body as { detail?: unknown }).detail;
+    const message =
+      typeof detail === 'string' ? detail : (detail as { message?: unknown } | undefined)?.message;
+    if (typeof message === 'string' && message.trim()) return message.trim();
+  } catch {
+    // 落到下面那一句。
+  }
+  return `讀不到選項（HTTP ${res.status}）`;
 }

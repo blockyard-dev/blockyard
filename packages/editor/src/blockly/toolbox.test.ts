@@ -148,6 +148,69 @@ describe('按鈕的位置（§7.2 的 palette）', () => {
 
     expect(contents[0]).toMatchObject({ callbackKey: buttonCallbackKey('demo_key', 'docs') });
   });
+
+  it('分類帶著自己宣告的 secret——`open_config` 按鈕要靠它才知道開哪一把', () => {
+    // 按鈕上只有 id、label、action（`ButtonSpec`），說不出是哪一把金鑰。那是
+    // 刻意的：一顆按鈕能指定金鑰，等於一個包能送使用者去設定別人的那一把。
+    // 所以 `App.tsx` 讀的是分類上這一份，而它從 manifest 的 config 來。
+    const [group] = groupByManifest(defineManifest({
+      manifestVersion: 1,
+      id: 'demo_secret',
+      name: '金鑰',
+      version: '0.1.0',
+      config: [
+        { key: 'base_url', type: 'string', label: '端點' },
+        { key: 'bot_token', type: 'secret', label: 'Bot Token', envVar: 'X_TOKEN' },
+      ],
+      palette: [block('a')],
+    } as unknown as Manifest));
+
+    expect(group!.secrets.map((c) => c.key)).toEqual(['bot_token']);
+  });
+});
+
+describe('`open_config` 的按鈕設定完就收起來', () => {
+  /** 一個宣告了金鑰、也放了那顆按鈕的包。 */
+  function groups() {
+    return groupByManifest(defineManifest({
+      manifestVersion: 1,
+      id: 'demo_done',
+      name: '設定完就消失',
+      version: '0.1.0',
+      config: [{ key: 'bot_token', type: 'secret', label: 'Bot Token' }],
+      palette: [
+        { opcode: 'a', type: 'command', text: 'a' },
+        { button: 'bot_token', label: '設定 Bot Token', action: 'open_config' },
+        { button: 'docs', label: '說明', action: 'open_url', url: 'https://example.com' },
+      ],
+    } as unknown as Manifest));
+  }
+
+  function labels(configured?: Set<string>): string[] {
+    return (buildToolbox(groups(), configured) as { contents: Category[] }).contents
+      .find((c) => c.name === '設定完就消失')!.contents
+      .filter((entry) => entry.kind === 'button')
+      .map((entry) => String(entry.text));
+  }
+
+  it('還沒設定的時候在', () => {
+    expect(labels()).toEqual(['設定 Bot Token', '說明']);
+  });
+
+  it('設定好了就不上架——它送人去做的那件事已經做完了', () => {
+    expect(labels(new Set(['demo_done.bot_token']))).toEqual(['說明']);
+  });
+
+  it('別人的金鑰不算數', () => {
+    // 名單是整個編輯器共用的一份（每個包的每一把都在裡面），所以比對的必須是
+    // `extId.key` 而不是只有 key——只比 key 的話，另一個包也叫 `bot_token`
+    // 的那一把會讓這顆按鈕憑空消失。
+    expect(labels(new Set(['other.bot_token']))).toEqual(['設定 Bot Token', '說明']);
+  });
+
+  it('只有 `open_config` 會消失：別的動作沒有「做完了」這個狀態', () => {
+    expect(labels(new Set(['demo_done.bot_token']))).toContain('說明');
+  });
 });
 
 describe('分段與間隔（§8.1）', () => {

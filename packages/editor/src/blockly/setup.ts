@@ -42,9 +42,11 @@ export interface Registration {
 export function buildProjectToolbox(
   registration: Registration,
   procedureBlocks: RegisteredBlock[],
+  /** 已經設定好的金鑰（`keyId`）——`open_config` 的按鈕設定完就不再上架。 */
+  configured?: ReadonlySet<string>,
 ): Record<string, unknown> {
   const calls = procedureBlocks.filter((block) => isCallType(block.type));
-  return buildToolbox(groupByManifest([...registration.blocks, ...calls]));
+  return buildToolbox(groupByManifest([...registration.blocks, ...calls]), configured);
 }
 
 export function registerManifests(manifests: Manifest[]): Registration {

@@ -74,6 +74,17 @@ palette:
     action: open_url
     url: "https://discord.com/developers/applications"
 
+  # 拿到 token 的下一步就是貼進來，所以按鈕就排在上面那顆的下面。
+  #
+  # **這顆按鈕的使用者是「下拉點開來是空的」那個人。** 伺服器與頻道兩格都要先
+  # 有 token 才問得出東西，而在此之前它們畫出來就是一格提示字——現在點開至少
+  # 會看到「還沒設定「Discord」的 Bot Token」（下拉會把後端那句話顯示出來），
+  # 但看到之後他還是得自己去右上角找面板。這顆按鈕把那段路收成一下：跳到金鑰
+  # 面板，而且**這一把已經填好**，剩下的只有貼上。
+  - button: bot_token
+    label: "設定 Bot Token"
+    action: open_config
+
   # 回 list，讓 `對每一項` 直接接得上。一則訊息回一個 object 而不是一串字：
   # 誰說的、什麼時候說的、內容是什麼，是三件不同的事，黏成一句話之後要在畫布
   # 上再拆一次。

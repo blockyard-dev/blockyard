@@ -13,6 +13,8 @@ import {
   type LabelFlyoutItem,
 } from '@blockly/continuous-toolbox';
 import { procIdFromType } from './procedures';
+// 時間與曲線與畫布的「滑到那顆積木」共用一份（見 `motion.ts` 開頭）。
+import { SCROLL_MS, easeOut, prefersReducedMotion } from './motion';
 
 export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
   name: 'blocky',
@@ -28,6 +30,16 @@ export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
     insertionMarkerColour: '#33333d',
     insertionMarkerOpacity: 0.3,
     cursorColour: '#33333d',
+    // Zelos 的「選取」是一圈 `#fff200` 的外發光（`SELECTED_GLOW_COLOUR`），而在
+    // 這個編輯器裡**點一下積木＝執行它**（App.tsx 的 `Events.CLICK`），所以那圈
+    // 黃色是跟著執行走的：跑完了、白框與發光都退掉了，它還留在那裡。兩種高亮
+    // 講的是同一件事的不同階段，畫面上卻是兩套顏色。
+    //
+    // 這裡的高亮語彙已經定好了（見 index.css：白色描邊 + 橘色外發光＝正在跑、
+    // 紅色＝錯了），選取沒有第三種顏色可用，所以讓它不畫。代價是**「哪一顆被
+    // 選起來了」在畫面上沒有回饋**——這個編輯器裡它幾乎沒有工作（點是執行、
+    // 拖是直接拖、右鍵選單自己會指），而鍵盤導覽那圈黃色是另一條規則，還在。
+    selectedGlowColour: 'transparent',
   },
   // 帽子由積木自己的 `style.hat` 決定（見 define.ts 的 applyShape）。全域打開
   // 的話，`return`、`stop` 這種沒有上接點的 cap 積木也會長出帽子。
@@ -106,8 +118,6 @@ export const FLYOUT_DEFAULT_WIDTH = 300;
  */
 export const FLYOUT_MIN_WIDTH = 0;
 
-/** 點分類捲到定位的時間上限。夠短到不會變成移動靶，夠長到看得出是「滑」過去。 */
-const SCROLL_MS = 350;
 
 /** SVG 的 namespace（`createElementNS` 要）。 */
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -172,16 +182,6 @@ export function setFlyoutWidth(
  * 開一個有名字的型別把 cast 收在 `scrollTargetPx` 一處，換版本只要重看那裡。
  */
 type ScrollTargetSlot = { scrollTarget: number | undefined };
-
-function prefersReducedMotion(): boolean {
-  // jsdom（單元測試）沒有 matchMedia。
-  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-}
-
-/** ease-out cubic：一開始就快，尾巴收得慢，看起來是「滑到定位」。 */
-function easeOut(t: number): number {
-  return 1 - (1 - t) ** 3;
-}
 
 class FixedScaleFlyout extends ContinuousFlyout {
   constructor(options: Blockly.Options) {
@@ -464,5 +464,24 @@ export const workspaceOptions: Partial<Blockly.BlocklyOptions> = {
   zoom: { controls: true, wheel: true, startScale: DEFAULT_SCALE, minScale: 0.3, maxScale: 2 },
   move: { scrollbars: true, drag: true, wheel: true },
   trashcan: true,
+  // 只擋得掉「載入那三個音效檔」（click / delete / disconnect）。**擋不掉
+  // `playErrorBeep()`**，見下面的 `muteWorkspace`。
   sounds: false,
 };
+
+/**
+ * 把一個工作區靜音。**`sounds: false` 不夠。**
+ *
+ * Blockly 的聲音有兩條路：一條是 `play('click')` 那種讀 `media/` 底下的音效檔，
+ * `sounds: false` 關的是這一條；另一條是 `playErrorBeep()`，用 Web Audio 現合一個
+ * 260Hz 的音，**不讀任何檔案，只看 `AudioManager` 的 `muted`**——而 `muted` 的預設
+ * 是 `false`，`inject` 的選項裡沒有任何一個會動到它。
+ *
+ * 於是「按下走不動的方向鍵就叫一聲」是預設行為：左鍵已經在工具箱、右鍵已經到最
+ * 裡面時，`NAVIGATE_LEFT` / `NAVIGATE_RIGHT` 找不到下一個節點就 `playErrorBeep()`。
+ * 刪不掉的東西按 Delete、複製不了的東西按 Ctrl+C 也是同一聲。**實測**：掛住
+ * `AudioContext.prototype.createOscillator` 之後，在工具箱上按一下左鍵就 +1。
+ */
+export function muteWorkspace(workspace: Blockly.WorkspaceSvg): void {
+  workspace.getAudioManager().setMuted(true);
+}

@@ -119,6 +119,53 @@ body,
   opacity: 0.5;
 }
 
+/* 只有圖示的那幾顆（監聽／執行紀錄／金鑰）。左右 padding 要跟上下配成方的，
+   不然一個 15px 的 icon 塞在 0.9rem 的左右留白裡會看起來像一顆被壓扁的按鈕。 */
+.button-icon {
+  padding: 0.3rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  justify-content: center;
+  gap: 0;
+}
+
+/* 監聽中：整顆綠起來。這是工具列上唯一一個「它還在背景做事」的狀態，而
+   狀態要靠**顏色**說，不是靠旁邊多一行字——字會被當成說明讀過去。 */
+.button-listening {
+  border-color: #2f9e57;
+  background: #e8f6ed;
+  color: #2f9e57;
+}
+
+/* 監聽中掛著幾顆事件積木（`HatCount`）。灰底黑字：它是計數，不是某個
+   命名空間的積木，不該借用任何一個分類色。 */
+.hat-count {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 尺寸都是 viewBox 的 user unit（整顆 80 單位高，畫成 30px）——`stroke-width`
+   跟著縮到 0.75px，所以這裡的 2 不是「粗」，是「看得見」。 */
+.hat-count-body {
+  fill: #d8dae4;
+  stroke: #b9bcca;
+  stroke-width: 2;
+}
+
+.hat-count-text {
+  fill: #22242c;
+  font-family: inherit;
+  font-size: 32px;
+  font-weight: 600;
+}
+
+/* 沒在監聽：帽子留在原位（不然按下耳朵整條工具列會跳），但要看得出它是暗的
+   ——不然一顆沒寫數字的帽子讀起來像「數字還在算」。用 `.button:disabled` 同
+   一個手法（淡掉），因為它說的是同一件事。 */
+.hat-count-off {
+  opacity: 0.45;
+}
+
 .button-run {
   background: #2f9e57;
   border-color: #2f9e57;
@@ -131,6 +178,25 @@ body,
   color: #fff;
 }
 
+/* 「執行／停止」是同一顆，所以它得有固定寬度：兩個標籤都是兩個字，但三角形
+   與方塊的 icon 差 1px，不釘住的話切換的那一刻右邊整排會挪一格。釘在 `.actions`
+   底下而不是 `.button-run` 本身——那個 class 在 `ProcedureModal` 也有人用，
+   那裡的按鈕不該跟著變寬。 */
+.actions .button-run,
+.actions .button-stop {
+  min-width: 5rem;
+  justify-content: center;
+}
+
+/* 執行中時同一顆變成「停止」。實心紅：它跟綠色的執行是同一個位置、同一個
+   尺寸，唯一的差別就是顏色與圖示——那兩樣得夠強，強到使用者不必讀字也知道
+   自己現在按下去是在收手而不是再跑一次。 */
+.button-stop {
+  background: #c23b3b;
+  border-color: #c23b3b;
+  color: #fff;
+}
+
 /* 執行與監聽是兩列控制，中間要看得出斷開——不然四顆按鈕會讀成同一組，
    而「停止」停的是哪一個就靠猜。 */
 .actions-divider {
@@ -138,44 +204,6 @@ body,
   align-self: stretch;
   margin: 0.15rem 0.25rem;
   background: var(--line);
-}
-
-.listen-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.8125rem;
-  color: var(--muted);
-}
-
-.listen-status-on {
-  color: #2f9e57;
-}
-
-/* 「聽著」跟「什麼都沒發生」在畫面上長得太像，所以給它一個會跳的點——
-   靜態的綠字會被當成一句說明，不是一個狀態。 */
-.listen-dot {
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 50%;
-  background: currentColor;
-  animation: listen-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes listen-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.25;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .listen-dot {
-    animation: none;
-  }
 }
 
 .run-status {
@@ -367,14 +395,37 @@ body,
  * 變數與輸出面板
  * ------------------------------------------------------------------ */
 
+/* 寬度由 `RunPanel` 用 inline style 給（拖曳可調），這裡只交代其餘的形。 */
 .run-panel {
   flex: none;
-  width: 17rem;
   border-left: 1px solid var(--line);
   background: #fff;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+/* 左緣的把手，跟 `.flyout-resizer` 是同一條規則的鏡像：畫在邊界上、比內容高
+   一層、`touch-action: none` 讓 pointer capture 在觸控上也成立。
+
+   `overflow: hidden` 在 `.run-panel` 上，所以它必須整條落在面板**裡面**
+   （`left: 0`），不能像積木面板那條一樣騎在邊界上——騎上去的那一半會被裁掉。 */
+.run-panel-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.run-panel-resizer:hover,
+.run-panel-resizer:active {
+  background: rgb(77 151 255 / 45%);
 }
 
 .run-section {
@@ -1229,6 +1280,46 @@ body,
   font-family: ui-monospace, monospace;
 }
 
+/* 值那一格外面多一層，眼睛壓在右緣。 */
+.keys-input-wrap {
+  position: relative;
+  display: block;
+}
+
+/* 眼睛佔的位置從輸入框自己讓出來，不是蓋在字上面——一串貼滿的金鑰會一路長到
+   右緣，蓋上去的話最後幾個字元剛好躲在圖示底下，而那正是使用者想核對的那幾個。 */
+.keys-input-wrap .keys-input {
+  padding-right: 2.1rem;
+}
+
+.keys-reveal {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.3rem;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.keys-reveal:hover {
+  background: #f3f5f9;
+  color: inherit;
+}
+
+/* 攤開的時候要看得出來它是「開著的」，不然眼睛與斜線眼睛在小尺寸下很像。 */
+.keys-reveal[aria-pressed='true'] {
+  color: inherit;
+}
+
 .keys-field-hint {
   padding: 0;
 }
@@ -1346,6 +1437,40 @@ body,
   fill: var(--muted);
   font-size: 0.9rem;
   font-weight: 500;
+}
+
+/* ------------------------------------------------------------------ *
+ * 鍵盤導覽的焦點框（Blockly 13 內建，沒有 inject 選項可以關掉）。
+ *
+ * 按下方向鍵之後 Blockly 會在 `.injectionDiv` 掛上
+ * `.blocklyKeyboardNavigation`，然後同時畫兩層框：藍色那層說「你人在哪一
+ * 區」（工具箱／flyout／畫布三選一），黃色那層說「游標停在哪一個節點」。
+ *
+ * **拿掉的是「哪一區」那層。** 它是一圈 3px 實線，貼著工具箱、flyout、整張
+ * 畫布的邊界畫滿——在一個滿版版面的編輯器上，那條線畫出來就是整個畫面被框
+ * 住，而它要講的事（焦點在哪一區）節點那圈黃色已經講完了。順帶拿掉「整張
+ * 畫布本身就是那個節點」的黃框（點一下空白處再按方向鍵就會出現），理由同一
+ * 個：它畫的也是貼著邊界的巨大矩形。
+ *
+ * **積木、欄位、分類上那圈黃色留著。** 它是唯一說得出「現在按 Enter 會作用
+ * 在哪一顆積木上」的東西，而且它只有一顆積木那麼大。
+ *
+ * 兩條都要 `!important`：Blockly 的 CSS 是 `inject()` 時才塞進 `<head>` 的，
+ * 比這份打包好的樣式表晚，同權重會贏（同分類欄那一段的理由）。**這裡依賴
+ * Blockly 的內部變數名與 class 名，換大版本時要複驗**——名字改掉的症狀是
+ * 藍框回來，不是壞掉。
+ * ------------------------------------------------------------------ */
+
+/* 藍框的三處（工具箱與 flyout 的 outline、畫布的 focus ring）全部只由這個
+   變數上色，所以蓋變數比逐條追那三組選擇器耐得住改版。節點色是另一個變數
+   （`--blockly-active-node-color`），不動。 */
+.injectionDiv {
+  --blockly-active-tree-color: transparent !important;
+}
+
+/* 「整張畫布就是那個節點」的黃框。這條得單獨寫：它上的是節點色。 */
+.injectionDiv .blocklyWorkspaceSelectionRing {
+  stroke: none !important;
 }
 
 /* ------------------------------------------------------------------ *

@@ -95,3 +95,47 @@ def test_dropdown_source_without_the_secret_gets_the_fallback(labeled_client: Te
     res = labeled_client.post("/api/extensions/labeled/dropdown/options")
     assert res.status_code == 200, res.text
     assert res.json() == [{"label": "（沒有金鑰）", "value": "x"}]
+
+
+def test_require_secret_reaches_the_browser_as_a_readable_sentence(tmp_path: Path) -> None:
+    """`ctx.require_secret` 的那句話要原封不動走到 `detail.message`。
+
+    **前端直接顯示它**：下拉抓不到選項時，選單裡頂著的就是這一句
+    （`FieldDynamicDropdown::notice`）。這是 `discord.servers` 在 token 還沒設定
+    時唯一會發生的事，而它原本畫出來是一格空白——空白說不出 token 沒設定，
+    使用者只會覺得那顆積木壞了。
+
+    所以這一題釘住的不是狀態碼，是**那句話到得了瀏覽器**。
+    """
+    root = tmp_path / "extensions"
+    pkg = root / "needy"
+    pkg.mkdir(parents=True)
+    (pkg / "manifest.yaml").write_text(
+        "manifestVersion: 1\n"
+        "id: needy\n"
+        "name: 需要金鑰的包\n"
+        "version: 0.1.0\n"
+        "permissions: []\n"
+        "requirements: []\n"
+        "config:\n"
+        "  - key: token\n"
+        "    type: secret\n"
+        "    label: Bot Token\n"
+        "palette: []\n",
+        encoding="utf-8",
+    )
+    (pkg / "main.py").write_text(
+        "from blocky import dropdown\n\n"
+        "@dropdown('needy.things')\n"
+        "async def things(ctx):\n"
+        "    ctx.require_secret('token')\n"
+        "    return []\n",
+        encoding="utf-8",
+    )
+    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=root)
+    with TestClient(app) as client:
+        res = client.post("/api/extensions/needy/dropdown/things")
+
+    assert res.status_code == 422, res.text
+    message = res.json()["detail"]["message"]
+    assert "需要金鑰的包" in message and "Bot Token" in message

@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as Blockly from 'blockly/core';
 import { ChevronLeft, ChevronRight, Trash2, X } from 'lucide-react';
-import { blockyTheme } from '../blockly/theme';
+import { blockyTheme, muteWorkspace } from '../blockly/theme';
 import {
   DECLARATION_TYPE,
   buildDeclaration,
@@ -132,6 +132,7 @@ export function ProcedureModal({ target, onCancel, onSubmit }: Props) {
     // 一顆埋著的地雷而不是一件小事。開之前記下來，關的時候還回去。
     const previousMain = Blockly.common.getMainWorkspace();
     const workspace = Blockly.inject(host, WORKSPACE_OPTIONS);
+    muteWorkspace(workspace);
     workspaceRef.current = workspace;
     // 預覽區會跟著對話框寬度變（視窗縮放、捲軸出現），而「置中」是一個相對
     // 於視野的位置——量完新的視野就要重算一次，不然積木會偏。

@@ -22,12 +22,28 @@
  * 新清單」變成「使用者的選擇被清空」。改成直接換 `cachedOptions` 再
  * `forceRerender()`，選中的值完全不動，只有顯示的文字與下次打開選單看到的
  * 清單會更新。
+ *
+ * **沒有選項的時候，選單裡放一句話，不是留白**（`notice()`）。清單是背景抓
+ * 來的，所以「還沒抓完」「抓失敗」「真的一個都沒有」是三個不同的中間狀態，
+ * 而它們原本畫出來一模一樣：點開下拉，一格空白。空白說不出 token 還沒設定、
+ * 說不出伺服器還沒選，使用者只知道「這裡壞了」。這三種狀態各有一句話，用
+ * `NOTICE_VALUE` 這個選不中的值頂著（見 `doClassValidation_`）。
  */
 import * as Blockly from 'blockly/core';
 import type { DropdownArgs } from './dropdownCache';
 import { fetchDropdownOptions, peekDropdownOptions } from './dropdownCache';
 
 export const FIELD_DYNAMIC_DROPDOWN_TYPE = 'field_blocky_dynamic_dropdown';
+
+/**
+ * 選單裡那一行「不是選項的東西」（載入中／讀不到／一個都沒有）帶的值。
+ *
+ * 它一定要是一個**不可能是真值**的字串：使用者點得到那一行，而點下去在
+ * `FieldDropdown` 眼裡就是一次 `setValue()`。`doClassValidation_` 認出這個值
+ * 就擋掉，所以點它等於沒點——不會有一個 `\u0000blocky.notice` 被存進 IR。
+ */
+const NOTICE_VALUE = '\u0000blocky.notice';
+const LOADING_TEXT = '載入中…';
 
 /** 影子積木上那個欄位的名字。與 `define.ts::SHADOW_FIELD` 同一個字串——不從
  * 那邊 import，是為了不讓這個檔案與 `define.ts` 互相 import（define.ts 已經
@@ -39,6 +55,9 @@ export interface FieldDynamicDropdownConfig extends Blockly.FieldConfig {
   source: string;
   /** manifest 的 `depends`：這份選項要吃同一顆積木上哪幾格的值。 */
   depends?: string[];
+  /** 那幾格的 `label`（參數名 → 標籤）。「先選擇伺服器」那句話要用它——只有
+   * 參數名的話那句話會變成「先選擇 server」。 */
+  dependsLabels?: Record<string, string>;
   /** 值還是空的時候顯示什麼。見 `getText_`。 */
   placeholder?: string;
 }
@@ -63,19 +82,33 @@ export interface FieldDynamicDropdownFromJsonConfig extends FieldDynamicDropdown
  * 下方建構子），這個佔位選項只在那個瞬間存在，使用者看不到。
  */
 function dynamicMenuGenerator(this: Blockly.FieldDropdown): Blockly.MenuOption[] {
-  const options = (this as FieldDynamicDropdown).cachedOptions;
+  const field = this as FieldDynamicDropdown;
+  // `notice()` 是原型上的方法，所以建構期（欄位還沒初始化）呼叫得到；它讀的
+  // 那幾個屬性那時還是 undefined，回 null，於是走下面那條原本的路。
+  const notice = field.notice();
+  if (notice) return [notice];
+  const options = field.cachedOptions;
   return Array.isArray(options) && options.length > 0 ? options : [['', '']];
 }
+
+/** 這顆欄位的清單現在處於哪一種狀態。畫面上那句話由它決定（`notice()`）。 */
+type LoadStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
 export class FieldDynamicDropdown extends Blockly.FieldDropdown {
   declare private extId: string;
   declare private source: string;
   declare private depends: string[];
+  declare private dependsLabels: Record<string, string>;
   declare private placeholder: string;
   declare cachedOptions: Blockly.MenuOption[];
   private fetchToken = 0;
-  /** 上一次抓的時候，依賴的那幾格是什麼值。用來認出「伺服器換了」。 */
-  private loadedFor = '';
+  /** 清單現在的狀態。**只影響顯示**——值一律照舊（見 `doClassValidation_`）。 */
+  private status: LoadStatus = 'idle';
+  /** `status === 'error'` 時那一句話。後端的 detail.message 直接放進來。 */
+  private problem = '';
+  /** 上一次抓的時候，依賴的那幾格是什麼值。用來認出「伺服器換了」。
+   * `null` = 還沒抓過任何一次，跟「抓過、而那次的依賴是空的」不是同一件事。 */
+  private loadedFor: string | null = null;
   private listener: ((e: Blockly.Events.Abstract) => void) | null = null;
 
   constructor(
@@ -85,9 +118,9 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
   ) {
     super(dynamicMenuGenerator, validator, config ?? { extId: '', source: '' });
     // `FieldDropdown` 沒有「初始值」這個建構子參數——它自己會選 `cachedOptions`
-    // 的第一項（`configure_` 已經把它設成 `[[value, value]]`，見下）。這裡再
-    // 明確設一次，是為了讓「直接 `new FieldDynamicDropdown(value, ...)`」
-    // 這個呼叫方式本身就正確，不必依賴呼叫端也同時把 `value` 塞進 `config`。
+    // 的第一項（`configure_` 種的那一份，見下）。這裡再明確設一次，是為了讓
+    // 「直接 `new FieldDynamicDropdown(value, ...)`」這個呼叫方式本身就正確，
+    // 不必依賴呼叫端也同時把 `value` 塞進 `config`。
     if (typeof value === 'string') this.setValue(value);
   }
 
@@ -96,6 +129,7 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
     this.extId = config.extId;
     this.source = config.source;
     this.depends = config.depends ?? [];
+    this.dependsLabels = config.dependsLabels ?? {};
     this.placeholder = config.placeholder ?? '選擇…';
     const seed = config.value ?? '';
     // 同一個 extId/source 常常在這顆積木被建構之前就已經抓過（工具箱把整份
@@ -105,8 +139,11 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
     // 吃別格的下拉在**建構的那一刻**還讀不到那幾格（`getSourceBlock()` 這時
     // 還沒接上父積木），所以只有不吃別格的才種得起熱快取。這不是效能取捨，是
     // 「那份資訊此刻不存在」——硬猜一份出來，畫出的第一眼會是別的伺服器的頻道。
-    const warm = this.depends.length === 0 ? peekDropdownOptions(this.extId, this.source) : null;
-    this.cachedOptions = warm ?? [[seed, seed]];
+    // 值是空的（`default: ""`）就**一個選項都不種**：種一個 `['', '']` 進去，
+    // 點開選單看到的就是一格空白，而那正是 `notice()` 要頂掉的東西。
+    const warm =
+      this.depends.length === 0 ? peekDropdownOptions(this.extId, this.source) : null;
+    this.cachedOptions = warm ?? (seed ? [[seed, seed]] : []);
   }
 
   override initView(): void {
@@ -182,25 +219,85 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
     if (!this.extId || !this.source) return;
     const token = ++this.fetchToken;
     const args = this.dependencyArgs();
+    const key = JSON.stringify(args);
+    // **換了伺服器就把手上那份清單丟掉。** 它屬於上一個伺服器，而一份屬於別人
+    // 的頻道清單看起來完全正常——使用者會從裡面挑一個，然後拿到「找不到這個
+    // 頻道」。選中的**值**不動（那是他自己選的，見 `watchDependencies`），丟掉
+    // 的只有選項。
+    if (this.loadedFor !== null && key !== this.loadedFor) this.cachedOptions = [];
     // 抓之前就記下來，不是抓回來才記：抓失敗（或這個伺服器一個頻道都沒有）
     // 時如果不記，每一個事件都會再打一次同一個註定失敗的請求。
-    this.loadedFor = JSON.stringify(args);
+    this.loadedFor = key;
+    this.settle('loading');
     try {
       const options = await fetchDropdownOptions(this.extId, this.source, { force, args });
       // 這段等待期間又觸發了一次（使用者按了重新整理、或又換了伺服器），這次
       // 的結果晚到，不該覆蓋更新的那一次。
-      if (token !== this.fetchToken || options.length === 0) return;
-      this.cachedOptions = options;
-      // `dropdownCreate()` 每次開選單都會自己重新呼叫 `getOptions(false)`，
-      // 所以打開選單看到的清單一定是新的；這裡再呼叫一次是為了讓
-      // `doValueUpdate_` 這類讀 `getOptions(true)`（吃快取）的內部路徑也跟著
-      // 更新，不必等到使用者真的點開選單那一刻才對齊。
-      this.getOptions(false);
-      this.forceRerender();
-    } catch {
+      if (token !== this.fetchToken) return;
+      // 空清單**不是**「維持原狀」：`discord.channels` 在還沒選伺服器時回的就
+      // 是空的，那是一個要說出來的狀態（`emptyText`），不是一次沒發生的更新。
+      if (options.length > 0) this.cachedOptions = options;
+      this.settle(options.length > 0 ? 'ready' : 'empty');
+    } catch (e) {
       // 抓不到就維持現有選項（seed 或上一次成功的清單）——不讓整顆積木壞掉，
-      // 使用者仍然看得到、改得動目前這個值（它就是一個字串）。
+      // 使用者仍然看得到、改得動目前這個值（它就是一個字串）。壞掉的原因寫進
+      // `problem`，選單打開時看得到：`還沒設定「Discord」的 Bot Token` 是這條
+      // 路上最常見的那一句，而它原本只會變成一格空白。
+      if (token !== this.fetchToken) return;
+      this.problem = e instanceof Error ? e.message : String(e);
+      this.settle('error');
     }
+  }
+
+  /** 換一個狀態，並且讓畫面跟上。
+   *
+   * `dropdownCreate()` 每次開選單都會自己重新呼叫 `getOptions(false)`，所以打開
+   * 選單看到的清單一定是新的；這裡再呼叫一次是為了讓 `doValueUpdate_` 這類讀
+   * `getOptions(true)`（吃快取）的內部路徑也跟著更新，不必等到使用者真的點開
+   * 選單那一刻才對齊。 */
+  private settle(status: LoadStatus): void {
+    this.status = status;
+    if (status !== 'error') this.problem = '';
+    this.getOptions(false);
+    this.forceRerender();
+  }
+
+  /**
+   * 選單裡頂著的那一行；有真的選項就回 `null`（那時候不需要有人頂著）。
+   *
+   * **建構期呼叫得到**：它是原型上的方法，而 `FieldDropdown` 的建構子會先跑一次
+   * `menuGenerator_()`。那一刻 `this.status` 還是 undefined（子類別的欄位在
+   * `super()` 回來之後才初始化），switch 掉到 default 回 null——與這顆欄位還沒
+   * 開始抓的狀態一致。
+   */
+  notice(): Blockly.MenuOption | null {
+    if (Array.isArray(this.cachedOptions) && this.cachedOptions.length > 0) return null;
+    switch (this.status) {
+      case 'loading':
+        return [LOADING_TEXT, NOTICE_VALUE];
+      case 'error':
+        return [this.problem || '讀不到選項', NOTICE_VALUE];
+      case 'empty':
+        return [this.emptyText(), NOTICE_VALUE];
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * 真的問到了、而答案是「一個都沒有」時那句話。
+   *
+   * 依賴的那幾格還空著是**最常見**的那一種，而且它根本不是問題：使用者從左往
+   * 右填，還沒選伺服器的那一刻本來就問不出頻道（`main.py::channels` 回空清單
+   * 就是為了這個）。所以這一句要說出下一步（「先選擇伺服器」），不是說「沒有
+   * 東西」——後者會讓人以為自己的伺服器裡真的沒有頻道。
+   */
+  private emptyText(): string {
+    const args = this.dependencyArgs();
+    const missing = this.depends
+      .filter((name) => !args[name])
+      .map((name) => this.dependsLabels[name] ?? name);
+    return missing.length > 0 ? `先選擇${missing.join('、')}` : '沒有可以選的項目';
   }
 
   /**
@@ -210,6 +307,10 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
    * 不在清單裡——那不代表這個值不合法，只代表清單還沒跟上。
    */
   protected override doClassValidation_(newValue?: string): string | null {
+    // 唯一擋下來的東西：選單裡那一行頂著的話。它是一句提示，不是一個值——
+    // 點下去在 `FieldDropdown` 眼裡卻是一次正常的選取，不擋的話它會被存進 IR，
+    // 而積木包收到的是一串使用者從來沒選過的東西。
+    if (newValue === NOTICE_VALUE) return null;
     return newValue ?? null;
   }
 
@@ -228,6 +329,11 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
    */
   protected override getText_(): string | null {
     const value = this.getValue();
+    // 還在抓、而且這一格還沒有值：先說「載入中…」。它與提示字（「選擇伺服器」）
+    // 的差別是**點開來會不會有東西**——在清單回來之前，這一格點開只有一行話，
+    // 而使用者有權在點下去之前就知道這件事。有值的時候不換：那個值（一串 id）
+    // 本來就是這一格現在真正的內容，換成「載入中…」等於把它藏起來。
+    if (!value && this.status === 'loading') return LOADING_TEXT;
     if (!value) return this.placeholder;
     const match = this.cachedOptions.find(
       (opt): opt is [string, string, string?] => Array.isArray(opt) && opt[1] === value,

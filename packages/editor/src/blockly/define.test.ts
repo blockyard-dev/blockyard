@@ -326,6 +326,37 @@ describe('影子積木', () => {
     // IR 表示跟文字影子完全一樣：一顆字面值存在 fields.VALUE，換掉的只有影子的型別。
     expect(blocks[0]!.shadows.method).toEqual({ type: shadowType, fields: { VALUE: 'GET' } });
   });
+
+  it('depends 的下拉一起帶上那幾格的 label，不是只帶參數名', () => {
+    // 「還沒選伺服器」是這種下拉最常見的空狀態，而欄位要說得出那句話
+    // （`FieldDynamicDropdown::emptyText`）。只有參數名的話它會變成「先選擇
+    // server」——宣告裡的名字，不是使用者在積木上看到的字。
+    const { definitions, blocks } = buildDefinitions(
+      manifestOf([
+        {
+          opcode: 'send',
+          type: 'command',
+          text: '發到 %(server) 的 %(channel)',
+          args: {
+            server: { type: 'dropdown', source: 'servers', default: '', label: '伺服器' },
+            channel: {
+              type: 'dropdown',
+              source: 'channels',
+              depends: ['server'],
+              default: '',
+              label: '頻道',
+            },
+          },
+        },
+      ] as unknown as BlockSpec[]),
+    );
+    const shadow = definitions.find((d) => d.type === blocks[0]!.shadows.channel!.type)!;
+    expect((shadow.args0 as any[])[0]).toMatchObject({
+      depends: ['server'],
+      dependsLabels: { server: '伺服器' },
+      placeholder: '選擇頻道',
+    });
+  });
 });
 
 describe('dynamic 積木', () => {

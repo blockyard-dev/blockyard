@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef } from 'react';
 import * as Blockly from 'blockly/core';
-import { workspaceOptions } from '../blockly/theme';
+import { muteWorkspace, workspaceOptions } from '../blockly/theme';
 
 interface Props {
   toolbox: Record<string, unknown>;
@@ -30,6 +30,7 @@ export function WorkspaceView({ toolbox, onReady }: Props) {
       ...workspaceOptions,
       toolbox: toolboxRef.current as unknown as Blockly.utils.toolbox.ToolboxDefinition,
     });
+    muteWorkspace(workspace);
     workspaceRef.current = workspace;
     onReady?.(workspace);
 

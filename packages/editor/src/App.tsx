@@ -14,9 +14,9 @@
  * 單專案模式（`PROJECT_ID` 固定）：專案列表、切換專案是之後的事。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Ear, History, Link2, Pause, Play, Square } from 'lucide-react';
+import { Ear, History, Link2, Play, Square } from 'lucide-react';
 import * as Blockly from 'blockly/core';
-import { ApiError, fetchExtensions, fetchProject, saveProject } from './api/client';
+import { ApiError, fetchExtensions, fetchKeys, fetchProject, saveProject } from './api/client';
 import { RunSocket, listRuns, runToAttach, startRun, stopRun } from './api/runs';
 import {
   NOT_LISTENING,
@@ -28,6 +28,7 @@ import {
 } from './api/triggers';
 import type { RunSummary } from './api/runs';
 import { buildProjectToolbox, registerManifests, type Registration } from './blockly/setup';
+import type { RegisteredBlock } from './blockly/define';
 import {
   callType,
   definitionType,
@@ -38,8 +39,10 @@ import {
 import { displayName } from './blockly/signature';
 import { applyProcedure } from './blockly/apply';
 import { watchOrphans } from './blockly/reshape';
+import { glideToBlock } from './blockly/motion';
+import { syncTrashedProcedures } from './blockly/lifecycle';
 import { fillDefinitionParams, watchDefinitionParams } from './blockly/params';
-import { buttonCallbackKey } from './blockly/toolbox';
+import { buttonCallbackKey, configTarget, type ToolboxGroup } from './blockly/toolbox';
 import { ProcedureModal, type ProcedureDialogTarget } from './components/ProcedureModal';
 import { CheckRunner } from './ir/checks';
 import { buildContext, type ConversionContext } from './ir/context';
@@ -49,6 +52,7 @@ import { RunDecorator } from './run/decorate';
 import { useRunStore } from './run/store';
 import { ExtensionsEntry } from './components/ExtensionsEntry';
 import { KeysEntry } from './components/KeysPanel';
+import { configuredIds, useKeysUi, type KeysTarget } from './components/keysStore';
 import { RunBubbles } from './components/RunBubbles';
 import { FlyoutResizer } from './components/FlyoutResizer';
 import { WebhookPanel } from './components/WebhookPanel';
@@ -99,6 +103,10 @@ type State =
       registration: Registration;
       project: ProjectIR;
       ctx: ConversionContext;
+      /** 這個專案的函式積木。**工具箱重建時要它**——金鑰設定好之後那顆
+       * `open_config` 按鈕要收起來，而那次重建不是由函式的改動引起的，手邊
+       * 沒有別的地方拿得到這一份（重算一次等於把所有函式積木再註冊一輪）。 */
+      procedureBlocks: RegisteredBlock[];
       /** 專案的工具箱 = 靜態宣告 + 這個專案的函式（§8.5）。函式一改就換一份。 */
       toolbox: Record<string, unknown>;
     };
@@ -141,11 +149,60 @@ export function App() {
 
   paramsRef.current = state.status === 'ready' ? state.project.procedures ?? {} : {};
 
+  /**
+   * 每個看過的函式的**最後一份簽章，含已經刪掉的**。`syncTrashedProcedures`
+   * 要把一筆宣告放回去時，名稱與參數只有這裡還記得——IR 說不出它們（帽子的
+   * 孔是畫面不是內容，§4.6），而 state 在刪掉的那一刻就沒有了。
+   */
+  const archiveRef = useRef<Record<string, Procedure>>({});
+  for (const [id, proc] of Object.entries(paramsRef.current)) archiveRef.current[id] = proc;
+
+  /**
+   * 走過「刪除這個積木…」的那幾個函式。**只有它們的宣告跟著帽子走**，理由見
+   * `blockly/lifecycle.ts`：另外兩種「帽子與宣告對不上」都是舊專案，而那條路
+   * `ir/serialize.ts` 明講要保留。
+   */
+  const trashedRef = useRef<Set<string>>(new Set());
+
   const runStatus = useRunStore((s) => s.status);
   const runId = useRunStore((s) => s.runId);
   const runMessage = useRunStore((s) => s.message);
   const runBlocks = useRunStore((s) => s.blocks);
   const running = runStatus === 'starting' || runStatus === 'running';
+
+  /**
+   * 已經設定好的那幾把金鑰（`keysStore`）。
+   *
+   * 工具箱要看它：`open_config` 的按鈕**設定完就收起來**（`toolbox.ts::isDone`）。
+   * ref 那一份給另外三個重建工具箱的地方用——它們是因為函式改了才重建的，要的
+   * 是「現在這份名單」，不是再問一次後端。
+   */
+  const configured = useKeysUi((s) => s.configured);
+  const configuredRef = useRef(configured);
+  configuredRef.current = configured;
+  /**
+   * 手上這份工具箱是用哪一份名單畫的。
+   *
+   * 開場那一份**已經是用新名單畫好的**（載入 effect 先問過金鑰才畫），而下面
+   * 那個 effect 在名單第一次從空的變成真的那一刻還是會醒來——沒有這個 ref，它
+   * 會再畫一份一模一樣的工具箱，而 `updateToolbox` 會把 flyout 捲回頂端。
+   */
+  const toolboxFor = useRef(configured);
+
+  // 名單變了就重畫工具箱：按鈕就是在這一步消失（設定好了）或回來（刪掉了）的。
+  // 只換 toolbox，畫布不動——`WorkspaceView` 走的是 `updateToolbox`。
+  useEffect(() => {
+    if (toolboxFor.current === configured) return;
+    toolboxFor.current = configured;
+    setState((prev) =>
+      prev.status === 'ready'
+        ? {
+            ...prev,
+            toolbox: buildProjectToolbox(prev.registration, prev.procedureBlocks, configured),
+          }
+        : prev,
+    );
+  }, [configured]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -157,8 +214,23 @@ export function App() {
       const procedures = project.procedures ?? {};
       const procedureBlocks = registerProcedures(procedures);
       const ctx = buildContext([...registration.blocks, ...procedureBlocks]);
-      const toolbox = buildProjectToolbox(registration, procedureBlocks);
-      setState({ status: 'ready', registration, project, ctx, toolbox });
+      // 金鑰的狀態要在畫第一份工具箱**之前**就在手上，不然已經設定好的那個
+      // 包會先畫出一顆「設定 Bot Token」，再在下一輪把它收掉——一顆閃一下就
+      // 不見的按鈕比一顆一直在的按鈕更難理解。
+      // 讀不到就當作一把都沒設定：那只會讓按鈕多留著，而按下去仍然是對的。
+      const keys = await fetchKeys(controller.signal).catch((e: unknown) => {
+        // **中止不是「讀不到」**：吞掉它的話，這條路會繼續往下走到 setState，
+        // 而那個元件已經不在了（dev 的 StrictMode 會真的走到這裡）。
+        if (controller.signal.aborted) throw e;
+        return [];
+      });
+      useKeysUi.getState().setConfigured(configuredIds(keys));
+      // 從 store 讀回來，不是用剛剛那一份：這份工具箱是用**哪一個 Set 物件**
+      // 畫的，下面 `toolboxFor` 那個 ref 要比對得起來。
+      const keysConfigured = useKeysUi.getState().configured;
+      toolboxFor.current = keysConfigured;
+      const toolbox = buildProjectToolbox(registration, procedureBlocks, keysConfigured);
+      setState({ status: 'ready', registration, project, ctx, procedureBlocks, toolbox });
     })().catch((error: unknown) => {
       if (controller.signal.aborted) return;
       setState({ status: 'error', message: describe(error) });
@@ -209,6 +281,17 @@ export function App() {
       // 之後由 listener 補上被擠掉的那些。
       // 拖進垃圾桶走與右鍵「刪除這個積木…」同一個函式（見 `deleteRef`）。
       watchDefinitionParams(ws, () => paramsRef.current, (id) => deleteRef.current(id));
+      // undo／redo 把定義帽子搬進搬出畫布時，那筆 `procedures` 宣告要跟著走
+      // （見 `syncRef`）。掛在 create／delete 上而不是只有 delete：redo 走的
+      // 是刪除，undo 走的是建立，而它們是同一條規則的兩個方向。
+      ws.addChangeListener((event: Blockly.Events.Abstract) => {
+        if (
+          event.type === Blockly.Events.BLOCK_CREATE
+          || event.type === Blockly.Events.BLOCK_DELETE
+        ) {
+          syncRef.current();
+        }
+      });
       setWorkspace(ws);
       if (state.status === 'ready') {
         loadProject(state.project, ws, state.ctx);
@@ -390,7 +473,12 @@ export function App() {
         ...state,
         project: { ...state.project, procedures: applied.procedures },
         ctx: applied.ctx,
-        toolbox: buildProjectToolbox(state.registration, applied.procedureBlocks),
+        procedureBlocks: applied.procedureBlocks,
+        toolbox: buildProjectToolbox(
+          state.registration,
+          applied.procedureBlocks,
+          configuredRef.current,
+        ),
       });
     },
     [state],
@@ -414,9 +502,15 @@ export function App() {
    * 都沒變，effect 不重跑，於是 Blockly 手上留著**改好之前**那一份——症狀是按鈕
    * 按下去跑的是舊行為，而重新整理就好，最難查的那種。
    */
-  const buttonRef = useRef<(button: ButtonSpec) => void>(null!);
-  buttonRef.current = (button: ButtonSpec) => {
+  const openKeys = useKeysUi((s) => s.openKeys);
+  const buttonRef = useRef<(group: ToolboxGroup, button: ButtonSpec) => void>(null!);
+  buttonRef.current = (group: ToolboxGroup, button: ButtonSpec) => {
     if (button.action === 'create_procedure') setDialog({ id: null });
+    // `open_config`：跳到金鑰面板，這一把已經填好（`secretTarget`）。與執行紀錄
+    // 上那顆「去設定」按鈕開的是同一個畫面、同一條路——差別只在時機：那一顆在
+    // 「跑起來才發現沒設定」之後，這一顆在使用者拉出積木、發現下拉問不出東西的
+    // 那一刻就在手邊。
+    else if (button.action === 'open_config') openKeys(secretTarget(group));
     else runButton(button);
   };
 
@@ -427,7 +521,7 @@ export function App() {
     for (const group of groups) {
       for (const button of group.buttons) {
         workspace.registerButtonCallback(buttonCallbackKey(group.id, button.button), () =>
-          buttonRef.current(button),
+          buttonRef.current(group, button),
         );
       }
     }
@@ -485,11 +579,15 @@ export function App() {
       // 「還有 3 個地方在用」如果找不到那三個地方，等於沒說——**把畫面捲到
       // 第一顆呼叫積木上**，與存檔 422 把警告標到那顆積木上是同一件事。
       //
+      // **滑過去，不是跳過去**（`blockly/motion.ts`）。使用者沒有動畫布，畫面
+      // 卻換了一批積木，而一次瞬間位移說不出「你原本在這裡、現在到那裡」——
+      // 他要回得去，中間那幾幀就是那句話。時間與曲線與 flyout 那條共用。
+      //
       // 只捲，不 `select()`。這條路是右鍵選單叫起來的，而選單關掉時 Blockly 會
       // 把焦點還給被按右鍵的那顆積木；程式呼叫的 `select()` 搶不贏它，卻會留下
       // 一圈清不掉的 `.blocklySelected`——實測連按三次就是三個黃框，而
       // `getSelected()` 從頭到尾都是定義帽子。延後一輪（甚至 50ms）也一樣。
-      ws.centerOnBlock(first.id);
+      glideToBlock(ws, first.id);
       setToast(
         `還有 ${callers.length} 個地方在呼叫「${label}」，要先把它們刪掉。已經捲到第一顆。`,
       );
@@ -499,6 +597,10 @@ export function App() {
     // `dispose(false)`：連同函式體一起收掉（`healStack` 給 true 會把函式體
     // 留在畫布上變成一疊落單積木）。定義帽子是 `deletable: false` 的，但那個
     // 旗標擋的是使用者的三條刪除路徑，不是 `dispose`。
+    //
+    // 這一下**進得了 undo 堆疊**，而 `delete procedures[procId]` 進不去——記
+    // 一筆，讓 `syncRef` 之後認得出「這顆帽子回來了，宣告該跟著回來」。
+    trashedRef.current.add(procId);
     ws.getBlocksByType(definitionType(procId), false)[0]?.dispose(false);
     delete procedures[procId];
 
@@ -507,9 +609,64 @@ export function App() {
       ...state,
       project: { ...state.project, procedures },
       ctx: buildContext([...state.registration.blocks, ...procedureBlocks]),
-      toolbox: buildProjectToolbox(state.registration, procedureBlocks),
+      procedureBlocks,
+      toolbox: buildProjectToolbox(state.registration, procedureBlocks, configuredRef.current),
     });
     setToast(`已刪除函式「${label}」。`);
+  };
+
+  /**
+   * **宣告跟著定義帽子走**（`blockly/lifecycle.ts`）。
+   *
+   * 刪掉一個函式動了兩本帳，而 Ctrl+Z 只退得回 Blockly 那一本——不補這一句，
+   * undo 之後畫布上會留著一顆帽子，而那個函式已經不存在了：工具箱少一顆呼叫
+   * 積木、存檔會把它退化成一個名字是 proc id 的空殼、拖到垃圾桶也沒有反應
+   * （`TrashAwareDragStrategy` 存不進序列化狀態）。
+   *
+   * 問的是「畫布上現在有沒有那顆帽子」而不是「剛剛發生了什麼」，所以 redo
+   * 免費對了，連按好幾次 undo／redo 也是。
+   *
+   * `fillDefinitionParams` 一定要跟著跑：帽子回來時孔裡那幾顆是序列化長出來
+   * 的半成品，而**帽子自己的拖曳策略也是這一步掛回去的**。
+   */
+  const syncRef = useRef<() => void>(null!);
+  /**
+   * 補孔自己會發 `BLOCK_CREATE`，而那條 listener 就是叫起這個函式的人。
+   *
+   * 重入的那一次讀到的是**同一份 closure**（`setState` 要下一次 render 才看得
+   * 到），所以它會算出同一個答案、再補一次孔——目前那一步是冪等的，於是這個
+   * 旗標擋掉的是「以後某天不是了」。同一顆積木被還原兩次的症狀是換掉的積木
+   * id，而那正是 §8.4 說 IR 指著它的東西。
+   */
+  const syncingRef = useRef(false);
+  syncRef.current = () => {
+    if (syncingRef.current) return;
+    if (state.status !== 'ready' || trashedRef.current.size === 0) return;
+    const ws = workspaceRef.current;
+    if (!ws) return;
+
+    const procedures = syncTrashedProcedures(
+      ws,
+      trashedRef.current,
+      state.project.procedures ?? {},
+      archiveRef.current,
+    );
+    if (!procedures) return;
+
+    const procedureBlocks = registerProcedures(procedures);
+    setState({
+      ...state,
+      project: { ...state.project, procedures },
+      ctx: buildContext([...state.registration.blocks, ...procedureBlocks]),
+      procedureBlocks,
+      toolbox: buildProjectToolbox(state.registration, procedureBlocks, configuredRef.current),
+    });
+    syncingRef.current = true;
+    try {
+      fillDefinitionParams(ws, procedures, (id) => deleteRef.current(id));
+    } finally {
+      syncingRef.current = false;
+    }
   };
 
   useEffect(() => registerEditMenu(editRef), []);
@@ -623,6 +780,11 @@ export function App() {
         )}
         {state.status === 'ready' && (
           <div className="actions">
+            {/* 執行狀態擺在最前面：它講的是「執行」那顆按鈕做出來的事，站在這
+                一組的開頭比站在工具列尾端（金鑰後面）更接近它的來源。而且它
+                是這一列唯一會長出來又縮回去的東西，放在 `margin-left: auto`
+                的那一側，長度變化推的是自己左邊的空白，不是右邊那六顆按鈕。 */}
+            <RunStatus />
             <button
               type="button"
               className="button"
@@ -631,35 +793,61 @@ export function App() {
             >
               {saveState.status === 'saving' ? '存檔中…' : '存檔'}
             </button>
-            <button
-              type="button"
-              className="button button-run"
-              onClick={() => void beginRun()}
-              disabled={running}
-            >
-              <Play size={14} strokeWidth={2.5} fill="currentColor" /> 執行
-            </button>
-            <button type="button" className="button" onClick={handleStop} disabled={!running}>
-              <Square size={13} strokeWidth={2.5} fill="currentColor" /> 停止
-            </button>
+            {/* 執行與停止是**同一顆**。這兩件事互斥（沒在跑不能停、在跑不能再
+                按執行），所以兩顆按鈕之中永遠有一顆是灰的——那顆灰的什麼都不
+                說，只是佔著位置讓使用者每次都得先確認自己該按哪一顆。合成一
+                顆之後「現在按下去會發生什麼」由它自己的樣子回答。
 
-            {/* 第二列：監聽。跟執行分開，因為「跑一次」與「一直聽著」是兩件
-                事，而使用者會需要「讓它繼續聽著，但把手上這次跑掉的停掉」。 */}
-            <span className="actions-divider" aria-hidden="true" />
-            {listening.on ? (
-              <button type="button" className="button" onClick={() => void endListening()}>
-                <Pause size={13} strokeWidth={2.5} fill="currentColor" /> 暫停監聽
+                位置不會跳：兩顆共用一個 `min-width`（見 `index.css`），所以
+                切換時右邊那排不會跟著挪。 */}
+            {running ? (
+              <button type="button" className="button button-stop" onClick={handleStop}>
+                <Square size={13} strokeWidth={2.5} fill="currentColor" /> 停止
               </button>
             ) : (
-              <button type="button" className="button" onClick={() => void beginListening()}>
-                <Ear size={14} strokeWidth={2.5} /> 監聽
+              <button type="button" className="button button-run" onClick={() => void beginRun()}>
+                <Play size={14} strokeWidth={2.5} fill="currentColor" /> 執行
               </button>
             )}
-            {listening.on && listening.hats.length > 0 && (
-              <span className="listen-status listen-status-on">
-                <span className="listen-dot" aria-hidden="true" />
-                聽著 {listening.hats.length} 顆事件積木
-              </span>
+
+            {/* 第二列：監聽。跟執行分開，因為「跑一次」與「一直聽著」是兩件
+                事，而使用者會需要「讓它繼續聽著，但把手上這次跑掉的停掉」。
+
+                只有圖示，說明交給 title／aria-label：這一列有六個入口，六段
+                中文標籤會把工具列撐到換行，而「監聽／執行紀錄／金鑰」這三顆
+                的圖示本身就認得出來（耳朵、時鐘、鑰匙）。 */}
+            <span className="actions-divider" aria-hidden="true" />
+            {/* 帽子**一直都在**，沒在監聽時只是不寫數字。理由是手感不是語意：
+                它要是跟著監聽開關進出，按下耳朵的那一刻整條工具列會往左跳一
+                格，而那一跳正好發生在使用者剛按完、眼睛還盯著那顆按鈕的時候。
+
+                數字本身照樣誠實——沒有事件積木就是 0，不是藏起來。「聽著幾顆」
+                與「一顆都沒有」是同一個問題的兩個答案，藏掉後者只會讀成「這
+                個數字還沒算出來」。 */}
+            <HatCount count={listening.on ? listening.hats.length : null} hint={listening.message} />
+            {listening.on ? (
+              // 還是耳朵，只是綠的：這一顆是**狀態**，而「它在聽」的圖像就是
+              // 耳朵。換成暫停符號等於把狀態換成動作，畫面上就再也沒有東西
+              // 在說「現在是聽著的」了——顏色一個人扛不動這件事。
+              <button
+                type="button"
+                className="button button-icon button-listening"
+                onClick={() => void endListening()}
+                aria-label="監聽中，按一下暫停"
+                title="監聽中，按一下暫停"
+              >
+                <Ear size={15} strokeWidth={2.5} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="button button-icon"
+                onClick={() => void beginListening()}
+                aria-label="監聽"
+                title="監聽：讓事件積木一直聽著"
+              >
+                <Ear size={15} strokeWidth={2.5} />
+              </button>
             )}
             {listening.on && listening.webhooks.length > 0 && (
               // 網址不直接攤在工具列上：它是一串 32 位亂碼加路徑，擺出來只會
@@ -669,16 +857,19 @@ export function App() {
                 <span className="keys-count">{listening.webhooks.length}</span>
               </button>
             )}
-            {listening.message && (
-              <span className="listen-status listen-status-idle">{listening.message}</span>
-            )}
 
             {/* 執行紀錄跟「執行／監聽」分開：那兩顆是「讓它跑」，這顆是
                 「回頭看它跑過什麼」——而後者在沒有東西在跑的時候也要進得去
                 （§6.3 的整個用意就是跨 Run、跨重啟）。 */}
             <span className="actions-divider" aria-hidden="true" />
-            <button type="button" className="button" onClick={() => setHistoryOpen(true)}>
-              <History size={13} strokeWidth={2.5} /> 執行紀錄
+            <button
+              type="button"
+              className="button button-icon"
+              onClick={() => setHistoryOpen(true)}
+              aria-label="執行紀錄"
+              title="執行紀錄"
+            >
+              <History size={15} strokeWidth={2.5} />
             </button>
           </div>
         )}
@@ -695,7 +886,6 @@ export function App() {
         )}
         {/* 右上角的全域入口（D28）：不綁定某個專案，載入中／出錯時也該進得去。 */}
         <KeysEntry />
-        <RunStatus />
         {saveState.status === 'error' && (
           <span className="save-status save-status-error">{saveState.message}</span>
         )}
@@ -743,6 +933,67 @@ export function App() {
   );
 }
 
+/**
+ * 監聽中掛著幾顆事件積木——畫成那顆積木本身的形狀。
+ *
+ * 前一版寫的是「聽著 N 顆事件積木」，一句得讀完才知道在講什麼的話。使用者在
+ * 畫布上認事件積木靠的是**那頂帽子**（`define.ts` 的 `style.hat`），所以這裡直
+ * 接把帽子畫出來、數字寫在肚子上：不必翻譯，一眼就對得起來。
+ *
+ * 灰色而不是分類色：這顆是「有幾顆」的計數，不代表其中任何一顆的命名空間，
+ * 隨便挑一個顏色只會讓人以為它在指某一類。
+ *
+ * `d` 是**從畫布上那顆事件積木身上抄下來的**（Blockly 13 的 geras render，
+ * 整條路徑往右下位移 2／20 讓描邊有地方畫），不是照著眼睛比例畫的近似——比例
+ * 一旦有出入，「這個計數說的是那種積木」這件事就得靠讀者自己相信。所以要動
+ * 這條路徑之前先去 render 一顆真的來對。
+ */
+function HatCount({ count, hint }: { count: number | null; hint?: string }) {
+  /** `null` = 沒在監聽。空字串讓下面的寬度與 `<text>` 一起收掉。 */
+  const text = count === null ? '' : count.toLocaleString();
+  // 帽子那道弧固定 96 寬，所以 112 是它撐得住的最小身體。空的跟一兩位數都落
+  // 在這個下限上——這正是「按下耳朵不會位移」的來源。三位數以上才加寬，不加
+  // 的話數字會壓到下緣那個 notch 上。
+  const bodyWidth = Math.max(112, 64 + text.length * 24);
+  // 「開著但一顆都沒有」那句話（`listeningStateOf` 的 message）搬進 tooltip：
+  // 工具列上它只需要是一個 0，但「按了為什麼沒反應」的答案不能因此消失。
+  const label =
+    count === null
+      ? '沒有在監聽'
+      : hint
+        ? `監聽中：${hint}`
+        : `監聽中，聽著 ${text} 顆事件積木`;
+  return (
+    <span className={count === null ? 'hat-count hat-count-off' : 'hat-count'} title={label}>
+      <svg
+        viewBox={`0 0 ${bodyWidth + 4} 80`}
+        width={((bodyWidth + 4) / 80) * 30}
+        height={30}
+        role="img"
+        aria-label={label}
+      >
+        <path
+          className="hat-count-body"
+          d={`m 2,20 c 25,-22 71,-22 96,0 H ${bodyWidth - 2} a 4,4 0 0,1 4,4 v 40 a 4,4 0 0,1 -4,4 H 50 c -2 0 -3 1 -4 2 l -4 4 c -1 1 -2 2 -4 2 h -12 c -2 0 -3 -1 -4 -2 l -4 -4 c -1 -1 -2 -2 -4 -2 H 6 a 4,4 0 0,1 -4,-4 z`}
+        />
+        {/* 身體是 y 20→68，所以正中央在 44。x 用身體的中線，不是 Blockly 那個
+            「欄位區的中線」——那顆積木左邊還有 notch 要讓，這顆沒有。 */}
+        {text !== '' && (
+          <text
+            className="hat-count-text"
+            x={2 + bodyWidth / 2}
+            y={44}
+            textAnchor="middle"
+            dominantBaseline="central"
+          >
+            {text}
+          </text>
+        )}
+      </svg>
+    </span>
+  );
+}
+
 const RUN_LABEL: Record<string, string> = {
   starting: '準備中⋯',
   running: '執行中⋯',
@@ -771,7 +1022,33 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** 宣告式按鈕的動作（D25 的 (a) 層）。 */
+/**
+ * `open_config` 要打開的那一把（D28 的 `KeysTarget`）。
+ *
+ * **哪一把由 manifest 說，不是按鈕說**：`ButtonSpec` 上只有 id、label、action
+ * ——刻意的，一顆按鈕能指定金鑰就等於一個包能送使用者去設定別人的那一把。所以
+ * 這裡讀的是這個分類自己宣告的 `config`。
+ *
+ * 一個包宣告兩把 secret 時取第一把；沒有宣告任何一把時回 `undefined`，那會開
+ * 一個**沒有鎖定任何一格**的金鑰面板。後者不是「什麼都不做」——一顆按下去沒有
+ * 反應的按鈕比一個開錯格子的面板更難懂，而那個面板上至少列著全部的金鑰。
+ */
+function secretTarget(group: ToolboxGroup): KeysTarget | undefined {
+  const secret = configTarget(group);
+  if (!secret) return undefined;
+  return {
+    extId: group.id,
+    extName: group.name,
+    key: secret.key,
+    label: secret.label ?? null,
+    envVar: secret.envVar ?? null,
+  };
+}
+
+/** 宣告式按鈕的動作（D25 的 (a) 層）裡，**不需要碰 React 的**那幾種。
+ *
+ * `create_procedure` 與 `open_config` 都要開編輯器自己的畫面，所以它們留在
+ * `buttonRef` 那邊（那裡才有 state 與 store）。 */
 function runButton(button: ButtonSpec): void {
   switch (button.action) {
     case 'open_url':
@@ -783,9 +1060,8 @@ function runButton(button: ButtonSpec): void {
       }
       return;
     default:
-      // `open_config`（§12.1 的設定面板）與 `call`（§7.3 的 @button）都要等
-      // P1 的積木包 Host。到那之前沒有人宣告得出這兩種按鈕，所以這裡是一句
-      // 誠實的「還沒接上」而不是一個假的成功。
+      // 只剩 `call`（§7.3 的 @button）：它要打後端，而目前沒有包宣告得出來。
+      // 一句誠實的「還沒接上」而不是一個假的成功。
       console.warn(`[blocky] 按鈕動作 ${button.action} 還沒接上`);
   }
 }

@@ -1,7 +1,7 @@
 # PROGRESS
 
 > 這份文件只做一件事：**交接**。它記「現在在哪裡、什麼還沒解決、下一步做什麼」。
-> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.36），實作經過在 `git log`
+> 規格與決議在 [`docs/design.md`](docs/design.md)（v0.37），實作經過在 `git log`
 > （每個 commit 的訊息就是那一輪的長版理由）。**兩邊已經有的東西，這裡不重複。**
 
 最後更新：2026-09-02
@@ -11,8 +11,8 @@
 **P0、P1、P2 全部結案。** 下一階段是 **P3 — 擴散**。
 
 ```
-cd backend && .venv/bin/python -m pytest      # 1027 passed, 5 skipped
-cd packages/editor && npm run check           # 453 passed（21 檔）+ tsc 乾淨
+cd backend && .venv/bin/python -m pytest      # 1040 passed, 5 skipped
+cd packages/editor && npm run check           # 477 passed（22 檔）+ tsc 乾淨
 ```
 
 > **改了 `extensions/` 就要跑不帶參數的 `pytest`**（`testpaths` 同時收 `tests`
@@ -22,7 +22,7 @@ cd packages/editor && npm run check           # 453 passed（21 檔）+ tsc 乾�
 > **改了積木宣告要重啟後端，而且開著的分頁要重新整理。** `/api/extensions` 只在
 > 開場問一次，兩邊都沒有訊號說它過期了。見已知缺口 1。
 
-題庫覆蓋 **56/94** 顆內建積木（60%）。`tests/gen_corpus.py --check` 只驗不寫檔，
+題庫覆蓋 **57/95** 顆內建積木（60%）。`tests/gen_corpus.py --check` 只驗不寫檔，
 不帶參數會重新產生 fixture 與黃金軌跡。
 
 ## 2. 下一步
@@ -48,11 +48,12 @@ cd packages/editor && npm run check           # 453 passed（21 檔）+ tsc 乾�
 1. **後端的積木集合變了，開著的分頁不會知道。** `/api/extensions` 只在開場問一
    次，所以重啟後端或裝一個新積木包之後，那個分頁的工具箱還是舊的，而畫面上
    **沒有任何訊號說它過期了**——症狀是「照你說的做，可是沒有那顆積木」。最便宜
-   的解是標頭那行「94 顆積木」：它已經在畫面上了，只要它會變，過期就看得出來。
-2. **變數面板在迴圈結束後還留著迴圈變數。** `for_each` 仍然發 `var.set`，但那個
-   名字現在是第 2 層的——迴圈跑完面板上還寫著 `item = 2`，而 `取得 (item)` 已經
-   是錯誤。**面板說的話與執行期不一致。** 便宜的解要 `var.set` 帶一個「哪一層」，
-   而那是一次 schema 決定。
+   的解是標頭那行「95 顆積木」：它已經在畫面上了，只要它會變，過期就看得出來。
+2. **變數面板在迴圈結束後還留著迴圈變數。** `for_each` 與 `count_to` 仍然發
+   `var.set`，但那個名字現在是第 2 層的——迴圈跑完面板上還寫著 `item = 2`，而
+   `取得 (item)` 已經是錯誤。**面板說的話與執行期不一致。** 便宜的解要 `var.set`
+   帶一個「哪一層」，而那是一次 schema 決定。**`count_to` 讓它更常見了**：計數
+   迴圈比「對每一項」平常得多。
 3. **`concurrency` 的 `queue` 與 `restart` 沒實作**（§5.1），目前與 `parallel` 同
    行為。`drop` 做了，因為 `when_cron` 宣告的就是它。
 4. **cron 沒有 interval**，只有五欄 crontab，所以最小粒度是一分鐘（§9.1 說兩種都要）。
@@ -147,10 +148,16 @@ cd packages/editor && npm run check           # 453 passed（21 檔）+ tsc 乾�
 - **帽子的參數孔擋不住別的積木**：靠 listener 收拾，而那一瞬間丟進去的積木會被存檔
   丟掉，目前沒有提示。
 - **鍵盤走不進浮動工具列與預覽積木**，所以分段的文字與順序只有滑鼠改得動。
-- **三處依賴 Blockly 內部行為，換版時要複驗**：右鍵選單的 `preconditionFn` 快取、
+- **四處依賴 Blockly 內部行為，換版時要複驗**：右鍵選單的 `preconditionFn` 快取、
   `WidgetDiv` 靠焦點活著（按鈕用 `pointerdown` + `preventDefault`）、keydown 必須
-  capture 才問得到「編輯器開不開著」。加上兩個 CSS hack：`.injectionDiv
-  { overflow: visible }` 與欄位編輯器的 inline style（`!important`）。
+  capture 才問得到「編輯器開不開著」，以及 `motion.ts` 靠
+  **`scroll(ws.scrollX, ws.scrollY)` 是不動點**（`scroll()` 夾完就直接寫回那兩個
+  欄位）——`glideToBlock` 用「先讓 `centerOnBlock` 跳到定位、記下落點、再跳回起
+  點」問出目的地，好處是不必抄一份 `centerOnBlock` 的公式，代價是這條性質。它不
+  成立的症狀是**滑到的位置偏一點點**，不是壞掉。加上三個 CSS hack：`.injectionDiv
+  { overflow: visible }`、欄位編輯器的 inline style（`!important`），以及把鍵盤
+  導覽的 `--blockly-active-tree-color` 蓋成 `transparent`（那圈貼著工具箱與整張
+  畫布邊界的藍框）——名字改掉的症狀是藍框回來，不是壞掉。
 
 ### 3.4 執行期與後端
 
@@ -178,7 +185,9 @@ cd packages/editor && npm run check           # 453 passed（21 檔）+ tsc 乾�
 
 - **版面與時間只有瀏覽器實測守著**（jsdom 量不到 `getBoundingClientRect` /
   `getComputedTextLength`）：半形單字置中、值氣泡的 hover 凍結、淡出的時間、浮動工具列
-  的位置、flyout 版面、focus trap「Tab 真的停在哪」。
+  的位置、flyout 版面、focus trap「Tab 真的停在哪」，以及 `motion.ts` 的兩段動畫
+  （flyout 捲動、`glideToBlock`）——`easeOut` 是純函式測得到，「滑到的是不是那顆
+  積木」不是。
 - **動態下拉的「依賴那一格變了就重抓」那條 workspace listener 沒有單元測試**——它要
   一個真的 workspace。`load()` 那一半有測（args 進 body、快取 key 含 args、值不會被
   清掉），瀏覽器裡也實測過選伺服器 → 頻道清單跟著換。
@@ -196,7 +205,7 @@ cd packages/editor && npm run check           # 453 passed（21 檔）+ tsc 乾�
 
 ## 4. 未決題
 
-design.md §16 的 **Q1、Q3–Q5、Q7–Q9、Q11、Q12、Q14、Q15、Q17、Q20、Q21** 仍未決。
+design.md §16 的 **Q1、Q3–Q5、Q7–Q9、Q11、Q12、Q14、Q15、Q17、Q20、Q21、Q23** 仍未決。
 
 已決的：Q2（廣播訊息，不做，D14）、Q6（函式暫存變數 `這次`，做，v0.33）、
 Q10（開發者路線，v0.17）、Q13（內建宣告放後端，D21）、Q16（字面值型別，第 6 步）、
@@ -265,7 +274,21 @@ Q18（`control.stop` 是 cap block，第五輪）、Q19（可重複參數群組�
     試過，編輯器自動存了）。§13.1「opcode 永不移除」擋的就是這個。**一條規則存在
     的地方，就是別人已經踩過的地方。**
 
-12. **翻裝下來的原始碼，不要用訓練資料裡的記憶去猜。** `discord` 那一輪三件事都是這樣翻出來的
+12. **一個動作跨兩本帳時，undo 只會退回其中一本。** 刪掉一個函式同時動了 Blockly
+    的工作區（自己管 undo）與 React 的 state（不進 undo 堆疊），於是 Ctrl+Z 之後
+    畫布上留著一顆帽子、而那個函式已經不存在——**兩邊各自都是對的**，錯的是中間
+    沒有人負責（第 5 條的形狀，只是這次那條縫在自己家裡）。修法是讓兩本帳其中
+    一本**跟著**另一本走，而且問的要是「現在的狀態是什麼」而不是「剛剛發生了
+    什麼」：前者的 redo 免費就對了，後者要再寫一次反向邏輯。**下次遇到「undo
+    之後怪怪的」，先數這個動作動了幾本帳。**
+
+13. **序列化存得下的東西比你以為的少。** 同一個 bug 的第二半：`deletable` 存得
+    進 `blocks.save()`，**拖曳策略存不進去**——所以 undo 還原出來的參數晶片看起來
+    完全正常（型別對、位置對、刪不掉），拖一下卻是把它從帽子上扯下來而不是複製
+    一份。凡是「我們逐顆掛上去的」東西（drag strategy、listener、警告），都要問
+    一次「這顆積木被還原時誰把它掛回去」。
+
+14. **翻裝下來的原始碼，不要用訓練資料裡的記憶去猜。** `discord` 那一輪三件事都是這樣翻出來的
    （`login()` 不開 gateway、`ctx.http` 注不進去、`jump_url` 吐 `@me`），三件如果照
    猜的寫下去都會是「到執行期才炸、而且訊息指錯方向」。上一輪的 `httpx2` 也是。
    **這條規矩到目前為止的命中率是 100%。**

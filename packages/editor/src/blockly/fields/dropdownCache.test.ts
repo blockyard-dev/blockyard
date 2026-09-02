@@ -88,11 +88,36 @@ describe('fetchDropdownOptions', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('回應不是 2xx 就丟出帶著端點與狀態碼的錯誤', async () => {
+  it('回應不是 2xx、body 也讀不出東西時，錯誤裡至少有狀態碼', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({ ok: false, status: 500, statusText: 'boom' }) as unknown as Response),
     );
     await expect(fetchDropdownOptions('http', 'cache-f')).rejects.toThrow(/500/);
+  });
+
+  it('後端說了為什麼，就丟那句話——它會被原樣顯示在下拉選單裡', async () => {
+    // 「還沒設定「Discord」的 Bot Token」是這條路上最常見的失敗，而它是一句
+    // 使用者照著做就能解決的話。換成 `POST … → 422` 的話，畫面上剩下的只有
+    // 一格空白，而空白說不出 token 沒設定。
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        json: async () => ({ detail: { message: '還沒設定「Discord」的 Bot Token' } }),
+      }) as unknown as Response),
+    );
+    await expect(fetchDropdownOptions('discord', 'cache-k')).rejects.toThrow(
+      '還沒設定「Discord」的 Bot Token',
+    );
+  });
+
+  it('連不上後端時翻成中文，不把 `Failed to fetch` 丟給使用者', async () => {
+    const boom = new TypeError('Failed to fetch');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw boom; }));
+    await expect(fetchDropdownOptions('http', 'cache-l')).rejects.toThrow('連不上後端');
+    // 原因不能弄丟——console 上要查得到到底是什麼掛了。
+    await expect(fetchDropdownOptions('http', 'cache-l')).rejects.toMatchObject({ cause: boom });
   });
 });

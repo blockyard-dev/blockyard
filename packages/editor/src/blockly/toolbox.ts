@@ -5,7 +5,8 @@
  * 已經把內建排在積木包前面（`api/extensions.py`），前端不再重排。
  */
 import { isButtonEntry, isSectionEntry, type RegisteredBlock } from './define';
-import type { ButtonSpec, Palette } from '../types/manifest';
+import { keyId } from '../api/client';
+import type { ButtonSpec, ConfigSpec, Palette } from '../types/manifest';
 
 export interface ToolboxGroup {
   id: string;
@@ -18,6 +19,13 @@ export interface ToolboxGroup {
   palette: Palette;
   /** 純按鈕的 view，給 `App.tsx` 註冊回呼用。 */
   buttons: ButtonSpec[];
+  /** manifest 的 `config` 裡的 secret 項（§12.1）。
+   *
+   * `open_config` 那顆按鈕要打開的就是這一把——而**按鈕本身說不出是哪一把**
+   * （`ButtonSpec` 只有 id、label、action），所以那個資訊只能從這裡來。放在
+   * 分類上而不是每次去 `blocks[0].manifest` 撈，是因為它是**這個分類**的性質，
+   * 不是它某一顆積木的。 */
+  secrets: ConfigSpec[];
 }
 
 /**
@@ -31,6 +39,26 @@ export function buttonCallbackKey(manifestId: string, buttonId: string): string 
 }
 
 const DEFAULT_COLOUR = '#9966FF';
+
+/** 「一把金鑰都還沒設定」。常數而不是每次 `new Set()`：`buildToolbox` 的預設
+ * 值要是每次都換一個新物件，`App.tsx` 那個「這份工具箱是用哪一份名單畫的」
+ * 的比對就永遠不相等。 */
+const EMPTY: ReadonlySet<string> = new Set<string>();
+
+/**
+ * `open_config` 那顆按鈕會打開的是哪一把金鑰。
+ *
+ * 按鈕自己說不出來（`ButtonSpec` 只有 id、label、action），所以答案在 manifest
+ * 的 `config` 裡——刻意的：一顆按鈕能指定金鑰，就等於一個包能送使用者去設定
+ * 別人的那一把。宣告了兩把 secret 的包取第一把。
+ *
+ * 這個函式同時是 `App.tsx`（要開哪一格）與下面 `categoryEntries`（按鈕還要不要
+ * 畫）的答案，寫成一份是因為那兩個問題的答案**必須**是同一把：不同的話，症狀
+ * 是按鈕永遠不消失，或者消失了卻還有一把沒設定。
+ */
+export function configTarget(group: ToolboxGroup): ConfigSpec | undefined {
+  return group.secrets[0];
+}
 
 export function groupByManifest(blocks: RegisteredBlock[]): ToolboxGroup[] {
   const groups = new Map<string, ToolboxGroup>();
@@ -46,6 +74,7 @@ export function groupByManifest(blocks: RegisteredBlock[]): ToolboxGroup[] {
         blocks: [],
         palette: manifest.palette ?? [],
         buttons: (manifest.palette ?? []).filter(isButtonEntry),
+        secrets: (manifest.config ?? []).filter((c) => c.type === 'secret'),
       };
       groups.set(manifest.id, group);
     }
@@ -81,7 +110,14 @@ export function findVariableReader(blocks: RegisteredBlock[]): { type: string; a
   return null;
 }
 
-export function buildToolbox(groups: ToolboxGroup[]): Record<string, unknown> {
+/**
+ * @param configured 已經設定好的金鑰（`keyId`）。`open_config` 的按鈕**設定完
+ *   就收起來**（見 `categoryEntries`）。
+ */
+export function buildToolbox(
+  groups: ToolboxGroup[],
+  configured: ReadonlySet<string> = EMPTY,
+): Record<string, unknown> {
   return {
     kind: 'categoryToolbox',
     contents: groups
@@ -89,8 +125,13 @@ export function buildToolbox(groups: ToolboxGroup[]): Record<string, unknown> {
         kind: 'category',
         name: group.name,
         colour: group.colour,
-        cssConfig: { container: 'blocky-category' },
-        contents: categoryEntries(group),
+        // `container` 會**取代**掉 Blockly 的預設 class，而不是加上去。Blockly
+        // 自己那條「鍵盤導覽時把瀏覽器的預設焦點框關掉」的規則正好掛在
+        // `.blocklyToolboxCategoryContainer:focus-visible` 上——只寫
+        // `blocky-category` 等於把那條規則甩掉，症狀是按方向鍵走到哪一格，那格
+        // 就多一圈藍色的系統焦點框（實測）。**兩個 class 都要留著。**
+        cssConfig: { container: 'blocklyToolboxCategoryContainer blocky-category' },
+        contents: categoryEntries(group, configured),
       }))
       .filter((category) => category.contents.length > 0),
   };
@@ -134,7 +175,10 @@ const LABEL_GAP = 8;
  * 版面數字（12 / 40 / 8）只有這裡有。manifest 說的是語意（「這裡是一段」「這裡
  * 有一顆按鈕」），多寬、標題長什麼樣子由編輯器決定，否則每個積木包各自決定留白。
  */
-function categoryEntries(group: ToolboxGroup): Record<string, unknown>[] {
+function categoryEntries(
+  group: ToolboxGroup,
+  configured: ReadonlySet<string>,
+): Record<string, unknown>[] {
   // 用 Blockly 的 type 而不是 opcode 當 key：`procedure.call#p_x` 有很多顆，而它們
   // 的 `spec.opcode` 全都是 `call`（見下面那段「專案資料生成的積木」）。
   const registered = new Map(group.blocks.map((block) => [block.type, block]));
@@ -157,6 +201,7 @@ function categoryEntries(group: ToolboxGroup): Record<string, unknown>[] {
     }
 
     if (isButtonEntry(entry)) {
+      if (isDone(entry, group, configured)) continue;
       entries.push({
         kind: 'button',
         text: entry.label,
@@ -183,6 +228,24 @@ function categoryEntries(group: ToolboxGroup): Record<string, unknown>[] {
   }
 
   return entries;
+}
+
+/**
+ * 這顆按鈕現在還有沒有事情可做。
+ *
+ * `open_config` 是**一次性的**：它把使用者送去貼一把金鑰，貼完之後那顆按鈕每
+ * 次捲過都在問一個答案永遠是「沒有」的問題。所以它設定完就收起來——工具箱上
+ * 剩下的都是還沒做的事。
+ *
+ * **換金鑰的路沒有跟著消失**：右上角的金鑰面板一直都在，而那才是「管理已經有
+ * 的東西」該去的地方。這顆按鈕從頭到尾只解決一件事——第一次那一把要去哪裡填。
+ *
+ * 別的動作（`open_url`、`call`）沒有「做完了」這個狀態，所以只有這一種會消失。
+ */
+function isDone(entry: ButtonSpec, group: ToolboxGroup, configured: ReadonlySet<string>): boolean {
+  if (entry.action !== 'open_config') return false;
+  const secret = configTarget(group);
+  return secret !== undefined && configured.has(keyId({ extId: group.id, key: secret.key }));
 }
 
 /**

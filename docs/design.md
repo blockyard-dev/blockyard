@@ -2,7 +2,7 @@
 
 | 項目 | 內容 |
 |---|---|
-| 版本 | Draft v0.36 |
+| 版本 | Draft v0.37 |
 | 日期 | 2026-09-02 |
 | 狀態 | 已審閱。**P0、P1、P2 全部完成**（P2 驗收句 2026-09-02 實測通過；範圍表裡的「`try_catch` 多個 catch」決議不做，見 D30）。**下一階段是 P3 — 擴散**（AI 生成積木包、匯出 Bundle、分享／匯入、Tauri 打包）|
 | 代號 | `blocky`（暫定，套件名 `blocky-runtime`） |
@@ -10,6 +10,22 @@
 ---
 
 ## 0.0 變更摘要
+
+### v0.37
+
+**新增 Q23：積木包的 secret 要不要分專案。** D28 的 keyring key 只有 `ext_id.key`，沒有專案這個維度——同一個積木包被兩個專案接不同資源（例如兩個 Supabase 專案各自的 URL/key）會互相覆蓋。webhook 簽章密鑰（Q22）已經是專案範圍，但那條決議沒有回頭套用到一般 config secret。
+
+**新增 `讓 (i) 從 (1) 數到 (10)`。** `重複 10 次` 數不出現在是第幾次。
+
+**修掉「刪掉函式再 undo，帽子回來了但函式死掉」。** 刪除跨了兩本帳，而 Ctrl+Z 只退得回其中一本。
+
+| 類別 | 變更 | 章節 |
+|---|---|---|
+| **新增** | **Q23：secret 要不要分專案？** 傾向 (b)——manifest 的 `secret` 型 config 多一個 `scope: project` 宣告，由積木包作者決定哪把天生該分專案；不建議整批改成專案範圍（多數 secret 是一個身分到處共用，逼使用者每個新專案重填一次與 P3 的驗收句衝突） | §16 Q23 |
+| **新增** | **`control.count_to`（`讓 %(name) 從 %(start) 數到 %(end)`）。** `重複 10 次` 數不出**現在是第幾次**，而那是它最常見的下一句（編號、`${i}` 進網址、第 3 次換做法）。原本只能用 `設定 [i] 為 0` + `改變 [i] 增加 1` 湊，而那個 `i` 寫的是全域層——兩條腳本各跑一次就互相踩（D29 修 `for_each` 時的同一個 bug，往回一層）。**兩端都算**：中文的「數到」講的是唸出來的最後一個數字，而右開區間在畫面上沒有東西說得出來。**起點比終點大就跑 0 次**，沒有「每次增加」那一格（+1 走不到比自己小的終點；要倒數就把迴圈體裡的 `i` 換成 `11 − i`，那件事畫面上看得見） | §4.4、§5.4 |
+| **證據** | 計數變數走與 `for_each` 完全相同的宣告（`binds` + `scope: body`），所以 D29 的作用範圍、指名是哪顆積木綁的錯誤訊息、存檔期擋 `設定 [i]` —— **一行都沒有再寫**。前端同理（D21：工具箱、形狀、影子全部從宣告長出來）。這是那兩條決議第一次交出「新增一顆綁定型積木」的完整代價：一段 yaml、一個 handler、五道題 | §7.2、§8.1 |
+| **修訂** | **「還有 N 個地方在呼叫它」改成滑到那顆積木，不是跳過去**（`blockly/motion.ts`）。使用者沒有動畫布、畫面卻換了一批積木，而一次瞬間位移說不出「你原本在這裡、現在到那裡」——他要回得去，中間那幾幀就是那句話。時間（350ms）與曲線（ease-out cubic）與 flyout 那條捲動動畫**共用一份**：同一個編輯器裡兩種「滑到定位」用不同的手感，是那種說不出哪裡怪的怪。`prefers-reduced-motion` 直接到位；滾輪或按下畫布**一碰就停**（那 350ms 裡使用者寫的也是 `scroll()`，而動畫每一幀都寫、永遠贏） | §8.2 |
+| **修訂** | **刪掉函式再 undo，那筆 `procedures` 宣告要跟著定義帽子回來。** 刪除同時動了兩本帳——帽子在 Blockly 的工作區上（自己管 undo），宣告在 React 的 state 裡（不進 undo 堆疊）。Ctrl+Z 只退得回前者，於是畫布上留下一顆帽子而那個函式已經不存在：工具箱少一顆呼叫積木、存檔會把它退化成一個名字是 proc id 的空殼（`serialize.ts` 的 passthrough 補洞路徑）、拖到垃圾桶也沒有反應（`TrashAwareDragStrategy` 存不進序列化狀態）。修法不是「讓刪除不進 undo 堆疊」（那只會讓帽子刪不回來），而是**讓宣告跟著帽子走**：問的是「畫布上現在有沒有那顆帽子」而不是「剛剛發生了什麼」，redo 因此免費對了 | §8.2、§8.5 |
 
 ### v0.36
 
@@ -782,7 +798,7 @@ object 以 key 存取（`object.get` 積木或 `${obj.key}`）；**key 不存在
 | namespace | 內容 |
 |---|---|
 | `event` | `when_flag_clicked` `when_cron` `when_webhook`（broadcast 已砍，見 D14） |
-| `control` | `if` `if_else` `repeat` `repeat_until` `forever` `for_each` `wait` `wait_until` `stop` `try_catch` |
+| `control` | `if` `if_else` `repeat` `repeat_until` `forever` `count_to` `for_each` `wait` `wait_until` `stop` `try_catch` |
 | `data` | `set` `change` `get` `new_list`；list 操作（add/delete/insert/replace/item/length/contains）；`persist_set` `persist_get` `persist_has` `persist_delete`（跨 Run 記憶，見 §5.4）。變數無需宣告，見 §4.5 |
 | `object` | `get` `set` `keys` `has` `parse_json` `to_json`；parse 永不自動，見 §4.8 |
 | `operator` | 算術、比較、邏輯、字串（join/letter/length/contains/regex） |
@@ -950,7 +966,7 @@ Scratch / Blockly 原生的變數模型是「id + 名稱對照表」，好處是
 不標：那兩個名字都是使用者自己取的，§5.4 的解析順序把它定義得很清楚，該補的是可見性
 （§8.5 的 pill 依層著色），不是一個警告。
 
-**「誰是建立端」由 manifest 宣告，不由編輯器寫死。** `data.set` 與 `data.get` 的名稱欄位在宣告裡都是 `type: variable`，差別靠 `binds: true`（§7.2）：目前是 `data.set.name`、`control.for_each.name`、`control.try_catch.error_name` 三處。前端因此**一個 opcode 的名字都不必知道**——這與 §8.1「新增積木不需要改前端一行程式碼」是同一條承諾（D21），靜態檢查不該是第一個破例的地方。**綁進來的名字看得到多遠由 D29 定**：只在綁它那顆積木的 body 裡（§5.4）。
+**「誰是建立端」由 manifest 宣告，不由編輯器寫死。** `data.set` 與 `data.get` 的名稱欄位在宣告裡都是 `type: variable`，差別靠 `binds: true`（§7.2）：目前是 `data.set.name`、`control.count_to.name`、`control.for_each.name`、`control.try_catch.error_name` 四處。前端因此**一個 opcode 的名字都不必知道**——這與 §8.1「新增積木不需要改前端一行程式碼」是同一條承諾（D21），靜態檢查不該是第一個破例的地方。**綁進來的名字看得到多遠由 D29 定**：只在綁它那顆積木的 body 裡（§5.4）。
 
 **`data.change` 刻意不是 `binds`。** 它會寫，但上面那條規則要求變數已存在，所以它是讀取端。這個差別看實作看不出來（兩者都走同一個寫入路徑），只有這份宣告說得出來。
 
@@ -1438,7 +1454,7 @@ Scratch 以 30fps 為單位讓出控制權。本專案**不採用**：這裡沒�
 | 4 | **持久化儲存** | **永久（SQLite）** | `data.persist_set` | 跨 Run、跨後端重啟 |
 
 1. **Procedure 參數** — 呼叫時建立 frame，遞迴深度上限 200（超出拋錯，避免堆疊爆掉）。參數在 frame 內唯讀：函式體裡用參數名寫入是**存檔期錯誤**，見下（v0.23）。
-2. **Thread-local** — 綁定型積木（`binds: true`，§4.5）建立的名字：hat 提供的欄位（如 `on_message` 的 `content`、`author`）、`try_catch` 的 `error`、`for_each` 的迴圈變數，唯讀。可見範圍見下（D29）。
+2. **Thread-local** — 綁定型積木（`binds: true`，§4.5）建立的名字：hat 提供的欄位（如 `on_message` 的 `content`、`author`）、`try_catch` 的 `error`、`for_each` 的迴圈變數與 `count_to` 的計數變數，唯讀。可見範圍見下（D29）。
 3. **全域變數** — 見下方生命週期。並發寫入以 asyncio 單執行緒語意保證原子性（不會有 torn read）。
 
 `data.set` **一律寫入全域層**——它說的是「建立一個全域變數」。另外有
@@ -1454,16 +1470,20 @@ Scratch 以 30fps 為單位讓出控制權。本專案**不採用**：這裡沒�
 
 #### 綁定的作用範圍 = 綁它那顆積木的 body（D29）
 
-第 2 層有三個建立端（`binds: true`，§4.5）：hat 的 `yields`、`try_catch` 的
-`error`、`for_each` 的迴圈變數。後兩者靠 `scope`（§7.2）與 `data.set` 分開——
-它們在宣告裡都是 `variable` + `binds`，差別只有這一句話說得出來。三個共用**一
-條**規則：
+第 2 層有四個建立端（`binds: true`，§4.5）：hat 的 `yields`、`try_catch` 的
+`error`、`for_each` 的迴圈變數、`count_to` 的計數變數。後三者靠 `scope`（§7.2）
+與 `data.set` 分開——它們在宣告裡都是 `variable` + `binds`，差別只有這一句話說
+得出來。四個共用**一條**規則：
 
 > 綁進來的名字，只在**綁它那顆積木的 body** 裡看得見。
 
 hat 的 body 是整條腳本，所以 `yields` 仍然是整條 thread——**「整條 thread」不是
 第二條規則，是同一條規則套在 hat 上的結果**。catch 的 body 是 catch 那一疊，
-`for_each` 的 body 是迴圈體。
+`for_each` 與 `count_to` 的 body 是迴圈體。
+
+**`count_to` 是這條規則第一顆「不必為它寫任何一行」的消費者**（v0.37）：宣告寫
+`binds: true` + `scope: body`，範圍、錯誤訊息指名是哪顆積木綁的、存檔期擋
+`設定 [i]`——三件事一行都沒有再寫。那正是 D21 與 D29 一起要換到的東西。
 
 **為什麼不是「整條 thread 都看得見」。** 把 `${錯誤.message}` 放在 `try_catch`
 **之後**：沒出錯是「未知變數」，出錯則拿到剛剛那個錯誤——同一個位置的值取決於
@@ -3044,6 +3064,7 @@ P1 的一半在 P0b 期間已經提前做完（見「目前進度」）：manife
 | ~~Q22~~ | ~~**webhook 的 HMAC secret 放哪？**~~ | §9.3 原本寫「在 hat 積木參數中設定 secret」，但那等於把密鑰寫進 `project.json`，與 D28（「Key 不能存進專案檔——分享專案會變成分享明文金鑰」）直接衝突。P2 第 2c 步因此只做了 token 那一半 | **不能放 IR。** 三條路：(a) 進 keyring，key 是 `專案+blockId`，積木上只顯示「已設定／未設定」與一顆設定按鈕（同 D28 的金鑰面板）；(b) 整個專案一把簽章密鑰，跟 token 存在一起；(c) 不做——token 已經是「猜不到的位址」，而多數 webhook 來源（GitHub、Stripe）的簽章演算法各不相同，做一個通用的 HMAC 欄位其實對不上任何一家。**已決議：(a)**（v0.28）。密鑰進 keyring（key 是 `webhook:{專案}` + blockId），積木上只留「要不要驗／哪個 header／哪個雜湊」三格不是秘密的東西。**blockId 不能進網址路徑**（v0.30）：Blockly 的 id 約五分之一含 `/`，而 ASGI 伺服器在路由之前就把 `%2F` 解回 `/`——路徑參數比對不上，回 404，而症狀是「按了設定密鑰，回到清單卻還是說沒設」。走 body（PUT）與 query（DELETE / reveal）。(c) 的觀察仍然成立，所以**界線寫進 §9.3**：這一版只對得上 GitHub 那一類（簽 body），Stripe 那種簽 `時間戳.內容` 的要積木包自己驗 |
 | Q21 | **積木包新增一個參數之後，既有專案裡那顆積木的那一格怎麼辦？** | P1 第 4 步真的發生了：`discord.send_message` 多了一個 `server` 參數，而存檔在那之前的專案重新載入時，那一格是一個**完全空的輸入孔**——沒有影子、沒有文字、連下拉的箭頭都沒有（箭頭排在文字後面），看起來就是積木上一塊填不了東西的深色缺口。使用者沒有辦法從畫面上知道那裡該放什麼，也沒有辦法把東西放進去。§13.1 說 opcode 不可變，但**參數會增加**，所以這是每個積木包長大時都會走到的路 | **不是 `deserialize` 的題目。** 「照宣告補上預設影子」試過了，會打破 roundtrip 等價——因為 **IR 裡沒有這個孔是有意義的**：`object.get` 的 `default` 不寫就是「找不到 key 就報錯」，補一個空字串進去會改變語意。也就是說 IR 目前**分不出「這個參數當時不存在」與「這個參數當時被刻意留空」**，而那正是要先回答的問題。三條路：(a) §13.2 的遷移腳本——積木包自己宣告怎麼補，最精確但把成本推給包作者；(b) 讓 manifest 分辨「必填」與「可省略」的參數（`object.get` 的 `default` 是後者），deserialize 只補前者；(c) IR 記下存檔時的 manifest 版本，由 loader 算差集。**傾向 (b)**：那個分界本來就存在（`has_default` 已經在 `ArgSpec` 裡），只是還沒有人讀它，而且它同時讓「必填的參數沒填」變成一件檢查得到的事。排在 P2 之後——它要的是一次 schema 決定，不該夾在別的工作裡做 |
 | Q16 | ~~非字串字面值（數字、布林、null）怎麼在畫布上輸入？~~ | — | **已決議：採用 (a)，否決 (b) 與 (c)**（P0b 第 6 步）。字面值影子從兩種變成四種（`text` / `number` / `boolean` / `null`），型別**由值決定**——`deserialize.ts` 從第 4 步起就寫著「宣告與值的型別不一致時一律信任值本身」，所以讀的那一半一行都沒改；寫的那一半與右鍵「改成文字 / 數字 / 是非 / 空值」是新的，切換時依 §4.3 的轉換表保留看得懂的值（`"12"` → 12、`真` → `"true"`、`null` → `""`）。布林影子用**下拉**（`真`／`假`）而不是 checkbox——白色影子裡的一個勾勾看不出「沒勾 = false」還是「這格是別的東西」；`null` 影子只有一個標籤，所以那個選單**不能只掛在 `FieldText` 上**。**(c) 否決**：沒有人知道 `data.set` 的 `value`「應該」允許哪幾種，答案是「全部」，而全部就等於不用宣告——那是把猜測寫進宣告。**(b) 否決**：會讓「打一個數字」變成要拖積木，比現況更繁瑣。順帶補了 `operator.true` / `operator.false`：六角形孔**沒有影子**（§8.1 刻意的），所以常數 `false` 在畫布上原本沒有出口，只能繞 `不成立 (空孔)` |
+| Q23 | **積木包的 secret 要不要分專案？** | D28（§12.1）把 secret 存進 keyring，但 `secret_store.py::_username()` 的 key 只有 `ext_id.key`，沒有專案這個維度——兩個專案若都用同一個積木包但要接不同的資源（例如兩個不同的 Supabase 專案，各自的 URL/key），後填的會直接覆蓋先填的。Q22 已經把 webhook 簽章密鑰做成 `專案 + blockId` 範圍，但那條決議沒有回頭套用到 D28 的一般 config secret | **不建議整批改成專案範圍**：多數 secret（Discord bot token、OpenAI key）是「一個身分、到處共用」，逼使用者每開一個新專案重填一次，與 P3「10 分鐘出一個可用積木包」的驗收句衝突。三條候選：(a) 現況不動，全域到底，使用者要分專案就自己在金鑰面板手動切換覆寫（成本低，但體驗差、容易填錯專案）；(b) manifest 的 `secret` 型 config 項多一個宣告（例如 `scope: project`），由積木包作者說清楚「這把天生就該分專案」，keyring key 相應變成 `專案 + ext_id.key`——同一顆積木包裡有的 secret 全域、有的分專案都可以；(c) 不動 manifest，改成金鑰面板每一列給使用者一個「這個專案要用自己的一把」切換，UI 決定而非包作者決定，彈性最高但金鑰面板要從「全域清單」變成「每個專案一份視圖」，動的地方比 (b) 大。傾向 (b)，因為它跟 D28「金鑰是積木包宣告出來的」同一個原則，而 (c) 把本該屬於包作者的判斷丟給每個使用者自己決定 |
 
 ---
 

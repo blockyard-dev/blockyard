@@ -119,6 +119,23 @@ function isChip(block: Blockly.Block): boolean {
 }
 
 /**
+ * 一顆 `procedure.param#` 積木「是帽子上那顆」需要的兩件事。
+ *
+ * 拆出來是因為**它有第二個呼叫端**：undo 把定義帽子放回來時，孔裡那幾顆是從
+ * 序列化狀態長出來的——型別對、位置對、`deletable: false` 也跟著回來了
+ * （`blocks.save` 存得下它），但**拖曳策略存不下來**。少了它那顆膠囊看起來
+ * 完全正常，拖一下卻是把它從帽子上扯下來，而不是複製一份。
+ *
+ * 所以「怎麼才算一顆晶片」只能有一個地方知道，新建與修復共用它。
+ */
+function makeChip(block: Blockly.Block): void {
+  block.setDeletable(false);
+  // 無畫面的工作區（測試、`ir/roundtrip`）沒有 SVG 也沒有拖曳——那兩件事
+  // 只有 `BlockSvg` 有。序列化那一半在兩邊完全相同，這正是要驗的東西。
+  if (block instanceof Blockly.BlockSvg) block.setDragStrategy(new CopyOnDragStrategy(block));
+}
+
+/**
  * 把每個定義帽子的孔填滿，並清掉被擠出來的那顆。
  *
  * 冪等：已經填好的孔不動它（重填會換掉積木 id，而使用者可能正拖著它）。載入
@@ -147,18 +164,26 @@ export function fillDefinitionParams(
         hat.setDragStrategy(new TrashAwareDragStrategy(hat, () => onTrash(procId)));
       }
       for (const param of paramsOf(proc)) {
+        const type = paramType(procId, param.id);
         const input = hat.getInput(param.id);
-        if (!input?.connection || input.connection.targetBlock()) continue;
+        if (!input?.connection) continue;
 
-        const chip = workspace.newBlock(paramType(procId, param.id));
-        chip.setDeletable(false);
-        // 無畫面的工作區（測試、`ir/roundtrip`）沒有 SVG 也沒有拖曳——那兩件
-        // 事只有 `BlockSvg` 有。序列化那一半在兩邊完全相同，這正是要驗的東西。
+        // 孔裡已經有東西：**型別對得上就是那顆晶片**，把它修好而不是換掉。
+        // 換掉會換掉積木 id，而使用者可能正拖著它（這個函式在每次積木移動時
+        // 都會跑）。型別對不上的是使用者自己丟進來的積木——那是上面那圈
+        // 「被擠出來的晶片」要處理的事，不是這裡。
+        const existing = input.connection.targetBlock();
+        if (existing) {
+          if (existing.type === type) makeChip(existing);
+          continue;
+        }
+
+        const chip = workspace.newBlock(type);
         if (chip instanceof Blockly.BlockSvg) {
           chip.initSvg();
           chip.render();
-          chip.setDragStrategy(new CopyOnDragStrategy(chip));
         }
+        makeChip(chip);
         input.connection.connect(chip.outputConnection!);
       }
     }
