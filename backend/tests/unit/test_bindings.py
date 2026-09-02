@@ -80,10 +80,10 @@ def test_known_names_does_not_leak_hidden_bindings() -> None:
 
 def test_the_message_names_the_block_that_bound_it() -> None:
     """D29 第 4 條。這句話是這次改動唯一會被使用者看到的地方。"""
-    s = scope(binder=lambda n: "對 ⋯ 的每一項 x" if n == "x" else None)
+    s = scope(binder=lambda n: "那顆「對 ⋯ 的每一項 x」" if n == "x" else None)
     with pytest.raises(UndefinedVariableError) as e:
         s.get("x")
-    assert "只在那顆「對 ⋯ 的每一項 x」裡面有效" in e.value.message
+    assert e.value.message == "變數「x」只在那顆「對 ⋯ 的每一項 x」裡面有效"
 
     # 沒有人綁過的名字仍然是一般的打錯字，配編輯距離建議
     s.run.set("count", 1)
@@ -261,4 +261,4 @@ def test_binder_index_only_collects_scoped_bindings() -> None:
          "fields": {"name": "x"}},
         {"id": "s", "opcode": "data.set", "parent": None, "fields": {"name": "總和"}},
     )
-    assert binder_index(b, SPECS) == {"x": "對 ⋯ 的每一項 x"}
+    assert binder_index(b, {}, SPECS) == {"x": "那顆「對 ⋯ 的每一項 x」"}

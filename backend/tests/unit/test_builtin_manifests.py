@@ -350,24 +350,30 @@ def test_declared_args_that_no_handler_reads_are_reported() -> None:
 # `t.scope.set(name, …)`，但它 §4.5 明定要求變數**已存在**（少打一顆「設定」
 # 換來的是打錯字被靜默當成新變數）。「會不會寫」與「會不會建立」是兩件事，
 # 只有人分得出來，所以這裡把答案寫下來，新增積木時會被下面那條反向檢查逼著回來。
+#
+# **`scope` 是這份名單的第二欄**（D29）：同樣是 `binds`，`data.set` 建立的名字
+# 整個 Run 都看得見，`for_each` 的只在自己那張嘴巴裡，`set_local` 的只在那次
+# 呼叫裡。少寫一個 `scope` 的症狀是「那個名字在範圍外讀得到」，而所有測試照樣綠。
 BINDING_ARGS = {
-    ("data.set", "name"),            # 寫入即建立（§4.5）
-    ("control.for_each", "name"),    # 迴圈變數
-    ("control.try_catch", "error_name"),  # thread-local 的錯誤（§5.4 第 2 層）
+    ("data.set", "name", None),                 # 寫入即建立，第 3 層（§4.5）
+    ("control.for_each", "name", "body"),       # 迴圈變數，第 2 層（D29）
+    ("control.try_catch", "error_name", "catch"),  # 錯誤，第 2 層（D29）
+    ("procedure.set_local", "name", "frame"),   # 本次呼叫，第 1 層（§16 Q6）
 }
 
 
 def test_binding_variable_args_are_exactly_the_declared_ones() -> None:
     declared = {
-        (f"{ns}.{b.opcode}", name)
+        (f"{ns}.{b.opcode}", name, a.scope)
         for ns, mf in declarations.manifests().items()
         for b in mf.blocks
         for name, a in b.args.items()
         if a.binds
     }
     assert declared == BINDING_ARGS, (
-        "binds 的宣告與這份名單不一致。多宣告 → 打錯的變數名不再被標警告；"
-        "少宣告 → 正確的變數被標成「還沒有被設定過」，而兩者都只在編輯器裡看得見"
+        "binds／scope 的宣告與這份名單不一致。多宣告 binds → 打錯的變數名不再被"
+        "標警告；少宣告 → 正確的變數被標成「還沒有被設定過」（兩者都只在編輯器裡"
+        "看得見）；scope 錯了 → 那個名字在範圍外讀得到，而那是執行期的事"
     )
 
 

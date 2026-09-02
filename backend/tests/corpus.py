@@ -831,6 +831,121 @@ case(
     tags=["control"],
 )
 
+# ---- §16 Q6：函式的暫存變數（`本次呼叫`） ----
+
+_LOCAL_SUM = {
+    "p_sum": {
+        "name": "加總",
+        "params": [{"id": "a1", "name": "清單", "type": "list"}],
+        "returns": "number",
+        "body": [
+            # `本次呼叫` 而不是 `設定`：後者寫全域，而全域是同一個 Run 的所有
+            # thread 共用的。
+            blk("procedure.set_local", fields={"name": "總和"}, value=0),
+            blk("control.for_each", fields={"name": "x"}, list=var("清單"), body=Stack([
+                # 迴圈體裡有一個 await——沒有它兩條 thread 不會交錯，這一題就
+                # 永遠是綠的（而 bug 還在）。真實情況是這裡有一顆 http 積木。
+                blk("control.wait", seconds=0),
+                # `改變` 寫回它讀到的那一層，所以這裡加的是 frame 裡那一個。
+                blk("data.change", fields={"name": "總和"}, value=var("x")),
+            ])),
+            blk("procedure.return", value=var("總和")),
+        ],
+    }
+}
+
+
+def _sum_of(name, *items):
+    return [
+        blk("data.set", fields={"name": name}, value=blk("data.new_list")),
+        *[blk("data.list_add", fields={"name": name}, item=i) for i in items],
+        log(blk("procedure.call", mutation={"proc": "p_sum"}, a1=var(name))),
+    ]
+
+
+case(
+    "procedure/locals_do_not_collide_across_threads",
+    "兩條 thread 各呼叫一次同一個函式，函式體的暫存變數互不干擾（§16 Q6）",
+    "§5.4 第 1 層 / §16 Q6 函式區域變數",
+    build(
+        scripts=[hat(*_sum_of("a", 1, 2, 3)), hat(*_sum_of("b", 10, 20, 30))],
+        procedures=_LOCAL_SUM,
+    ),
+    # 用 `設定` 寫全域的話這裡是 36 與 66——兩邊互相踩。這與 D29 修掉的迴圈
+    # 變數是同一個 bug，往上一層，而它是 Q6 等了好幾輪的那個「真的被咬的人」。
+    {"status": "ok", "logs": ["6", "60"]},
+    tags=["procedure", "variables", "threads", "Q6"],
+)
+
+case(
+    "procedure/locals_are_one_per_recursion_level",
+    "遞迴時每一層各自一份暫存變數（§16 Q6）",
+    "§5.4 第 1 層 / §16 Q6 函式區域變數",
+    build(
+        scripts=[hat(log(blk("procedure.call", mutation={"proc": "p_fib"}, a1=7)))],
+        procedures={
+            "p_fib": {
+                "name": "費氏",
+                "params": [{"id": "a1", "name": "n", "type": "number"}],
+                "returns": "number",
+                "body": [
+                    blk("control.if",
+                        condition=blk("operator.lt", a=var("n"), b=2),
+                        then=Stack([blk("procedure.return", value=var("n"))])),
+                    # **兩顆都先存起來、最後才相加**，不是
+                    # `回傳 (前一項 + fib(n-2))`。後者用 `設定` 寫全域也會過，
+                    # 因為 §4.6 的求值順序是由左而右：`前一項` 在內層那次呼叫
+                    # 把它蓋掉**之前**就讀完了。這一題要抓的正是那個覆蓋，所以
+                    # 讀取必須排在會蓋掉它的呼叫後面。
+                    blk("procedure.set_local", fields={"name": "前一項"},
+                        value=blk("procedure.call", mutation={"proc": "p_fib"},
+                                  a1=blk("operator.subtract", a=var("n"), b=1))),
+                    blk("procedure.set_local", fields={"name": "前兩項"},
+                        value=blk("procedure.call", mutation={"proc": "p_fib"},
+                                  a1=blk("operator.subtract", a=var("n"), b=2))),
+                    blk("procedure.return",
+                        value=blk("operator.add", a=var("前一項"), b=var("前兩項"))),
+                ],
+            }
+        },
+    ),
+    {"status": "ok", "logs": ["13"]},
+    tags=["procedure", "variables", "Q6"],
+)
+
+case(
+    "errors/set_local_outside_a_function",
+    "「本次呼叫」放在頂層腳本 → 存檔期擋下（這裡沒有「這次呼叫」）",
+    "§16 Q6 規則 3",
+    one(blk("procedure.set_local", fields={"name": "暫存"}, value=1)),
+    {"status": "load_error", "load_error": "只能放在函式定義裡面"},
+    tags=["procedure", "validation", "Q6"],
+)
+
+case(
+    "errors/set_local_shadowing_a_param",
+    "「本次呼叫」與參數同名 → 存檔期擋下，不是覆寫",
+    "§16 Q6 規則 2",
+    build(
+        scripts=[hat(log(blk("procedure.call", mutation={"proc": "p_x"}, a1=1)))],
+        procedures={
+            "p_x": {
+                "name": "跳", "params": [{"id": "a1", "name": "次數", "type": "number"}],
+                "returns": "number",
+                "body": [
+                    blk("procedure.set_local", fields={"name": "次數"}, value=99),
+                    blk("procedure.return", value=var("次數")),
+                ],
+            }
+        },
+    ),
+    # 開放覆寫的話，帽子上那顆參數膠囊會在函式體中段開始說謊，而它換來的只有
+    # 「不必換個名字」。
+    {"status": "load_error", "load_error": "已經是函式「跳」的參數"},
+    tags=["procedure", "validation", "Q6"],
+)
+
+
 # ---- §5.6 錯誤重試策略（P2） ----
 
 

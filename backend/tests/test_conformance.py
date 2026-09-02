@@ -56,6 +56,8 @@ def test_corpus_covers_spec_table() -> None:
         "D29",
         # §5.6 錯誤重試策略
         "retry",
+        # §16 Q6 函式區域變數
+        "Q6",
     }
     seen: set[str] = set()
     for d in _dirs():

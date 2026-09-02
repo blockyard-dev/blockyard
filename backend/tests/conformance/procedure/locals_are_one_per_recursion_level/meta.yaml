@@ -1,0 +1,10 @@
+title: 遞迴時每一層各自一份暫存變數（§16 Q6）
+spec: §5.4 第 1 層 / §16 Q6 函式區域變數
+tags:
+- procedure
+- variables
+- Q6
+expect:
+  status: ok
+  logs:
+  - '13'

@@ -34,6 +34,7 @@ from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
 from blocky.errors import ValidationError
+from blocky.extensions.manifest import SCOPE_FRAME
 
 if TYPE_CHECKING:
     from blocky.extensions.manifest import BlockSpec
@@ -61,23 +62,49 @@ def scoped_binds(spec: BlockSpec | None) -> list[tuple[str, str]]:
     """
     if spec is None:
         return []
-    return [(name, arg.scope) for name, arg in spec.args.items() if arg.scope is not None]
+    return [
+        (name, arg.scope)
+        for name, arg in spec.args.items()
+        if arg.scope is not None and arg.scope != SCOPE_FRAME
+    ]
 
 
-def writes_global(spec: BlockSpec | None) -> list[str]:
-    """這顆積木上「寫進第 3 層」的變數名稱欄位。
+def frame_binds(spec: BlockSpec | None) -> list[str]:
+    """這顆積木上「綁一個名字進 frame」的格子（§16 Q6 的 `本次呼叫`）。
 
-    兩種：`binds` 但沒有 `scope`（`data.set`：寫入即建立），以及 `writes`
-    （`data.change`：要求已存在）。`把 (x) 加到 [清單]` 不算——它就地改那個
-    清單、不呼叫 `scope.set`，所以它在迴圈變數上是**對的**，擋它是誤報。
+    範圍是**所在的函式體**，而函式體不是一疊 stack——它掛在定義積木的 `next`
+    上。所以它不能像 `scope: body` 那樣指一格，宣告用的是保留字 `frame`。
     """
     if spec is None:
         return []
-    return [
-        name
-        for name, arg in spec.args.items()
-        if arg.writes or (arg.binds and arg.scope is None)
-    ]
+    return [name for name, arg in spec.args.items() if arg.scope == SCOPE_FRAME]
+
+
+def creates_global(spec: BlockSpec | None) -> list[str]:
+    """「**建立**一個第 3 層的名字」的欄位（`binds` 但沒有 `scope`，即 `data.set`）。
+
+    它撞到任何唯讀的名字**或函式的暫存變數**都是錯的：`設定` 建立的是全域，
+    而同一個函式裡讀那個名字讀到的是第 1 層——寫出去的值永遠看不見。
+    """
+    if spec is None:
+        return []
+    return [name for name, arg in spec.args.items() if arg.binds and arg.scope is None]
+
+
+def writes_existing(spec: BlockSpec | None) -> list[str]:
+    """「**寫**一個已經存在的名字」的欄位（`writes: true`，即 `data.change`）。
+
+    與 `creates_global` 分開，因為它們撞到函式暫存變數時的答案**相反**：`改變`
+    寫回它讀到的那一層（§16 Q6），所以 `本次呼叫 [總和] 為 (0)` 之後
+    `改變 [總和] 增加 (x)` 是對的——那正是累加最自然的寫法。擋它才是誤報。
+
+    唯讀的那幾層（參數、迴圈變數、錯誤變數）兩者一起擋，理由一樣。
+
+    `把 (x) 加到 [清單]` 兩邊都不算——它就地改那個清單、不呼叫 `scope.set`。
+    """
+    if spec is None:
+        return []
+    return [name for name, arg in spec.args.items() if arg.writes]
 
 
 def block_label(block: dict[str, Any], spec: BlockSpec | None) -> str:
@@ -143,27 +170,66 @@ def _input_holding(parent: dict[str, Any], child_id: str) -> str | None:
     return None
 
 
-def binder_index(blocks: dict[str, Any], resolve: SpecResolver) -> dict[str, str]:
-    """name → 「綁它的那顆積木叫什麼」。只收有範圍的綁定端（見 `scoped_binds`）。
+def binder_index(
+    blocks: dict[str, Any], procedures: dict[str, Any], resolve: SpecResolver
+) -> dict[str, str]:
+    """name → 「它在**哪裡**有效」的那一句話。只收有範圍的綁定端。
+
+    值是一整句而不是一個標籤，因為兩種綁定端的說法本來就不一樣：
+
+        那顆「對 ⋯ 的每一項 水果」     C block 綁的（第 2 層）
+        函式「加總」                   `本次呼叫` 綁的（第 1 層，§16 Q6）
+
+    第二種指的是函式而不是那顆 `本次呼叫` 積木：範圍是整個函式體，而使用者要
+    回去的地方是那個函式，不是某一顆積木。
 
     給的是**整份專案**的答案而不是「這一刻堆疊上有什麼」，因為那句話要說的正是
-    範圍**外**的情形——迴圈跑完，那一層早就被 pop 掉了，執行期已經沒有東西記得
-    是誰綁的。
+    範圍**外**的情形——迴圈跑完、函式回傳了，那一層早就沒了，執行期已經沒有東西
+    記得是誰綁的。
 
-    同一個名字被兩顆不同的積木綁時取字典序第一個：這是一句提示不是規格，而兩顆
+    同一個名字被兩處綁時取字典序第一個：這是一句提示不是規格，而兩顆
     `對每一項 item` 的文字本來就一模一樣，去重之後多半只剩一個。
     """
+    params_by_definition = _params_by_definition(procedures)
     found: dict[str, set[str]] = {}
-    for block in blocks.values():
+    for bid, block in blocks.items():
         if not isinstance(block, dict):
             continue
         spec = resolve(str(block.get("opcode", "")))
         fields = block.get("fields") or {}
+
         for field_name, _stack in scoped_binds(spec):
             name = fields.get(field_name) if isinstance(fields, dict) else None
             if isinstance(name, str) and name:
-                found.setdefault(name, set()).add(block_label(block, spec))
-    return {name: sorted(labels)[0] for name, labels in found.items()}
+                found.setdefault(name, set()).add(f"那顆「{block_label(block, spec)}」")
+
+        for field_name in frame_binds(spec):
+            name = fields.get(field_name) if isinstance(fields, dict) else None
+            if not isinstance(name, str) or not name:
+                continue
+            owner = _enclosing_definition(blocks, bid, params_by_definition)
+            # 不在函式裡是存檔期錯誤，所以這裡幾乎不會發生；真發生了就退回
+            # 那顆積木自己，總比一句話裡有個空洞好。
+            phrase = f"函式「{owner[1][0]}」" if owner else f"那顆「{block_label(block, spec)}」"
+            found.setdefault(name, set()).add(phrase)
+
+    return {name: sorted(phrases)[0] for name, phrases in found.items()}
+
+
+def _enclosing_definition(
+    blocks: dict[str, Any],
+    block_id: str,
+    params_by_definition: dict[str, tuple[str, set[str]]],
+) -> tuple[str, tuple[str, set[str]]] | None:
+    """這顆積木在哪個函式定義底下。不在任何函式裡就是 None。
+
+    函式體掛在定義積木的 `next` 上（不是一格 stack），所以這裡不看是從哪一格
+    進來的——與 `_validate_structure` 對 `回傳` 位置的判斷同一條規則。
+    """
+    for ancestor_id, _ancestor, _via in ancestors(blocks, block_id):
+        if (found := params_by_definition.get(ancestor_id)) is not None:
+            return ancestor_id, found
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -191,21 +257,96 @@ def validate_blocks(
     if not isinstance(blocks, dict):
         return
     params_by_definition = _params_by_definition(procedures)
+    locals_by_definition = _locals_by_definition(blocks, params_by_definition, resolve)
 
     for bid, block in blocks.items():
         if not isinstance(block, dict):
             continue
         spec = resolve(str(block.get("opcode", "")))
-        targets = writes_global(spec)
-        if not targets:
-            continue
-        fields = block.get("fields") or {}
-        for field_name in targets:
-            name = fields.get(field_name) if isinstance(fields, dict) else None
+        fields = block.get("fields") if isinstance(block.get("fields"), dict) else {}
+
+        # `本次呼叫 [x]`（§16 Q6）——它自己的兩條規則。
+        for field_name in frame_binds(spec):
+            name = fields.get(field_name)
             if not isinstance(name, str) or not name:
                 continue
-            if (owner := _readonly_owner(blocks, bid, name, params_by_definition, resolve)):
-                raise ValidationError(owner, block_id=bid)
+            label = block_label(block, spec)
+            # 規則 3：只准放在函式體內。頂層堆疊沒有 frame，而且「粉紅 = 函式」
+            # （§8.5 唯一能用眼睛掃出來的規則）只有在這條成立時才不說謊。
+            if _enclosing_definition(blocks, bid, params_by_definition) is None:
+                raise ValidationError(
+                    f"「{label}」只能放在函式定義裡面；"
+                    "這裡沒有「這次呼叫」，頂層的腳本要用「設定」",
+                    block_id=bid,
+                )
+            # 規則 2：與參數同名擋下，不是覆寫。§4.6 的「參數唯讀、只活在這個
+            # frame」正撐著帽子上那顆膠囊「看到的就是拿到的」；開放覆寫，膠囊在
+            # 函式體中段就開始說謊。換來的只有「不必換個名字」。
+            # 順帶也擋掉撞到迴圈變數／錯誤變數的情形——同一個 `_readonly_owner`。
+            if owner := _readonly_owner(blocks, bid, name, params_by_definition, {}, resolve):
+                raise ValidationError(
+                    f"「{name}」已經是{owner}的名字，唯讀；"
+                    f"這顆「{label}」會另外建立一個同名的暫存變數，請換個名字",
+                    block_id=bid,
+                )
+
+        # `設定 [x]`：撞到唯讀的名字**或函式的暫存變數**都是錯的。
+        for field_name in creates_global(spec):
+            name = fields.get(field_name)
+            if not isinstance(name, str) or not name:
+                continue
+            owner = _readonly_owner(
+                blocks, bid, name, params_by_definition, locals_by_definition, resolve
+            )
+            if owner:
+                raise ValidationError(
+                    f"「{name}」是{owner}的名字；"
+                    "這顆積木會寫到一個同名的全域變數，請換個名字",
+                    block_id=bid,
+                )
+
+        # `改變 [x]`：只擋唯讀的那幾層。它寫回讀到的那一層，所以撞到函式的暫存
+        # 變數是**對的**——`本次呼叫 [總和] 為 (0)` 之後 `改變 [總和]` 正是累加
+        # 最自然的寫法，擋它是誤報。
+        for field_name in writes_existing(spec):
+            name = fields.get(field_name)
+            if not isinstance(name, str) or not name:
+                continue
+            owner = _readonly_owner(
+                blocks, bid, name, params_by_definition, {}, resolve
+            )
+            if owner:
+                raise ValidationError(
+                    f"「{name}」是{owner}的名字，唯讀；"
+                    "這顆積木會寫到一個同名的全域變數，請換個名字",
+                    block_id=bid,
+                )
+
+
+def _locals_by_definition(
+    blocks: dict[str, Any],
+    params_by_definition: dict[str, tuple[str, set[str]]],
+    resolve: SpecResolver,
+) -> dict[str, set[str]]:
+    """definitionBlock → 那個函式體裡 `本次呼叫` 建立的名字。
+
+    要這張表是因為 `設定 [總和]` 與 `本次呼叫 [總和]` 之間是**兄弟**關係，不是
+    祖先關係——祖先鏈走不到它。而那兩顆湊在同一個函式裡，讀的是第 1 層、寫的是
+    第 3 層，又是一個「值對了一半」。
+    """
+    out: dict[str, set[str]] = {}
+    for bid, block in blocks.items():
+        if not isinstance(block, dict):
+            continue
+        spec = resolve(str(block.get("opcode", "")))
+        fields = block.get("fields") if isinstance(block.get("fields"), dict) else {}
+        for field_name in frame_binds(spec):
+            name = fields.get(field_name)
+            if not isinstance(name, str) or not name:
+                continue
+            if found := _enclosing_definition(blocks, bid, params_by_definition):
+                out.setdefault(found[0], set()).add(name)
+    return out
 
 
 def _params_by_definition(procedures: dict[str, Any]) -> dict[str, tuple[str, set[str]]]:
@@ -233,32 +374,35 @@ def _readonly_owner(
     block_id: str,
     name: str,
     params_by_definition: dict[str, tuple[str, set[str]]],
+    locals_by_definition: dict[str, set[str]],
     resolve: SpecResolver,
 ) -> str | None:
-    """這顆寫入積木身上的名字，撞到了哪個唯讀的東西。回傳那句錯誤訊息。
+    """這顆積木身上的名字，撞到了哪個唯讀的東西。回傳「那是什麼」的那一句。
 
     **由內而外走，第一個命中的就是答案**：一個 `設定 [x]` 同時在綁 `x` 的迴圈
     裡、又在有參數 `x` 的函式裡時，遮蔽它的是內層那個，訊息要指那一顆。
+
+    回傳的是名詞片語（`那顆「對 ⋯ 的每一項 x」` / `函式「跳」的參數`），句子由
+    呼叫端組——同一個判斷有兩個消費者，而它們要說的下半句不一樣（一個會寫到
+    全域變數，一個會另外建一個暫存變數）。
     """
     for ancestor_id, ancestor, via in ancestors(blocks, block_id):
         spec = resolve(str(ancestor.get("opcode", "")))
-        fields = ancestor.get("fields") or {}
+        fields = ancestor.get("fields") if isinstance(ancestor.get("fields"), dict) else {}
         for field_name, stack in scoped_binds(spec):
             if via != stack:
                 continue  # 在別張嘴巴裡（`try` 那一疊看不到 `error`）
-            bound = fields.get(field_name) if isinstance(fields, dict) else None
-            if bound == name:
-                return (
-                    f"「{name}」是那顆「{block_label(ancestor, spec)}」綁的名字，唯讀；"
-                    "這顆積木會寫到一個同名的全域變數，請換個名字"
-                )
+            if fields.get(field_name) == name:
+                return f"那顆「{block_label(ancestor, spec)}」綁"
 
-        if (found := params_by_definition.get(ancestor_id)) and name in found[1]:
-            proc_name, _ = found
-            return (
-                f"「{name}」是函式「{proc_name}」的參數，唯讀；"
-                "這顆積木會寫到一個同名的全域變數，請換個名字"
-            )
+        if (found := params_by_definition.get(ancestor_id)) is not None:
+            proc_name, params = found
+            if name in params:
+                return f"函式「{proc_name}」的參數"
+            # 同一個函式裡的 `本次呼叫`。這一格是**兄弟**不是祖先，所以它不在
+            # 上面那條祖先鏈上，要靠預先掃出來的那張表。
+            if name in locals_by_definition.get(ancestor_id, ()):
+                return f"函式「{proc_name}」裡「本次呼叫」建立"
     return None
 
 
@@ -267,7 +411,9 @@ __all__ = [
     "ancestors",
     "binder_index",
     "block_label",
+    "frame_binds",
     "scoped_binds",
     "validate_blocks",
-    "writes_global",
+    "creates_global",
+    "writes_existing",
 ]

@@ -94,6 +94,31 @@ async def _param(t: Thread, b: Block) -> Any:
     return frame.params.get(param.name)
 
 
+@command("procedure.set_local")
+async def _set_local(t: Thread, b: Block) -> None:
+    """`本次呼叫 [名稱] 為 (值)`（§16 Q6）。
+
+    **寫進當前 frame，不是全域。** 這顆積木存在的全部理由是：`data.set` 寫的
+    第 3 層是同一個 Run 的所有 thread 共用的，所以兩條腳本各呼叫一次同一個
+    函式，函式體裡那個暫存變數就互相踩——與 D29 修掉的迴圈變數是同一個 bug，
+    往上一層。遞迴同理，各層各自一份。
+
+    **沒有配對的讀取積木。** §5.4 第 1 層就是 frame，既有的 `取得 (名稱)` 與
+    `${名稱}` 本來就讀得到它。再發一顆是同一件事兩個入口。
+
+    三條規則在存檔期擋（`blocky/bindings.py`）：只准放在函式體內、不可與參數
+    同名、不可與 `設定` 撞名。三條都是「讀的與寫的不是同一個東西」——而畫面上
+    那兩顆積木長得一模一樣。
+    """
+    name = t.field(b, "name")
+    if not isinstance(name, str) or name == "":
+        raise ValidationError("積木沒有填變數名稱", block_id=t.interp._bid(b))
+    v = await t.value(b, "value")
+    t.scope.set_local(name, v, block_id=t.interp._bid(b))
+    # `var.set` 照發：變數面板看得到函式跑到一半的暫存值，那是它最有用的時候。
+    t.interp.sink.emit("var.set", threadId=t.id, name=name, value=v)
+
+
 @command("procedure.return")
 async def _return(t: Thread, b: Block) -> None:
     """cap block。巢狀在迴圈或 if 內同樣有效。"""

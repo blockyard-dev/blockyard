@@ -1,0 +1,9 @@
+title: 「本次呼叫」與參數同名 → 存檔期擋下，不是覆寫
+spec: §16 Q6 規則 2
+tags:
+- procedure
+- validation
+- Q6
+expect:
+  status: load_error
+  load_error: 已經是函式「跳」的參數

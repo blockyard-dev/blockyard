@@ -11,7 +11,6 @@ from typing import Annotated, Any, Callable, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from blocky.bindings import validate_blocks as validate_bindings
 from blocky.errors import ValidationError
 from blocky.ir import expression as expr
 from blocky.ir import template as tpl
@@ -354,8 +353,16 @@ def load(
     if shapes is not None:
         _validate_shapes(project, shapes)
     if specs is not None:
-        # §5.4／D29：`設定 [迴圈變數]`、`設定 [參數名]`。**排在最後**：它要走
-        # 積木的祖先鏈，而那條鏈的完整性是 `_validate_structure` 驗過的。
+        # §5.4／D29：`設定 [迴圈變數]`、`設定 [參數名]`、§16 Q6 的 `本次呼叫`。
+        # **排在最後**：它要走積木的祖先鏈，而那條鏈的完整性是
+        # `_validate_structure` 驗過的。
+        #
+        # **在函式裡 import**：`bindings` 要讀宣告上的 `scope`（`SCOPE_FRAME`），
+        # 而 `extensions.manifest` 反過來用這個模組的 `Strict` 與 `PLACEHOLDER`。
+        # 這是那個環唯一的斷點——ir 層是被依賴的那一邊，不該在模組頂端就把
+        # 擴充系統拉進來（同 `shapes` / `terminals` 是注進來的而不是自己去查）。
+        from blocky.bindings import validate_blocks as validate_bindings
+
         validate_bindings(data.get("blocks") or {}, data.get("procedures") or {}, specs)
     return LoadedProject(project, templates, exprs)
 

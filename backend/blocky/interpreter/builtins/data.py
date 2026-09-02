@@ -65,7 +65,11 @@ async def _change(t: Thread, b: Block) -> None:
     delta = await t.number(b, "value", default=0)
     cur = to_number(t.scope.get(name), block_id=None)
     v = cur + delta
-    t.scope.set(name, v)
+    # **寫回它讀到的那一層**（§16 Q6）。`設定` 說的是「建立一個全域變數」，
+    # 這顆說的是「把既有的那個變大」——寫死全域的話，函式裡的
+    # `本次呼叫 [總和] 為 (0)` 之後 `改變 [總和]` 會讀 frame、寫全域，那個累加
+    # 永遠加不上去，而畫面上什麼都看不出來。
+    t.scope.change(name, v)
     _emit_set(t, name, v)
 
 

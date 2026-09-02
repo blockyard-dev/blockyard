@@ -1,0 +1,9 @@
+title: 「本次呼叫」放在頂層腳本 → 存檔期擋下（這裡沒有「這次呼叫」）
+spec: §16 Q6 規則 3
+tags:
+- procedure
+- validation
+- Q6
+expect:
+  status: load_error
+  load_error: 只能放在函式定義裡面

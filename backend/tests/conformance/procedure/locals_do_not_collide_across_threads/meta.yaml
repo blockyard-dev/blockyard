@@ -1,0 +1,12 @@
+title: 兩條 thread 各呼叫一次同一個函式，函式體的暫存變數互不干擾（§16 Q6）
+spec: §5.4 第 1 層 / §16 Q6 函式區域變數
+tags:
+- procedure
+- variables
+- threads
+- Q6
+expect:
+  status: ok
+  logs:
+  - '6'
+  - '60'

@@ -127,9 +127,16 @@ class ArgSpec(Strict):
     # opcode），而它得先知道哪一顆積木是那個「取得」。沒有這個宣告，前端只能
     # 寫死 `data.get`——那正是 D21 要消滅的東西。
     reads: bool = False
-    # D29：`binds` 綁進來的名字，**看得見的範圍是哪一疊 stack**——寫的是同一顆
-    # 積木上某個 `type: stack` 參數的名字（`for_each` 是 `body`，`try_catch` 是
-    # `catch`）。沒寫這一格的 `binds` 寫的是全域層（§5.4 第 3 層，`data.set`）。
+    # D29：`binds` 綁進來的名字，**看得見的範圍**。這一格回答的只有一個問題
+    # ——「這個名字看得到多遠」——而 §5.4 的四層剛好就是它的值域：
+    #
+    #   `<stack 參數名>`  那一疊（`for_each` 是 `body`、`try_catch` 是 `catch`）
+    #   `frame`           所在的**函式體**（第 1 層，§16 Q6 的 `本次呼叫`）
+    #   沒寫              全域層（第 3 層，`data.set`）
+    #
+    # `frame` 是保留字而不是「某個叫 frame 的參數」，因為函式體**不是一疊
+    # stack**：它掛在定義積木的 `next` 上，指不到。同一顆積木上真的有一格叫
+    # `frame` 時載入期會擋（見 `BlockSpec._check`）——那是唯一會撞的情形。
     #
     # 分辨這兩種綁定端**只有宣告答得出來**：`data.set.name` 與
     # `control.for_each.name` 在 manifest 裡長得一模一樣（`type: variable` +
@@ -138,6 +145,7 @@ class ArgSpec(Strict):
     # 名單——那正是 D21 要消滅的東西，而積木包哪天有了自己的 C 型綁定積木，
     # 那份名單就是錯的。
     scope: str | None = None
+    #: `scope` 的保留值：範圍是所在的函式體（§5.4 第 1 層）。
     # §5.4：這一格指名的變數會被**寫進全域層**，但這顆積木不建立它
     # （`data.change`：§4.5 要求變數已存在）。`binds` 的第三面。
     #
@@ -330,6 +338,10 @@ class ConfigSpec(Strict):
         return "default" in self.model_fields_set
 
 
+#: `ArgSpec.scope` 的保留值：範圍是所在的函式體（§5.4 第 1 層、§16 Q6）。
+SCOPE_FRAME = "frame"
+
+
 class BlockSpec(Strict):
     """一顆積木的宣告。`opcode` 是**不帶命名空間**的短名。"""
 
@@ -403,6 +415,16 @@ class BlockSpec(Strict):
             # D29：`scope` 指的必須是同一顆積木上一疊真的 stack。指錯的症狀是
             # 一個**永遠看不見的名字**（範圍是一疊不存在的積木），而那在畫面上
             # 長得跟「打錯變數名」一模一樣。
+            if arg.scope == SCOPE_FRAME:
+                # 一顆積木同時有 `scope: frame` 與一格叫 frame 的參數時，讀的
+                # 人分不出那是保留字還是那一格——而 IR 讀不出來。擋在宣告期最便宜。
+                if SCOPE_FRAME in self.args:
+                    raise ValueError(
+                        f"參數 {name} 的 scope 是保留字 {SCOPE_FRAME}，"
+                        f"但這顆積木上也有一格叫 {SCOPE_FRAME}：請把那一格改名"
+                    )
+                continue
+
             if arg.scope is not None:
                 # 指進重複群組：那一疊在份數是 0 的時候根本不存在，而且它有幾份
                 # 是每顆積木自己的事——一個基底的名字不可能同時在那幾疊裡。

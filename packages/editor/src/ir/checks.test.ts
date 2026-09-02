@@ -336,6 +336,27 @@ describe('綁定的作用範圍（D29）', () => {
     expect(kindsOn(warnings, 'outside')).toEqual(['variable']);
   });
 
+  it('`本次呼叫` 建立的名字只在那個函式體裡（§16 Q6）', () => {
+    const s = scene(
+      {
+        d: { opcode: 'procedure.definition', next: 'local', fields: { proc: 'p_sum' } },
+        local: {
+          opcode: 'procedure.set_local', parent: 'd', next: 'inside',
+          fields: { name: '總和' },
+        },
+        inside: { opcode: 'data.change', parent: 'local', fields: { name: '總和' } },
+        h: { opcode: 'event.when_flag_clicked', next: 'outside' },
+        outside: { opcode: 'data.change', parent: 'h', fields: { name: '總和' } },
+      },
+      ['h'],
+      { p_sum: { name: '加總', params: [], returns: null, definitionBlock: 'd', body: 'local' } },
+    );
+    const warnings = s.check();
+    expect(kindsOn(warnings, 'inside')).toEqual([]);
+    // 指的是**函式**不是那顆積木：範圍是整個函式體，而使用者要回去的地方是函式。
+    expect(messageOn(warnings, 'outside')).toBe('變數「總和」只在函式「加總」裡面有效');
+  });
+
   it('`設定` 建立的名字仍然是扁平的——第 3 層是整個 Run 共用', () => {
     const s = scene(
       {

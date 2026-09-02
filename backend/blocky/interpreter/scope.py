@@ -85,11 +85,16 @@ class Frame:
     從 catch 裡呼叫的函式看得見 `error`，而那個名字在函式的畫面上不存在。
     """
 
-    __slots__ = ("params", "proc_id", "depth", "thread_base")
+    __slots__ = ("params", "locals", "proc_id", "depth", "thread_base")
 
     def __init__(self, proc_id: str, params: dict[str, Any], depth: int, thread_base: int) -> None:
         self.proc_id = proc_id
         self.params = params
+        # §16 Q6：`本次呼叫 [x] 為 ()` 寫這裡。與 `params` 分開而不是合成一個
+        # dict，因為 `procedure.param` 讀的必須**只有**參數——那顆膠囊說的是
+        # 「這次呼叫傳進來的值」，讓它讀得到一個同名的暫存變數，膠囊就在函式體
+        # 中段開始說謊。兩者撞名是存檔期錯誤，所以這裡不必決定誰贏。
+        self.locals: dict[str, Any] = {}
         self.depth = depth
         self.thread_base = thread_base
 
@@ -209,8 +214,11 @@ class Scope:
 
     def get(self, name: str, *, block_id: str | None = None) -> Any:
         f = self.current_frame
-        if f is not None and name in f.params:
-            return f.params[name]
+        if f is not None:
+            if name in f.params:
+                return f.params[name]
+            if name in f.locals:
+                return f.locals[name]
         floor = self.thread_floor
         if self.thread.has(name, floor=floor):
             return self.thread.get(name, floor=floor)
@@ -241,7 +249,7 @@ class Scope:
         else:
             hint = "綁進來的名字只在那顆積木的嘴巴裡看得見。要在外面用，先用「設定」把值存起來。"
         return UndefinedVariableError(
-            f'變數「{name}」只在那顆「{label}」裡面有效',
+            f"變數「{name}」只在{label}裡面有效",
             block_id=block_id,
             hint=hint,
         )
@@ -249,20 +257,64 @@ class Scope:
     def has(self, name: str) -> bool:
         f = self.current_frame
         return (
-            (f is not None and name in f.params)
+            (f is not None and (name in f.params or name in f.locals))
             or self.thread.has(name, floor=self.thread_floor)
             or self.run.has(name)
         )
 
     def set(self, name: str, value: Any) -> None:
-        """§5.4：`data.set` **一律寫入全域層**（前兩層唯讀）。"""
+        """§5.4：`data.set` **一律寫入全域層**。
+
+        第 2 層唯讀（D29），第 1 層只有 `本次呼叫` 寫得到（Q6）——而那顆積木撞
+        到這裡的名字是存檔期錯誤，所以這一行不必問「現在有沒有 frame」。
+        """
         self.run.set(name, value)
+
+    def change(self, name: str, value: Any) -> None:
+        """`改變 [x] 增加 (n)`：**寫回它讀到的那一層**（§4.5、§16 Q6）。
+
+        `data.set` 說的是「建立一個全域變數」，所以它一律寫第 3 層；`data.change`
+        說的是「把既有的那個變大」——它先讀，而讀到哪一層，寫就該回哪一層。寫死
+        第 3 層才是那個讀寫分家的 bug：函式裡 `本次呼叫 [總和] 為 (0)` 之後
+        `改變 [總和]` 會讀 frame、寫全域，於是那個累加**永遠加不上去**。
+
+        **對既有專案是同一個行為。** 在這顆積木之前，第 1 層只有參數、第 2 層
+        唯讀，而 `改變` 撞到那兩層都是存檔期錯誤——所以每一份存得進去的專案裡，
+        `改變` 讀到的一定是第 3 層。這是純粹的加法。
+
+        前兩層唯讀的那些（參數、迴圈變數、錯誤變數）走不到這裡：`bindings.py`
+        在存檔期就擋掉了，理由是讀寫指到兩個不同的東西。
+        """
+        f = self.current_frame
+        if f is not None and name in f.locals:
+            f.locals[name] = value
+            return
+        self.run.set(name, value)
+
+    def set_local(self, name: str, value: Any, *, block_id: str | None = None) -> None:
+        """§16 Q6：`本次呼叫 [x] 為 ()` 寫進當前 frame（第 1 層）。
+
+        遞迴與並行各自一份——這是它存在的全部理由：`data.set` 寫全域，而全域是
+        同一個 Run 的所有 thread 共用的，兩條腳本各呼叫一次同一個函式，函式體裡
+        的暫存變數就互相踩。
+
+        「不在函式體裡」是**存檔期**擋下的（§16 Q6 規則 3），所以走到這裡代表
+        IR 是手寫或別的版本產生的。仍然給一句看得懂的話，不是 IndexError。
+        """
+        f = self.current_frame
+        if f is None:
+            raise UndefinedVariableError(
+                f"「本次呼叫 {name}」只能放在函式定義裡面",
+                block_id=block_id,
+                hint="這裡沒有「這次呼叫」——頂層的腳本要用「設定」。",
+            )
+        f.locals[name] = value
 
     def known_names(self) -> list[str]:
         names = set(self.run.vars) | set(self.thread.names(floor=self.thread_floor))
         f = self.current_frame
         if f is not None:
-            names |= set(f.params)
+            names |= set(f.params) | set(f.locals)
         return sorted(names)
 
     def shadows_param(self, name: str) -> bool:

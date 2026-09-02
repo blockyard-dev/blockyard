@@ -1,0 +1,116 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3", "value": [1, 2, 3]}
+{"op": "var.set", "threadId": "t1", "name": "a", "value": [1, 2, 3]}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "var.set", "threadId": "t1", "name": "a", "value": [1, 2, 3]}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "var.set", "threadId": "t1", "name": "a", "value": [1, 2, 3]}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "var.set", "threadId": "t1", "name": "a", "value": [1, 2, 3]}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_8"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_9"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_9", "value": [1, 2, 3]}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_20"}
+{"op": "var.set", "threadId": "t1", "name": "總和", "value": 0}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_20"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_21"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_22"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_22", "value": [1, 2, 3]}
+{"op": "var.set", "threadId": "t1", "name": "x", "value": 1}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_23"}
+{"op": "thread.start", "threadId": "t2", "scriptId": "sc_2"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_11"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_12"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_12", "value": [10, 20, 30]}
+{"op": "var.set", "threadId": "t2", "name": "b", "value": [10, 20, 30]}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_11"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_13"}
+{"op": "var.set", "threadId": "t2", "name": "b", "value": [10, 20, 30]}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_13"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_14"}
+{"op": "var.set", "threadId": "t2", "name": "b", "value": [10, 20, 30]}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_14"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_15"}
+{"op": "var.set", "threadId": "t2", "name": "b", "value": [10, 20, 30]}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_15"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_16"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_17"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_18"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_18", "value": [10, 20, 30]}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_20"}
+{"op": "var.set", "threadId": "t2", "name": "總和", "value": 0}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_20"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_21"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_22"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_22", "value": [10, 20, 30]}
+{"op": "var.set", "threadId": "t2", "name": "x", "value": 10}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_23"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_23"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_24"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_25"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_25", "value": 1}
+{"op": "var.set", "threadId": "t1", "name": "總和", "value": 1}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_24"}
+{"op": "var.set", "threadId": "t1", "name": "x", "value": 2}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_23"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_23"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_24"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_25"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_25", "value": 10}
+{"op": "var.set", "threadId": "t2", "name": "總和", "value": 10}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_24"}
+{"op": "var.set", "threadId": "t2", "name": "x", "value": 20}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_23"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_23"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_24"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_25"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_25", "value": 2}
+{"op": "var.set", "threadId": "t1", "name": "總和", "value": 3}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_24"}
+{"op": "var.set", "threadId": "t1", "name": "x", "value": 3}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_23"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_23"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_24"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_25"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_25", "value": 20}
+{"op": "var.set", "threadId": "t2", "name": "總和", "value": 30}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_24"}
+{"op": "var.set", "threadId": "t2", "name": "x", "value": 30}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_23"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_23"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_24"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_25"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_25", "value": 3}
+{"op": "var.set", "threadId": "t1", "name": "總和", "value": 6}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_24"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_21"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_26"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_27"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_27", "value": 6}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_8", "value": 6}
+{"op": "log", "threadId": "t1", "level": "info", "text": "6", "blockId": "blk_7"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_7"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_23"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_24"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_25"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_25", "value": 30}
+{"op": "var.set", "threadId": "t2", "name": "總和", "value": 60}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_24"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_21"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_26"}
+{"op": "block.enter", "threadId": "t2", "blockId": "blk_27"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_27", "value": 60}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_17", "value": 60}
+{"op": "log", "threadId": "t2", "level": "info", "text": "60", "blockId": "blk_16"}
+{"op": "block.exit", "threadId": "t2", "blockId": "blk_16"}
+{"op": "thread.end", "threadId": "t2", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

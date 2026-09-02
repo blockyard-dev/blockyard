@@ -200,6 +200,7 @@ class Interpreter:
         # pop 掉了。算一次就好：專案在一個 Run 裡不會變。
         self._binders = binder_index(
             {bid: b.model_dump() for bid, b in project.blocks.items()},
+            {pid: p.model_dump() for pid, p in project.procedures.items()},
             resolve_spec(extensions),
         )
 
