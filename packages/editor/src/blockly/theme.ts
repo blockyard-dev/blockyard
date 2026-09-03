@@ -15,6 +15,8 @@ import {
 import { procIdFromType } from './procedures';
 // 時間與曲線與畫布的「滑到那顆積木」共用一份（見 `motion.ts` 開頭）。
 import { SCROLL_MS, easeOut, prefersReducedMotion } from './motion';
+// 匯入即註冊「Alt 拖曳 = 複製」的那個 dragger（下面 `plugins.blockDragger` 指名它）。
+import { DUPLICATING_DRAGGER } from './duplicate';
 
 export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
   name: 'blocky',
@@ -458,6 +460,8 @@ export const workspaceOptions: Partial<Blockly.BlocklyOptions> = {
     toolbox: 'BlockyToolbox',
     flyoutsVerticalToolbox: 'BlockyFlyout',
     metricsManager: 'ContinuousMetrics',
+    // 按住 Alt／Option 拖曳 = 複製這顆以下整串（`duplicate.ts`）。
+    blockDragger: DUPLICATING_DRAGGER,
   },
   media: 'media/',
   grid: { spacing: 40, length: 3, colour: '#e2e4ee', snap: false },

@@ -51,6 +51,13 @@ export type RunStatus = 'idle' | 'starting' | 'running' | RunEndStatus;
 
 interface RunState {
   runId: string | null;
+  /**
+   * 前端**自己接著** `/ws/run` 的那個 Run（`App.tsx` 的 `attachSocket`）。
+   *
+   * 一個 Run 的事件只能從一個地方進來，而這一格就是「哪一個 Run 已經有主了」
+   * ——`applyProject` 靠它把重複的那一份擋掉。見 `own()`。
+   */
+  ownedRunId: string | null;
   status: RunStatus;
   /** 連不上、啟動失敗之類的整體訊息。積木層級的錯誤不放這裡。 */
   message: string | null;
@@ -63,6 +70,7 @@ interface RunState {
 
   begin(): void;
   attach(run: RunSummary): void;
+  own(runId: string | null): void;
   fail(message: string): void;
   apply(frame: RunFrame): void;
   applyProject(frame: ProjectFrame): void;
@@ -84,6 +92,7 @@ let logSeq = 0;
 
 export const useRunStore = create<RunState>((set, get) => ({
   runId: null,
+  ownedRunId: null,
   status: 'idle',
   ...emptyRun(),
 
@@ -91,6 +100,14 @@ export const useRunStore = create<RunState>((set, get) => ({
   begin: () => set({ runId: null, status: 'starting', ...emptyRun() }),
 
   attach: (run) => set({ runId: run.runId, status: 'running' }),
+
+  /**
+   * 「這個 Run 的事件由 run 通道送」，`null` = 沒有人接著。
+   *
+   * `App.tsx` 開／關那條 socket 時各叫一次。放在 store 而不是一個 ref，是因為
+   * 用它的是 `applyProject`——判斷「這一份要不要套用」的地方就在這裡。
+   */
+  own: (runId) => set({ ownedRunId: runId }),
 
   fail: (message) => set({ status: 'error', message }),
 
@@ -105,6 +122,13 @@ export const useRunStore = create<RunState>((set, get) => ({
    * 是被丟過的（§6.2），而那時候 `run.start` 已經不在裡面了。
    */
   applyProject: (frame) => {
+    // **已經有主的那個 Run 不從這條通道進來。** 後端每一個 Run 都往專案通道
+    // 送（`runs/manager.py` 的 `hub.publish`），所以前端自己接著 `/ws/run` 的
+    // 那一個會收到兩份同樣的 frame——而 log 是累加的，畫面上就是每一行印兩次。
+    //
+    // 正常情況下 `App.tsx` 在監聽開著時根本不開 run 通道，這道判斷守的是接縫：
+    // Run 先開始、使用者才按下監聽（綠旗就是這個順序）。
+    if (frame.runId === get().ownedRunId) return;
     if (frame.runId !== get().runId) {
       set({ runId: frame.runId, status: 'running', ...emptyRun() });
     }

@@ -14,7 +14,7 @@
  * 單專案模式（`PROJECT_ID` 固定）：專案列表、切換專案是之後的事。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Ear, History, Link2, Play, Square } from 'lucide-react';
+import { Check, Ear, History, Link2, Play, Save, Square } from 'lucide-react';
 import * as Blockly from 'blockly/core';
 import { ApiError, fetchExtensions, fetchKeys, fetchProject, saveProject } from './api/client';
 import { ProjectSocket, RunSocket, startRun, stopRun } from './api/runs';
@@ -103,17 +103,17 @@ type State =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | {
-      status: 'ready';
-      registration: Registration;
-      project: ProjectIR;
-      ctx: ConversionContext;
-      /** 這個專案的函式積木。**工具箱重建時要它**——金鑰設定好之後那顆
-       * `open_config` 按鈕要收起來，而那次重建不是由函式的改動引起的，手邊
-       * 沒有別的地方拿得到這一份（重算一次等於把所有函式積木再註冊一輪）。 */
-      procedureBlocks: RegisteredBlock[];
-      /** 專案的工具箱 = 靜態宣告 + 這個專案的函式（§8.5）。函式一改就換一份。 */
-      toolbox: Record<string, unknown>;
-    };
+    status: 'ready';
+    registration: Registration;
+    project: ProjectIR;
+    ctx: ConversionContext;
+    /** 這個專案的函式積木。**工具箱重建時要它**——金鑰設定好之後那顆
+     * `open_config` 按鈕要收起來，而那次重建不是由函式的改動引起的，手邊
+     * 沒有別的地方拿得到這一份（重算一次等於把所有函式積木再註冊一輪）。 */
+    procedureBlocks: RegisteredBlock[];
+    /** 專案的工具箱 = 靜態宣告 + 這個專案的函式（§8.5）。函式一改就換一份。 */
+    toolbox: Record<string, unknown>;
+  };
 
 type SaveState =
   | { status: 'idle' }
@@ -124,6 +124,25 @@ type SaveState =
 export function App() {
   const [state, setState] = useState<State>({ status: 'loading' });
   const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' });
+  /**
+   * 畫布上有沒有還沒存檔的改動。
+   *
+   * **這不只是一個提示，它是「監聽聽的是舊版」那件事的答案。** 後端跑的、聽的
+   * 都是**已存檔的那一份**（`runs/manager.py::start` 讀的是 store，不是瀏覽器
+   * 手上那份），而存檔本身就會 resync 一次 trigger
+   * （`api/projects.py::put_project`）——所以「改了畫布但監聽沒跟上」從來不是
+   * 同步壞掉，是那些改動根本還沒存進去。畫面上沒有任何東西說這件事，於是它
+   * 看起來像 bug；`dirty` 就是那句話。
+   *
+   * 用**內容比對**而不是「有事件就標髒」：undo 回到存檔時的樣子就該重新乾淨，
+   * 而捲動視角、點選積木不該算改動。代價是每 200ms 序列化一次全畫布——與旁邊
+   * 那個靜態檢查同一個量級，所以兩件事掛在同一個節流上（見下面那個 effect）。
+   */
+  const [dirty, setDirty] = useState(false);
+  /** 上一次真的存進後端的那份 IR 的 JSON。`null` = 還沒有基準（見那個 effect）。 */
+  const savedRef = useRef<string | null>(null);
+  /** 成功存檔了幾次。監聽中的那份 trigger 狀態要跟著它重讀。 */
+  const [savedRevision, setSavedRevision] = useState(0);
   /**
    * 一句話的提示，蓋在畫布上（刪不掉的函式、刪掉了哪個函式）。
    *
@@ -146,6 +165,8 @@ export function App() {
   const paramsRef = useRef<Record<string, Procedure>>({});
   const decoratorRef = useRef<RunDecorator | null>(null);
   const socketRef = useRef<RunSocket | null>(null);
+  /** 監聽開著沒有。回呼活得比 render 久，所以要有一份 ref（同 `paramsRef`）。 */
+  const listeningRef = useRef(false);
   const checkerRef = useRef<CheckRunner | null>(null);
   const [workspace, setWorkspace] = useState<Blockly.WorkspaceSvg | null>(null);
   /** 「創建積木」對話框（§8.5）。`null` = 沒開。 */
@@ -219,14 +240,14 @@ export function App() {
     setState((prev) =>
       prev.status === 'ready'
         ? {
-            ...prev,
-            toolbox: buildProjectToolbox(
-              prev.registration,
-              prev.procedureBlocks,
-              configured,
-              enabled,
-            ),
-          }
+          ...prev,
+          toolbox: buildProjectToolbox(
+            prev.registration,
+            prev.procedureBlocks,
+            configured,
+            enabled,
+          ),
+        }
         : prev,
     );
   }, [configured, enabled]);
@@ -302,7 +323,7 @@ export function App() {
       })
       // 問不到就維持「沒在跑」。這不是要往使用者臉上丟一句錯誤的時機——
       // 後端連不上的話，載入專案那條路已經會說話了。
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       alive = false;
     };
@@ -338,6 +359,24 @@ export function App() {
     [state],
   );
 
+  /**
+   * 現在這份畫布的 IR。**存檔與「改過了沒有」共用同一條。**
+   *
+   * 兩邊各寫一次序列化參數的話，`meta` 或 `procedures` 只要有一格對不上，比對
+   * 就會永遠說「改過了」——而那顆星星會從此拿不掉，變成一個沒有人相信的提示。
+   */
+  const snapshotProject = useCallback((): ProjectIR | null => {
+    const ws = workspaceRef.current;
+    if (!ws || state.status !== 'ready') return null;
+    // `extensions` 不在這裡：它由 `serializeWorkspace` 從畫布上的積木算出來
+    // （§13.3）。拉一顆積木包的積木出來就等於宣告用到了它。
+    return serializeWorkspace(ws, state.ctx, {
+      formatVersion: state.project.formatVersion,
+      meta: state.project.meta,
+      procedures: state.project.procedures,
+    });
+  }, [state]);
+
   /** 存檔。回傳成功與否——執行要靠它決定要不要繼續。 */
   const save = useCallback(async (): Promise<boolean> => {
     if (state.status !== 'ready') return false;
@@ -350,16 +389,17 @@ export function App() {
     // 一起拆掉。
     for (const block of ws.getAllBlocks(false)) block.setWarningText(null, SAVE_WARNING_ID);
 
-    // `extensions` 不在這裡：它由 `serializeWorkspace` 從畫布上的積木算出來
-    // （§13.3）。拉一顆積木包的積木出來就等於宣告用到了它。
-    const project = serializeWorkspace(ws, state.ctx, {
-      formatVersion: state.project.formatVersion,
-      meta: state.project.meta,
-      procedures: state.project.procedures,
-    });
+    const project = snapshotProject();
+    if (!project) return false;
 
     try {
       await saveProject(PROJECT_ID, project);
+      // 這一份就是後端手上的那一份——「畫布改過了沒有」從這裡重新起算。
+      // **存成功才記**：存壞的那一次後端還留著舊的，而畫布上那些改動確實
+      // 還沒進去，那時候標成乾淨等於把使用者騙回原本那個 bug。
+      savedRef.current = JSON.stringify(project);
+      setDirty(false);
+      setSavedRevision((n) => n + 1);
       setSaveState({ status: 'saved' });
       return true;
     } catch (error: unknown) {
@@ -374,7 +414,7 @@ export function App() {
       setSaveState({ status: 'error', message: describe(error) });
       return false;
     }
-  }, [state]);
+  }, [state, snapshotProject]);
 
   /**
    * 監聽（§9、P1 第 4 步第 3 段）。
@@ -387,30 +427,67 @@ export function App() {
    * 那句話要說出來，否則按下去什麼都沒發生會被當成壞掉。
    */
   const [listening, setListening] = useState<ListeningState>(NOT_LISTENING);
+  listeningRef.current = listening.on;
   const [hooksOpen, setHooksOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  /**
-   * 接上一個 Run 的事件流。
-   *
-   * 綠旗、「點一下就跑」與 **hat 觸發的 Run** 走同一條——後者是後端自己起的
-   * （`listeners.py`），前端只是把 socket 接過去。抽出來是因為它本來就該只有
-   * 一份：編輯器同時只顯示一個 Run（一個 socket、一份高亮）。
-   */
-  const attach = useCallback((run: RunSummary) => {
+  /** 接上一個 Run 的 `/ws/run` 通道。**只有 `attach` 與交棒回來時會用。** */
+  const attachSocket = useCallback((runId: string) => {
     socketRef.current?.close();
-    useRunStore.getState().attach(run);
-    socketRef.current = new RunSocket(run.runId, {
+    useRunStore.getState().own(runId);
+    const socket: RunSocket = new RunSocket(runId, {
       onFrame: (frame) => useRunStore.getState().apply(frame),
       onClose: (clean) => {
+        // **只清自己那一筆。** 關掉舊 socket 的 `onclose` 是下一輪才到的，那時
+        // 這兩格可能已經記著下一個 Run 了。清得掉才有下一句：`ownedRunId` 是
+        // 「這個 Run 有沒有人接著」的唯一答案，留著一筆死的，監聽關掉時就不會
+        // 去接手。
         const s = useRunStore.getState();
+        if (s.ownedRunId === runId) s.own(null);
+        if (socketRef.current === socket) socketRef.current = null;
         // Run 還在跑卻斷線：使用者要知道畫面停在半路，而不是以為它跑完了。
         if (s.status === 'running' || s.status === 'starting') {
           s.finish(clean ? 'cancelled' : 'error', clean ? undefined : '事件連線中斷');
         }
       },
     });
+    socketRef.current = socket;
   }, []);
+
+  /**
+   * 接上一個 Run 的事件流。綠旗與「點一下就跑」走這一條。
+   *
+   * **監聽開著的時候不開 run 通道。** 後端每一個 Run 都往專案通道送
+   * （`runs/manager.py` 的 `hub.publish`，不分是誰起的），所以那時候這個 Run
+   * 的 frame 已經在路上了——再接一條就是同一份事件套用兩次，而 log 是累加的：
+   * 症狀是每一行都印兩次（實測，D33 之後）。高亮與變數是覆寫式的，所以只有
+   * log 會露出來。
+   *
+   * hat 觸發的 Run 不經過這裡：它是後端自己起的，前端沒有那個 runId，而那正是
+   * 專案通道存在的理由（D33）。
+   */
+  const attach = useCallback(
+    (run: RunSummary) => {
+      useRunStore.getState().attach(run);
+      if (listeningRef.current) return;
+      attachSocket(run.runId);
+    },
+    [attachSocket],
+  );
+
+  /**
+   * 監聽關掉、而手上這個 Run 還在跑：把它接回 run 通道。
+   *
+   * 「一個 Run 的事件只從一個地方進來」的另一半：監聽開著時那個地方是專案
+   * 通道，而按下停止監聽的當下它就沒了。不接回來的話畫面從那一刻起安靜，而
+   * Run 還在後端跑——那是最糟的一種畫面，因為它看起來像跑完了。
+   */
+  useEffect(() => {
+    if (listening.on) return;
+    const { runId: current, ownedRunId, status } = useRunStore.getState();
+    if (ownedRunId) return; // 已經有人接著（Run 先開始、監聽後來才關掉的那條路）
+    if (current && (status === 'running' || status === 'starting')) attachSocket(current);
+  }, [listening.on, attachSocket]);
 
   const beginListening = useCallback(async () => {
     // 監聽跑的也是**已存檔的那一份**（同執行，`runs/manager.py` 開頭那段）。
@@ -430,8 +507,34 @@ export function App() {
   const endListening = useCallback(async () => {
     setListening(NOT_LISTENING);
     setHooksOpen(false);
-    await deactivateProject(PROJECT_ID).catch(() => {});
+    await deactivateProject(PROJECT_ID).catch(() => { });
   }, []);
+
+  /**
+   * 存檔之後，監聽中的那份狀態要重讀（§9.2 的「專案編輯後 diff」）。
+   *
+   * 後端在 `PUT /api/projects` 裡自己 resync 了 trigger，所以**存檔就是套用**
+   * ——但工具列上那頂帽子的數字是 `beginListening` 那一刻拿的。新拉一顆 hat
+   * 出來存檔，後端確實接上了，而畫面還寫著舊的數字：那會讓人以為存檔沒有用，
+   * 然後去按停止再按一次監聽（而那才是真的會掉訊息的動作）。
+   *
+   * 掛在 `savedRevision` 而不是 `dirty` 上：要重讀的時機是「存進去了」，不是
+   * 「畫布變乾淨了」——存檔失敗時後端沒有變，沒有東西要重讀。
+   */
+  useEffect(() => {
+    if (!listening.on || savedRevision === 0) return;
+    let alive = true;
+    fetchTriggerState(PROJECT_ID)
+      .then((summary) => {
+        if (alive) setListening(listeningStateOf(summary));
+      })
+      // 讀不到就留著舊的數字。存檔那條路已經說過話了，這裡再丟一句錯誤只會
+      // 蓋掉真正的那一句。
+      .catch(() => { });
+    return () => {
+      alive = false;
+    };
+  }, [savedRevision, listening.on]);
 
   /** 設完密鑰之後重讀狀態——`secretSet` 是後端算的，前端猜不得。 */
   const refreshHooks = useCallback(async () => {
@@ -739,7 +842,7 @@ export function App() {
       glideToBlock(ws, (used[at] ?? first).id);
       setToast(
         `畫布上還有 ${used.length} 顆「${group.name}」的積木，要先把它們刪掉才能刪掉這個擴充功能。` +
-          `已經捲到第 ${at + 1} 顆——再按一次刪除會跳到下一顆。`,
+        `已經捲到第 ${at + 1} 顆——再按一次刪除會跳到下一顆。`,
       );
       return;
     }
@@ -846,6 +949,12 @@ export function App() {
         onFrame: (frame) => useRunStore.getState().applyProject(frame),
         onClose: (clean) => {
           if (cancelled || clean) return;
+          // 監聽開著時這是手上那個 Run 的唯一來源（`attach` 不再開 run 通道），
+          // 所以斷線就等於畫面停在半路——與 `RunSocket` 同一句話。
+          const s = useRunStore.getState();
+          if (s.status === 'running' || s.status === 'starting') {
+            s.finish('error', '事件連線中斷');
+          }
           retry = window.setTimeout(connect, 1000);
         },
       });
@@ -860,15 +969,36 @@ export function App() {
   }, [listening.on]);
 
   /**
-   * 執行前的靜態檢查（§4.5、§4.6、§8.5）。載入完先跑一次，之後每次編輯節流重跑。
+   * 執行前的靜態檢查（§4.5、§4.6、§8.5），外加「畫布改過了沒有」。
    *
-   * `isUiEvent` 的那些（點選、捲動、縮放）跳過：它們改的是視角不是積木，而
-   * 這個檢查只看積木。
+   * 兩件事共用一個節流不是為了省一個 listener，是因為它們掃的是同一份東西：
+   * 各自掛一條的話，同一次編輯會把全畫布走兩趟，而 PROGRESS 上那筆帳就是這樣
+   * 記起來的。
+   *
+   * `isUiEvent` 的那些（點選、捲動、縮放）跳過：它們改的是視角不是積木——而
+   * 「改過了沒有」問的也正是積木，捲動一下就說有未存檔的改動是說謊。
    */
   useEffect(() => {
     if (!workspace || state.status !== 'ready') return;
     const checker = checkerRef.current;
     const input = { ctx: state.ctx, procedures: state.project.procedures ?? {} };
+
+    /**
+     * 「改過了沒有」＝ 現在的 IR 跟上一次存進去的那份不一樣。
+     *
+     * **第一次算出來的那份就是基準**（`savedRef` 還是 `null` 的那一次）。不能
+     * 在載入的當下記：`loadProject` 是一路 `append` 出來的，那些 BLOCK_CREATE
+     * 事件下一個 macrotask 才送到，掛旗子的做法會讓每個專案一打開就是髒的。
+     * 等節流那 200ms 過去，帽子上的參數晶片（`watchDefinitionParams`）也補完
+     * 了，這時的畫布才真的是「剛打開的樣子」。
+     */
+    const syncDirty = () => {
+      const project = snapshotProject();
+      if (!project) return;
+      const json = JSON.stringify(project);
+      if (savedRef.current === null) savedRef.current = json;
+      setDirty(json !== savedRef.current);
+    };
 
     let timer: ReturnType<typeof setTimeout> | null = null;
     const schedule = () => {
@@ -876,6 +1006,7 @@ export function App() {
       timer = setTimeout(() => {
         timer = null;
         checker?.run(input);
+        syncDirty();
       }, CHECK_DELAY_MS);
     };
 
@@ -888,7 +1019,7 @@ export function App() {
       workspace.removeChangeListener(listener);
       if (timer !== null) clearTimeout(timer);
     };
-  }, [workspace, state]);
+  }, [workspace, state, snapshotProject]);
 
   useEffect(() => {
     if (!workspace || state.status !== 'ready') return;
@@ -906,6 +1037,17 @@ export function App() {
     workspace.addChangeListener(listener);
     return () => workspace.removeChangeListener(listener);
   }, [workspace, state, beginRun]);
+
+  /**
+   * 耳朵上那句話。監聽中而畫布又改過了的時候，它要說的是**它在聽的是哪一份**
+   * ——不是「你有東西沒存」（那句話存檔按鈕自己會說），而是「你看到的跟它在跑
+   * 的不是同一份，而解法是存檔，不是把監聽關掉再開」。後者是使用者原本會做的
+   * 事，而它對 Discord 那種長連線是真的有代價的（斷線重連期間的訊息就沒了）。
+   */
+  const listeningLabel =
+    listening.on && dirty
+      ? '監聽中——但它聽的是上次存檔的那一份，畫布上還有沒存的改動（按存檔套用）。按這顆則暫停監聽'
+      : '監聽中，按一下暫停';
 
   return (
     <div className="app">
@@ -929,13 +1071,39 @@ export function App() {
                 是這一列唯一會長出來又縮回去的東西，放在 `margin-left: auto`
                 的那一側，長度變化推的是自己左邊的空白，不是右邊那六顆按鈕。 */}
             <RunStatus />
+            {/* 存檔按鈕自己說「現在存了沒有」：乾淨是打勾，有改動是磁片。
+                這件事以前寫在工具列最右邊那句「已存檔」上，而它有兩個毛病——
+                它離按鈕很遠（中間隔著整排按鈕與金鑰入口），而且它只說得出
+                「存過了」，說不出「有東西還沒存」。後者才是要緊的那一半：
+                執行與監聽跑的都是**已存檔的那一份**。
+
+                乾淨時是灰的：沒有東西可以存，按下去只是把一份一模一樣的 IR
+                再送一次。寬度釘死（見 `index.css`），不然每打一個字整排按鈕
+                都會跟著挪一格。 */}
             <button
               type="button"
-              className="button"
+              className="button button-save"
               onClick={() => void save()}
-              disabled={saveState.status === 'saving' || running}
+              disabled={saveState.status === 'saving' || running || !dirty}
+              title={
+                dirty
+                  ? '存檔：執行與監聽跑的都是存檔的那一份'
+                  : '畫布跟存檔的那一份一樣'
+              }
             >
-              {saveState.status === 'saving' ? '存檔中…' : '存檔'}
+              {saveState.status === 'saving' ? (
+                <>
+                  <Save size={13} strokeWidth={2.5} /> 存檔中…
+                </>
+              ) : dirty ? (
+                <>
+                  <Save size={13} strokeWidth={2.5} /> 存檔
+                </>
+              ) : (
+                <>
+                  <Check size={14} strokeWidth={3} /> 已存檔
+                </>
+              )}
             </button>
             {/* 執行與停止是**同一顆**。這兩件事互斥（沒在跑不能停、在跑不能再
                 按執行），所以兩顆按鈕之中永遠有一顆是灰的——那顆灰的什麼都不
@@ -975,11 +1143,28 @@ export function App() {
               // 在說「現在是聽著的」了——顏色一個人扛不動這件事。
               <button
                 type="button"
-                className="button button-icon button-listening"
+                className={
+                  dirty
+                    ? 'button button-icon button-listening button-listening-stale'
+                    : 'button button-icon button-listening'
+                }
                 onClick={() => void endListening()}
-                aria-label="監聽中，按一下暫停"
-                title="監聽中，按一下暫停"
+                aria-label={listeningLabel}
+                title={listeningLabel}
               >
+                {/* 改過了就在耳朵前面加一顆星（`*耳朵`）——分頁標題上那個
+                    「這份檔案還沒存」的記號，同一個約定。
+
+                    排在流裡面而不是絕對定位的角標：`*` 這個字本來就畫在字身
+                    的上緣，所以它自己就落在耳朵的左上角，不必去算 top／left
+                    ——而角標那種做法在這顆 1.9rem 的按鈕上一定會壓到耳朵的
+                    線條。星星本身不是按鈕：這顆耳朵是監聽的開關，讓它在有
+                    星星的時候改做別的事，等於同一個位置有兩種結果。 */}
+                {dirty && (
+                  <span className="listening-stale" aria-hidden="true">
+                    *
+                  </span>
+                )}
                 <Ear size={15} strokeWidth={2.5} />
               </button>
             ) : (
@@ -1032,9 +1217,6 @@ export function App() {
         <KeysEntry />
         {saveState.status === 'error' && (
           <span className="save-status save-status-error">{saveState.message}</span>
-        )}
-        {saveState.status === 'saved' && runStatus === 'idle' && (
-          <span className="save-status save-status-ok">已存檔</span>
         )}
       </header>
 

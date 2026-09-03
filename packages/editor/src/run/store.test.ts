@@ -19,6 +19,9 @@ function apply(...events: RunEvent[]): void {
 
 beforeEach(() => {
   useRunStore.getState().begin();
+  // `begin()` 不動 `ownedRunId`——那一格的主人是 `App.tsx` 的 socket，不是
+  // 「按下執行」這個動作。所以測試自己清。
+  useRunStore.getState().own(null);
 });
 
 describe('積木狀態', () => {
@@ -193,6 +196,32 @@ describe('專案通道（§9）', () => {
       events: [{ op: 'log', level: 'info', text: '二' }],
     });
     expect(useRunStore.getState().logs.map((l) => l.text)).toEqual(['一', '二']);
+  });
+
+  it('run 通道已經接著的那個 Run，專案通道不再套一次', () => {
+    // 後端**每一個** Run 都往專案通道送（`runs/manager.py` 的 `hub.publish`），
+    // 所以「Run 先開始、使用者後來才按下監聽」的那一段時間裡，同一份 frame 會
+    // 從兩條通道各來一次。log 是累加的——不擋就是畫面上每一行都印兩次（實測，
+    // D33 之後）。高亮與變數是覆寫式的，所以只有 log 會露出來。
+    const batch: RunFrame = { runId: 'r_1', events: [{ op: 'log', level: 'info', text: '一' }] };
+    useRunStore.getState().own('r_1');
+    useRunStore.getState().apply(batch);
+    useRunStore.getState().applyProject(batch);
+
+    expect(useRunStore.getState().logs.map((l) => l.text)).toEqual(['一']);
+  });
+
+  it('沒有人接著的那些照樣進來——那正是這條通道的工作', () => {
+    // hat 觸發的 Run：前端沒有那個 runId，接不上 `/ws/run`（D33）。
+    useRunStore.getState().own('r_1');
+    useRunStore.getState().applyProject({
+      runId: 'r_2',
+      events: [{ op: 'log', level: 'info', text: '外面來的' }],
+    });
+
+    const s = useRunStore.getState();
+    expect(s.runId).toBe('r_2');
+    expect(s.logs.map((l) => l.text)).toEqual(['外面來的']);
   });
 
   it('第一批被丟過（少了 run.start）也照樣認得出是新的 Run', () => {

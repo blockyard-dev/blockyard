@@ -12,7 +12,7 @@
 
 ```
 cd backend && .venv/bin/python -m pytest      # 1052 passed, 5 skipped
-cd packages/editor && npm run check           # 498 passed（24 檔）+ tsc 乾淨
+cd packages/editor && npm run check           # 508 passed（25 檔）+ tsc 乾淨
 ```
 
 > **改了 `extensions/` 就要跑不帶參數的 `pytest`**（`testpaths` 同時收 `tests`
