@@ -15,12 +15,12 @@ node_modules/
 .vite/
 *.tsbuildinfo
 
-# Blocky runtime data
+# Blockyard runtime data
 *.db
 *.db-journal
 *.sqlite3
 extensions/*/.venv/
-.blocky/
+.blockyard/
 
 # Secrets — 絕不進版控
 .env
@@ -32,3 +32,6 @@ extensions/*/.venv/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Claude Code 本機設定，不是專案內容
+.claude/

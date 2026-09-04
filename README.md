@@ -1,4 +1,4 @@
-# Blocky Workflow
+# Blockyard Workflow
 
 Scratch 風格的積木編輯器，組出會做真事的自動化流程：HTTP、Discord、LLM、檔案。
 
@@ -14,17 +14,17 @@ Scratch 風格的積木編輯器，組出會做真事的自動化流程：HTTP�
 
 | 模組 | 狀態 |
 |---|---|
-| `blocky/ir/values.py` | 值模型與轉換（§4.3、D15 的 IEEE754 語意） |
-| `blocky/ir/template.py` | `${}` 插值解析與求值（§4.7、D9） |
-| `blocky/ir/expression.py` | 運算積木的算術文法（§4.7b、D23） |
-| `blocky/ir/schema.py` | IR 的 pydantic 模型與載入期驗證（§4.1、§4.2、D20 的形狀） |
-| `blocky/interpreter/` | tree-walking 直譯器 + 90 顆內建積木（`builtins/*.py` 實作、`builtins/*.yaml` 宣告，D21） |
-| `blocky/extensions/` | Host 邊界（§7.5）、manifest schema、`InProcessHost` 與 **`SubprocessHost`**（雙向 JSON-RPC、`uv venv` 依賴隔離）、keyring |
-| `blocky/runs/` | Run 生命週期、WebSocket 事件、§6.2 的批次與聚合、停止、**hat 的監聽**（§9 的前身） |
+| `blockyard/ir/values.py` | 值模型與轉換（§4.3、D15 的 IEEE754 語意） |
+| `blockyard/ir/template.py` | `${}` 插值解析與求值（§4.7、D9） |
+| `blockyard/ir/expression.py` | 運算積木的算術文法（§4.7b、D23） |
+| `blockyard/ir/schema.py` | IR 的 pydantic 模型與載入期驗證（§4.1、§4.2、D20 的形狀） |
+| `blockyard/interpreter/` | tree-walking 直譯器 + 90 顆內建積木（`builtins/*.py` 實作、`builtins/*.yaml` 宣告，D21） |
+| `blockyard/extensions/` | Host 邊界（§7.5）、manifest schema、`InProcessHost` 與 **`SubprocessHost`**（雙向 JSON-RPC、`uv venv` 依賴隔離）、keyring |
+| `blockyard/runs/` | Run 生命週期、WebSocket 事件、§6.2 的批次與聚合、停止、**hat 的監聽**（§9 的前身） |
 | `extensions/` | 三個手寫積木包：`http`（httpx，由 host 提供）、`openai`（官方 SDK）、`discord`（discord.py，含長連線 trigger） |
-| `blocky/api/` | FastAPI：`/api/projects`、`/api/extensions`、`/api/runs`、`/ws/run/{id}`（附錄 A） |
-| `blocky/storage/` | SQLite 專案表 |
-| `blocky/cli.py` | `blocky serve` |
+| `blockyard/api/` | FastAPI：`/api/projects`、`/api/extensions`、`/api/runs`、`/ws/run/{id}`（附錄 A） |
+| `blockyard/storage/` | SQLite 專案表 |
+| `blockyard/cli.py` | `blockyard serve` |
 | `tests/conformance/` | §17 一致性題庫，87 題 |
 | `packages/shared-schema/` | 由 pydantic 匯出的 IR 與 manifest JSON Schema |
 | `packages/editor/` | Blockly zelos 工作區、manifest → 積木的動態註冊（§8.1）、IR ↔ Blockly 雙向轉換（§8.4）、`FieldText`（§8.5）、執行時的視覺回饋（§8.3） |
@@ -37,15 +37,15 @@ Scratch 風格的積木編輯器，組出會做真事的自動化流程：HTTP�
 
 ```bash
 cd packages/editor && npm install && npm run build
-cd ../../backend && .venv/bin/python -m blocky.cli serve
+cd ../../backend && .venv/bin/python -m blockyard.cli serve
 ```
 
-`blocky serve` 會把 `packages/editor/dist/` 掛在 `/` 上，自動開瀏覽器。
+`blockyard serve` 會把 `packages/editor/dist/` 掛在 `/` 上，自動開瀏覽器。
 
 開發時分成兩個 process（前端有 HMR，dev server 把 `/api` 代理到 8787）：
 
 ```bash
-cd backend && .venv/bin/python -m blocky.cli serve --no-open   # :8787
+cd backend && .venv/bin/python -m blockyard.cli serve --no-open   # :8787
 cd packages/editor && npm run dev                              # :5173
 ```
 
@@ -71,7 +71,7 @@ uv pip install -e ".[dev]"
 .venv/bin/python tests/gen_corpus.py --check  # 只驗證題庫的 expect 斷言
 .venv/bin/python tests/gen_corpus.py          # 重新產生 fixture 與黃金軌跡
 .venv/bin/python tools/export_schema.py       # 重新匯出 IR 與 manifest JSON Schema
-.venv/bin/python -m blocky.cli serve          # 起 API（預設 127.0.0.1:8787）
+.venv/bin/python -m blockyard.cli serve          # 起 API（預設 127.0.0.1:8787）
 ```
 
 ---
