@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from blocky.storage import LOCAL_OWNER, ProjectStore
+from blockyard.storage import LOCAL_OWNER, ProjectStore
 
 
 def store(tmp_path: Path) -> ProjectStore:
-    return ProjectStore(tmp_path / "blocky.db")
+    return ProjectStore(tmp_path / "blockyard.db")
 
 
 def test_put_then_get_returns_the_same_json(tmp_path: Path) -> None:
@@ -52,6 +52,6 @@ def test_missing_project_is_none_and_delete_reports_it(tmp_path: Path) -> None:
 
 
 def test_store_creates_its_directory(tmp_path: Path) -> None:
-    """`blocky serve` 第一次跑時 `~/.blocky/` 還不存在。"""
-    ProjectStore(tmp_path / "a" / "b" / "blocky.db")
-    assert (tmp_path / "a" / "b" / "blocky.db").exists()
+    """`blockyard serve` 第一次跑時 `~/.blockyard/` 還不存在。"""
+    ProjectStore(tmp_path / "a" / "b" / "blockyard.db")
+    assert (tmp_path / "a" / "b" / "blockyard.db").exists()

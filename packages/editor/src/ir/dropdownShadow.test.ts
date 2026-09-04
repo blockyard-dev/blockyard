@@ -6,7 +6,7 @@
  * 錯的是**那一格的樣子**——所以上一輪在瀏覽器裡驗的那句「選 POST → 存檔 →
  * 重新整理 → 值還在」剛好驗不到它。
  *
- * 成因：`shadowKindOf('blocky.shadow.dropdown#…')` 回 `null`，而
+ * 成因：`shadowKindOf('blockyard.shadow.dropdown#…')` 回 `null`，而
  * `deserialize.ts::buildShadowState` 拿它跟 `kindOfValue('POST')`（`'text'`）
  * 比對，對不上就退回 `DEFAULT_SHADOWS.text`。存檔那一半一直是好的：
  * `readShadowValue` 認不出種類時會掉進文字分支，字串照樣寫出去。
@@ -32,7 +32,7 @@ import { buildContext, type ConversionContext } from './context';
 import { loadProject } from './deserialize';
 import { serializeWorkspace } from './serialize';
 import type { Manifest } from '../types/manifest';
-import type { BlockyProjectIR as ProjectIR } from '../types/project';
+import type { BlockyardProjectIR as ProjectIR } from '../types/project';
 
 const HTTP_MANIFEST = resolve(
   dirname(fileURLToPath(import.meta.url)),

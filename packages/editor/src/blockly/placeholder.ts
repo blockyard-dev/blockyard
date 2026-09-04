@@ -37,14 +37,14 @@
  *     用到哪些包」，而佔位符的包**照定義就是查不到的那一個**。
  */
 import * as Blockly from 'blockly/core';
-import type { Block as IRBlock, BlockyProjectIR as ProjectIR } from '../types/project';
+import type { Block as IRBlock, BlockyardProjectIR as ProjectIR } from '../types/project';
 import type { ConversionContext } from '../ir/context';
 
 /** 佔位符把原始 `mutation` 藏在這個 key 底下（`extraState`）。 */
-export const PLACEHOLDER_MUTATION = 'blockyUnknownMutation';
+export const PLACEHOLDER_MUTATION = 'blockyardUnknownMutation';
 
 /** 佔位符積木身上的警告 id（與 `checks.ts` 的 `CHECK_PREFIX` 分開）。 */
-export const PLACEHOLDER_WARNING = 'blocky-unknown';
+export const PLACEHOLDER_WARNING = 'blockyard-unknown';
 
 /**
  * 這一輪註冊過的佔位符 type。
@@ -198,7 +198,7 @@ function define(opcode: string, usage: Usage): void {
       // **不自己畫驚嘆號**：`setWarningText` 已經在積木左上角放了一個，而且那個
       // 點得下去、說得出原因。兩個並排（`⚠ ⚠ ghost.send`）只是看起來壞掉。
       this.appendDummyInput().appendField(
-        new Blockly.FieldLabel(opcode, 'blocky-unknown-opcode'),
+        new Blockly.FieldLabel(opcode, 'blockyard-unknown-opcode'),
       );
 
       // 欄位用 serializable 的 label：**畫面上讀得到、存回去也還在**，但不能
@@ -224,13 +224,13 @@ function define(opcode: string, usage: Usage): void {
 
     /** `mutation` Blockly 不認識，只有 `extraState` 這條路存得回去。 */
     saveExtraState(this: Blockly.Block) {
-      const kept = (this as unknown as { blockyMutation?: unknown }).blockyMutation;
+      const kept = (this as unknown as { blockyardMutation?: unknown }).blockyardMutation;
       return kept == null ? null : { [PLACEHOLDER_MUTATION]: kept };
     },
 
     loadExtraState(this: Blockly.Block, state: unknown) {
       const kept = (state as Record<string, unknown> | null)?.[PLACEHOLDER_MUTATION];
-      (this as unknown as { blockyMutation?: unknown }).blockyMutation = kept ?? null;
+      (this as unknown as { blockyardMutation?: unknown }).blockyardMutation = kept ?? null;
     },
   };
 }

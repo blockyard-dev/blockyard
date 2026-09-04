@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as Blockly from 'blockly/core';
 import { ChevronLeft, ChevronRight, Trash2, X } from 'lucide-react';
-import { blockyTheme, muteWorkspace } from '../blockly/theme';
+import { blockyardTheme, muteWorkspace } from '../blockly/theme';
 import {
   DECLARATION_TYPE,
   buildDeclaration,
@@ -75,7 +75,7 @@ const VALUE_TYPES: { value: ParamType; label: string }[] = [
 
 const WORKSPACE_OPTIONS: Partial<Blockly.BlocklyOptions> = {
   renderer: 'zelos',
-  theme: blockyTheme,
+  theme: blockyardTheme,
   media: 'media/',
   sounds: false,
   trashcan: false,
@@ -533,7 +533,7 @@ function AdderButton({
  */
 const TYPE_ITEMS = VALUE_TYPES;
 
-const MENU_PREFIX = 'blocky_declaration_';
+const MENU_PREFIX = 'blockyard_declaration_';
 
 /**
  * 預覽積木上的右鍵選單：刪掉這一格、換型別。

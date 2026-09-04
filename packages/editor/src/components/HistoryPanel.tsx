@@ -139,9 +139,15 @@ export function HistoryPanel({ projectId, onClose }: { projectId: string; onClos
             {runs.map((run) => (
               <li key={run.runId}>
                 <button type="button" className="history-row" onClick={() => setSelected(run)}>
-                  <span className={`history-status history-status-${run.status}`}>
-                    {STATUS_TEXT[run.status] ?? run.status}
-                  </span>
+                  {/* 一顆點，不是一個詞（見 `index.css`）。`role="img"` +
+                      `aria-label` 讓那個詞留在無障礙樹上——這一格是這一列唯一
+                      說得出「它跑成功了沒有」的東西，不能只剩顏色。 */}
+                  <span
+                    className={`history-status history-status-${run.status}`}
+                    role="img"
+                    aria-label={STATUS_TEXT[run.status] ?? run.status}
+                    title={STATUS_TEXT[run.status] ?? run.status}
+                  />
                   <span className="history-main">
                     <span className="history-trigger">{triggerLabel(run)}</span>
                     <span className="history-time">
@@ -222,7 +228,11 @@ function RunDetail({ run, onBack }: { run: RunSummary; onBack: () => void }) {
       )}
 
       {more !== null && (
-        <button type="button" className="button" onClick={() => void loadFrom(more)}>
+        <button
+          type="button"
+          className="button history-more"
+          onClick={() => void loadFrom(more)}
+        >
           載入更多
         </button>
       )}

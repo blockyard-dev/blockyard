@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from blocky.runs.recorder import STORED_OPS, RunRecorder
-from blocky.storage import RunStore
+from blockyard.runs.recorder import STORED_OPS, RunRecorder
+from blockyard.storage import RunStore
 
 
 def store(tmp_path: Path) -> RunStore:
-    s = RunStore(tmp_path / "blocky.db")
+    s = RunStore(tmp_path / "blockyard.db")
     s.start("r_1", seq=1, project_id="p1", trigger="flag", started_at="2026-09-01T00:00:00.000Z")
     return s
 

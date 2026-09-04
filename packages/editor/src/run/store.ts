@@ -47,6 +47,22 @@ export interface LogLine {
 /** §8.2：log buffer 上限 5000 筆，環形。 */
 const LOG_LIMIT = 5000;
 
+/**
+ * 一格宣告面板留幾則訊息。
+ *
+ * 這份記錄的用途是**重播**：(a) 路線把面板的狀態放在瀏覽器，而 iframe 換分頁或
+ * 搬進彈出視窗一定會重載（規格）。重播讓那件事不痛，同時解掉「面板還沒開就先
+ * 送」——一個 outbox，`ready` 之後沖出去。
+ *
+ * 有上限，因為它是一個 `重複 10000 次` 就會長到一萬則的東西。丟最舊的，於是
+ * 重播出來的是「最近這幾則」——而那正是 §6.2 那條規則的形狀：丟掉可以，靜靜地
+ * 丟掉不行（丟了就標 `truncated`，畫面上會說）。
+ *
+ * 這個數字比「一次執行畫幾個點」要大一個級距，因為**它跨 Run 累積**（見
+ * `emptyRun` 的說明）：一次 60 點的圖跑十次就是 600 則。
+ */
+const OUTBOX_LIMIT = 2000;
+
 export type RunStatus = 'idle' | 'starting' | 'running' | RunEndStatus;
 
 interface RunState {
@@ -63,6 +79,13 @@ interface RunState {
   message: string | null;
   blocks: Map<string, BlockState>;
   variables: Map<string, unknown>;
+  /**
+   * 積木包**宣告**的面板收到的訊息，`extId/panelId` → 這次 Run 的全部訊息。
+   *
+   * key 是 `extId/panelId`，也就是 manifest 宣告的那一格。**分頁是宣告出來
+   * 的**，所以這份 Map 的鍵不會憑空長出新的一個。
+   */
+  extPanels: Map<string, { messages: unknown[]; truncated: boolean }>;
   logs: LogLine[];
   /** 後端因為前端跟不上而丟掉的事件數（§6.2）。>0 代表畫面不完整。 */
   dropped: number;
@@ -74,9 +97,24 @@ interface RunState {
   fail(message: string): void;
   apply(frame: RunFrame): void;
   applyProject(frame: ProjectFrame): void;
+  /** 這次 Run 送給某一格面板的訊息記錄有沒有被截掉（`OUTBOX_LIMIT`）。 */
+  panelTruncated(key: string): boolean;
   finish(status: RunEndStatus, message?: string): void;
 }
 
+/**
+ * 按下執行時要清掉的那些。
+ *
+ * **`extPanels` 不在裡面。** 面板跨 Run 累積，清空由使用者拉一顆 `清空圖表`
+ * 明確要求——理由是 §5.1 的「點一下就跑」：每次執行都清的話，點一顆
+ * `加一個點` 就只會看到一個點，那顆積木等於不能單獨點，而單獨點正是那條規則
+ * 存在的意義。
+ *
+ * 它也才是 (a) 那條路一致的樣子：**面板的狀態在瀏覽器**，Python 只是資料來源。
+ * 在這裡清掉等於把「面板是 Run 的產物」偷偷帶回來——而那時候 iframe 裡的畫面
+ * 並不會跟著清，於是**切一下分頁（重掛、重播）畫面就會少掉前幾次的東西**：
+ * 同一份資料，看你有沒有切過分頁而不一樣。
+ */
 function emptyRun() {
   return {
     blocks: new Map<string, BlockState>(),
@@ -94,12 +132,32 @@ export const useRunStore = create<RunState>((set, get) => ({
   runId: null,
   ownedRunId: null,
   status: 'idle',
+  // 跨 Run 活著，所以不在 `emptyRun()` 裡（見那份說明）。清空的入口有兩個：
+  // 使用者拉的 `清空圖表` 積木，以及整頁重新整理。
+  extPanels: new Map<string, { messages: unknown[]; truncated: boolean }>(),
   ...emptyRun(),
 
   /** 按下執行的那一刻：上一次的高亮、值氣泡、log 全部清掉。 */
   begin: () => set({ runId: null, status: 'starting', ...emptyRun() }),
 
-  attach: (run) => set({ runId: run.runId, status: 'running' }),
+  /**
+   * `POST /api/runs` 回來了：這個 Run 是我們的。
+   *
+   * **但它可能已經結束了。** 監聽開著時「點一下就跑」不開 run 通道（D33），
+   * 事件走專案通道——而一次 1 毫秒的 Run 比一趟 HTTP 往返快得多，所以
+   * `run.start` 與 `run.end` 常常在 POST 回來**之前**就到齊了。無條件寫
+   * `running` 就是把一個終局推回「執行中」，而那個 Run 不會再有任何事件來把它
+   * 關掉——症狀是按鈕永遠停在「停止」，而後端那一列寫著 ok。
+   *
+   * 判斷用「這一格的狀態是什麼」而不是「剛剛發生了什麼」（PROGRESS 第 12 條）：
+   * 同一個 runId 已經是終局就什麼都不動。
+   */
+  attach: (run) =>
+    set((s) =>
+      s.runId === run.runId && s.status !== 'starting' && s.status !== 'running'
+        ? {}
+        : { runId: run.runId, status: 'running' },
+    ),
 
   /**
    * 「這個 Run 的事件由 run 通道送」，`null` = 沒有人接著。
@@ -110,6 +168,8 @@ export const useRunStore = create<RunState>((set, get) => ({
   own: (runId) => set({ ownedRunId: runId }),
 
   fail: (message) => set({ status: 'error', message }),
+
+  panelTruncated: (key) => get().extPanels.get(key)?.truncated ?? false,
 
   /**
    * 專案通道送來的一批（§9）。`runId` 換人就先清空再套用。
@@ -148,6 +208,7 @@ export const useRunStore = create<RunState>((set, get) => ({
     set((state) => {
       const blocks = new Map(state.blocks);
       const variables = new Map(state.variables);
+      let extPanels = state.extPanels;
       const threads = new Map(state.threads);
       let logs = state.logs;
       let status = state.status;
@@ -214,6 +275,18 @@ export const useRunStore = create<RunState>((set, get) => ({
           case 'log':
             logs = append(logs, { level: event.level, text: event.text, blockId: event.blockId });
             break;
+          case 'ext.panel': {
+            const key = `${event.extId}/${event.panelId}`;
+            const prev = extPanels.get(key);
+            const messages = [...(prev?.messages ?? []), event.payload];
+            const over = messages.length > OUTBOX_LIMIT;
+            extPanels = new Map(extPanels);
+            extPanels.set(key, {
+              messages: over ? messages.slice(messages.length - OUTBOX_LIMIT) : messages,
+              truncated: (prev?.truncated ?? false) || over,
+            });
+            break;
+          }
         }
       }
 
@@ -224,6 +297,7 @@ export const useRunStore = create<RunState>((set, get) => ({
           // 發光——看起來像卡住了。
           status === 'running' || status === 'starting' ? blocks : settle(blocks),
         variables,
+        extPanels,
         threads,
         logs,
         status,

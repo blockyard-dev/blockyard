@@ -42,7 +42,7 @@ export type BlockType = string;
  *
  * extension 沒有這個問題：它在**每一顆**積木的 init 時跑。
  */
-const HAT_EXTENSION = 'blocky_start_hat';
+const HAT_EXTENSION = 'blockyard_start_hat';
 
 function registerHatExtension(): void {
   if (Blockly.Extensions.isRegistered(HAT_EXTENSION)) return;
@@ -73,12 +73,12 @@ const ARG_REF = /%\((\w+)\)/g;
  * 編輯」，不是「這裡只能是字串」），而是讓影子的型別跟著**值**走，再給一個
  * 右鍵切換（見 `fields/FieldText.ts` 的 `LITERAL_ITEMS`）。
  */
-export const SHADOW_TEXT = 'blocky.shadow.text';
-export const SHADOW_NUMBER = 'blocky.shadow.number';
-export const SHADOW_BOOLEAN = 'blocky.shadow.boolean';
-export const SHADOW_NULL = 'blocky.shadow.null';
+export const SHADOW_TEXT = 'blockyard.shadow.text';
+export const SHADOW_NUMBER = 'blockyard.shadow.number';
+export const SHADOW_BOOLEAN = 'blockyard.shadow.boolean';
+export const SHADOW_NULL = 'blockyard.shadow.null';
 /** 動態下拉的影子（D22）。永遠帶 `#${blockType}.${name}` 後綴，見 `shadowFor`。 */
-export const SHADOW_DROPDOWN = 'blocky.shadow.dropdown';
+export const SHADOW_DROPDOWN = 'blockyard.shadow.dropdown';
 
 /** 一顆字面值影子代表的 JSON 型別。 */
 export type ShadowKind = 'text' | 'number' | 'boolean' | 'null';
@@ -87,7 +87,7 @@ export type ShadowKind = 'text' | 'number' | 'boolean' | 'null';
  * 影子的 Blockly type → 它代表的型別。認不得就回 `null`（不是字面值影子）。
  *
  * 用 `startsWith` 是因為宣告了修飾欄位的參數會拿到專屬影子
- * （`blocky.shadow.number#control.repeat.times`，見 `shadowFor`）——那仍然是
+ * （`blockyard.shadow.number#control.repeat.times`，見 `shadowFor`）——那仍然是
  * 一顆數字影子。
  */
 export function shadowKindOf(type: string): ShadowKind | null {
@@ -468,7 +468,7 @@ function buildMessage(
     if (!arg) {
       // manifest 參照了不存在的參數。後端的 §8.1 一致性測試守的是參數名對不
       // 上，這裡守的是 `text` 對不上——原樣印出來比默默吞掉好查。
-      console.warn(`[blocky] ${blockType} 的 text 參照了未宣告的參數 ${name}`);
+      console.warn(`[blockyard] ${blockType} 的 text 參照了未宣告的參數 ${name}`);
       return whole;
     }
     consumed.add(name);

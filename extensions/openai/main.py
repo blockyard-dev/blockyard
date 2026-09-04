@@ -22,7 +22,7 @@
 import openai
 from openai import AsyncOpenAI
 
-from blocky import BlockError, block, dropdown
+from blockyard import BlockError, block, dropdown
 
 # 策展清單，不是即時打 `GET /v1/models`。理由跟 §7.1「不打真 API」一致：一份
 # 會因為上游多上架一顆模型就變長的下拉，等於把「選哪一顆」這個決定丟回給使用

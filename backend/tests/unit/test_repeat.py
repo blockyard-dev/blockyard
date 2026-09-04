@@ -7,10 +7,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from blocky.errors import ValidationError
-from blocky.extensions.manifest import BlockSpec
-from blocky.interpreter import declarations
-from blocky.repeat import count_of, validate_blocks
+from blockyard.errors import ValidationError
+from blockyard.extensions.manifest import BlockSpec
+from blockyard.interpreter import declarations
+from blockyard.repeat import count_of, validate_blocks
 
 
 def spec(**over: Any) -> BlockSpec:
@@ -217,10 +217,10 @@ def chain_project(*, repeat: int, complete: bool = True) -> dict[str, Any]:
 
 @pytest.fixture
 def client(tmp_path: Any) -> Any:
-    from blocky.api.app import create_app
-    from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
+    from blockyard.api.app import create_app
+    from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
 
-    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
     with TestClient(app) as c:
         yield c
 

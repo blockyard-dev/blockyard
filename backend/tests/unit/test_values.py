@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from blocky.errors import BadIndexError, TypeCoercionError
-from blocky.ir.values import (
+from blockyard.errors import BadIndexError, TypeCoercionError
+from blockyard.ir.values import (
     can_cast,
     is_empty,
     is_type,

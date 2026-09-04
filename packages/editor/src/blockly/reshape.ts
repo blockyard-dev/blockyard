@@ -23,7 +23,7 @@ import type { Procedure } from '../types/project';
 type BlockState = Blockly.serialization.blocks.State;
 
 /** 孤兒警告的 id。清除一律帶 id——不帶的 `setWarningText(null)` 是拆掉整顆圖示。 */
-export const ORPHAN_WARNING_ID = 'blocky-orphan';
+export const ORPHAN_WARNING_ID = 'blockyard-orphan';
 
 const ORPHAN_MESSAGE = '這顆積木原本插在被改掉的那一格裡。它沒有被刪除——接到別的地方，或自己刪掉它。';
 

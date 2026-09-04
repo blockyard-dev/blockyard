@@ -2,7 +2,7 @@
 
 三條驗收線：
 
-  1. app 起得來（`blocky serve` 的實質內容）
+  1. app 起得來（`blockyard serve` 的實質內容）
   2. 題庫的 `project.json` PUT 進去再 GET 回來**內容等價**——不掉欄位、不改 blockId
   3. 壞的 IR 回 422 且訊息指名 blockId——也就是存檔時就跑 §4 的載入期驗證
 
@@ -19,15 +19,15 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from blocky.api.app import create_app
-from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.api.app import create_app
+from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
 
 CORPUS = Path(__file__).parents[1] / "conformance"
 
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
-    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
     return TestClient(app)
 
 
@@ -274,7 +274,7 @@ def test_garbage_body_is_422_not_500(client: TestClient) -> None:
 
 def test_extensions_include_builtins_marked_as_such(client: TestClient) -> None:
     """D21：內建與積木包從同一個端點吐出，格式一模一樣。"""
-    from blocky.interpreter import declarations
+    from blockyard.interpreter import declarations
 
     body = client.get("/api/extensions").json()
     by_id = {m["id"]: m for m in body}
@@ -317,3 +317,175 @@ def test_static_dropdown_options_are_declared(client: TestClient) -> None:
     color_of = block_of(by_id["demo"], "color_of")
     assert color_of["args"]["fruit"]["source"] == "list_fruits"
     assert "options" not in color_of["args"]["fruit"]
+
+
+# --------------------------------------------------------------------------
+# 面板的靜態檔（§8.3、§16 Q17 的 B 路線）
+#
+# 這個端點是「積木包可以把 bytes 交給瀏覽器」的唯一入口，所以它的守衛就是那件
+# 事的全部守衛。每一條都值一題。
+# --------------------------------------------------------------------------
+
+
+def test_面板的_entry_送得出來(client: TestClient) -> None:
+    r = client.get("/api/extensions/demo/asset/ui/index.html")
+
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    # 從內容猜型別是這條路上最容易被繞過的一格。
+    assert r.headers["x-content-type-options"] == "nosniff"
+
+
+def test_子資源也送得出來(client: TestClient) -> None:
+    """sandbox 的 opaque origin 底下，相對路徑的 <link> 與 <script> 仍然要載得起來
+    ——不然多檔案的面板（vendored three.js 之類）整條不成立。"""
+    assert client.get("/api/extensions/demo/asset/ui/panel.css").status_code == 200
+    assert client.get("/api/extensions/demo/asset/ui/panel.js").status_code == 200
+
+
+def test_content_type_只認白名單(client: TestClient) -> None:
+    """副檔名認不得就 404，不猜一個型別送出去。"""
+    r = client.get("/api/extensions/demo/asset/main.py")
+
+    assert r.status_code == 404
+    assert "不能載" in r.json()["detail"]
+
+
+def test_跳不出積木包的資料夾(client: TestClient) -> None:
+    """字串規則在 manifest 那層擋過，這裡擋的是 HTTP 來的路徑——面板的子資源
+    是瀏覽器自己去要的，不經過任何宣告。"""
+    r = client.get("/api/extensions/demo/asset/../../http/main.py")
+
+    # 有些 client 會先正規化掉 `..`，所以兩種結局都算擋住了（重點是拿不到檔案）。
+    assert r.status_code == 404
+
+
+def test_沒宣告面板的包沒有這條路(client: TestClient) -> None:
+    """端點的開關就是 `panels` 宣告。沒宣告面板的包不該有一條把檔案送出去的
+    路——那是「哪些包可以送 bytes」唯一說得出口的地方。"""
+    r = client.get("/api/extensions/http/asset/main.py")
+
+    assert r.status_code == 404
+    assert "沒有面板" in r.json()["detail"]
+
+
+# --------------------------------------------------------------------------
+# 封面（§8.1、D31）
+#
+# 它刻意不共用上面那條 `/asset/{path}`：那個端點只開給宣告過 `panels` 的包，而
+# 封面是每個包都該有的東西。這裡的題目就是「多開一條路沒有把上面那道門打開」。
+# --------------------------------------------------------------------------
+
+
+def test_封面送得出來(client: TestClient) -> None:
+    r = client.get("/api/extensions/demo/cover")
+
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"
+    assert r.headers["x-content-type-options"] == "nosniff"
+
+
+def test_封面留得住(client: TestClient) -> None:
+    """`no-cache` 而不是 `no-store`。
+
+    差別是「留著、用之前先問一下」與「不准留」——後者的症狀是每次打開擴充功能
+    面板都把每張封面重抓一次，而且第十次跟第一次一樣慢。ETag 一起送，所以那一
+    句「問一下」的答案是 304。
+    """
+    r = client.get("/api/extensions/demo/cover")
+
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.headers.get("etag")
+
+    again = client.get("/api/extensions/demo/cover", headers={"If-None-Match": r.headers["etag"]})
+    assert again.status_code == 304
+
+
+def test_沒有面板的包也有封面(client: TestClient) -> None:
+    """封面與 `panels` 無關——`http` 沒有面板，但它在擴充功能面板上一樣有一張卡。"""
+    assert client.get("/api/extensions/http/cover").status_code == 200
+    # 而那道門沒有因此被打開：它仍然拿不到自己的任何一個檔案。
+    assert client.get("/api/extensions/http/asset/main.py").status_code == 404
+
+
+def test_封面端點不吃路徑(client: TestClient) -> None:
+    """路徑由 manifest 決定，request 一個字都不帶——所以這裡沒有可以被塞
+    `../` 的地方，多出來的那一段只會變成一條不存在的 route。"""
+    assert client.get("/api/extensions/demo/cover/../main.py").status_code == 404
+
+
+def test_沒宣告封面就是_404(client: TestClient) -> None:
+    r = client.get("/api/extensions/沒這個包/cover")
+
+    assert r.status_code == 404
+    assert "沒有封面" in r.json()["detail"]
+
+
+def test_封面宣告出現在_api_extensions_上(client: TestClient) -> None:
+    """前端靠它決定那格畫圖還是畫名字的第一個字。"""
+    demo = next(g for g in client.get("/api/extensions").json() if g["id"] == "demo")
+
+    assert demo["cover"] == "preview.png"
+
+
+def test_面板宣告出現在_api_extensions_上(client: TestClient) -> None:
+    """前端要靠它決定分頁列上有哪幾格——分頁是**宣告**出來的，不是資料生出來的。"""
+    demo = next(g for g in client.get("/api/extensions").json() if g["id"] == "demo")
+
+    assert demo["panels"] == [{"id": "demo", "name": "示範面板", "entry": "ui/index.html"}]
+
+
+def test_csp_用編輯器報上來的_origin(client: TestClient) -> None:
+    """後端算不出瀏覽器用的是哪個 origin：dev 下瀏覽器載的是 5173（Vite 代理），
+    後端看到的是被代理之後的自己。用錯的話症狀是**整格面板一片空白**。"""
+    r = client.get(
+        "/api/extensions/demo/asset/ui/index.html", params={"embed": "http://localhost:5173"}
+    )
+
+    csp = r.headers["content-security-policy"]
+    assert "default-src http://localhost:5173" in csp
+    # `'self'` 在 opaque origin 下匹配不到自己的 panel.js。
+    assert "'self'" not in csp
+    # 面板連不出去：要打網路是 Python 那側的事，受 `permissions: [net]` 管。
+    assert "connect-src 'none'" in csp
+
+
+def test_csp_沒有_frame_ancestors(client: TestClient) -> None:
+    """它擋的是「別的頁面嵌這格面板」，而後端只綁 127.0.0.1（§12.1）。留著它
+    換來的是「值只要有一點不對，面板就整格不見」——第一次踩到的訊息是
+    「localhost 拒絕連線」，而那看起來完全不像 CSP。"""
+    csp = client.get("/api/extensions/demo/asset/ui/index.html").headers["content-security-policy"]
+
+    assert "frame-ancestors" not in csp
+
+
+def test_embed_是_header_注入的入口_要驗(client: TestClient) -> None:
+    """這個值原樣進到一個 response header，而 CSP 是用分號分段的。認不得就退回
+    後端自己的 origin，不是原樣放行。"""
+    csp = client.get(
+        "/api/extensions/demo/asset/ui/index.html",
+        params={"embed": "http://x; connect-src *"},
+    ).headers["content-security-policy"]
+
+    assert "connect-src 'none'" in csp
+    assert "connect-src *" not in csp
+
+
+def test_子資源不帶_csp(client: TestClient) -> None:
+    """CSP 管的是**文件**能載什麼。掛在每個 .js 上不會多擋到任何東西，只會讓
+    「這條規則從哪裡來的」多幾個要查的地方。"""
+    r = client.get("/api/extensions/demo/asset/ui/panel.js")
+
+    assert "content-security-policy" not in r.headers
+
+
+def test_面板的檔案帶_cors(client: TestClient) -> None:
+    """面板是 opaque origin，所以它拿**自己的**檔案也算跨來源。
+
+    `<script type="module">` 的抓取一律走 CORS（classic script 不會），
+    `@font-face` 與 `fetch` 也是。少了這一行的症狀是「HTML 與 CSS 都到了、JS 沒
+    跑起來」——因為 `<link rel=stylesheet>` 是 no-cors，進得來。
+    """
+    for path in ("ui/index.html", "ui/panel.js", "ui/panel.css"):
+        r = client.get(f"/api/extensions/demo/asset/{path}")
+        assert r.headers["access-control-allow-origin"] == "*", path

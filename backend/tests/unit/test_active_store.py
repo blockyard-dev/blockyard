@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from blocky.storage import ActiveStore
+from blockyard.storage import ActiveStore
 
 
 def store(tmp_path: Path) -> ActiveStore:
-    return ActiveStore(tmp_path / "blocky.db")
+    return ActiveStore(tmp_path / "blockyard.db")
 
 
 def test_activate_then_survives_a_restart(tmp_path: Path) -> None:
@@ -51,9 +51,9 @@ def test_list_is_oldest_first(tmp_path: Path) -> None:
 def test_active_is_not_part_of_the_project_json(tmp_path: Path) -> None:
     """塞進 IR 的話，匯出一份專案再匯入到別人的機器上會連同「開著」一起搬
     過去——而那台機器並沒有同意跑任何東西。這裡確認它是自己一張表。"""
-    from blocky.storage import ProjectStore
+    from blockyard.storage import ProjectStore
 
-    p = ProjectStore(tmp_path / "blocky.db")
+    p = ProjectStore(tmp_path / "blockyard.db")
     p.put("p1", {"meta": {"name": "x"}})
     store(tmp_path).activate("p1")
 

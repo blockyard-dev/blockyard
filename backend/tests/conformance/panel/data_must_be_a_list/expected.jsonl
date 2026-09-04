@@ -1,0 +1,6 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_2", "error": {"type": "ExtensionError", "code": "extension", "message": "積木包「面板」的 panel.line_chart 的參數 data 需要清單，收到文字", "blockId": "blk_2", "hint": "是不是需要先用「解析 JSON」？"}}
+{"op": "thread.end", "threadId": "t1", "status": "error"}
+{"op": "run.end", "runId": "r1", "status": "error"}

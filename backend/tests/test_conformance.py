@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from blocky.conformance import check, diff_trace, read_case, run_case
+from blockyard.conformance import check, diff_trace, read_case, run_case
 
 ROOT = Path(__file__).parent / "conformance"
 

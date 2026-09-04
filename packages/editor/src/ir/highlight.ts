@@ -61,7 +61,7 @@ export interface AnalyzeOptions {
 /**
  * 出現在 `${}` 的**名稱**片段裡即判定為運算式的字元（D9 的防線）。
  *
- * 與 `blocky/ir/template.py::_EXPRESSION_CHARS` 逐字元相同。`[...]` 的內容
+ * 與 `blockyard/ir/template.py::_EXPRESSION_CHARS` 逐字元相同。`[...]` 的內容
  * 不走這條檢查——那裡由索引規則自己擋，所以 `items[-1]` 的負號不會被誤判
  * 成減法。
  */

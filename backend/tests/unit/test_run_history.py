@@ -13,13 +13,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from blocky.api.app import create_app
-from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
-from blocky.storage import INTERRUPTED, RunStore
+from blockyard.api.app import create_app
+from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.storage import INTERRUPTED, RunStore
 
 
 def app_for(tmp_path: Path) -> Any:
-    return create_app(db_path=tmp_path / "blocky.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    return create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ def test_run_ids_do_not_repeat_after_a_restart(tmp_path: Path) -> None:
 def test_a_killed_run_is_marked_interrupted_not_cancelled(tmp_path: Path) -> None:
     """後端被砍時還在跑的 Run。`cancelled` 是使用者按了停止，是一個有人做過
     的決定；這個是沒有人知道它跑到哪裡。"""
-    store = RunStore(tmp_path / "blocky.db")
+    store = RunStore(tmp_path / "blockyard.db")
     store.start("r_1", seq=1, project_id="p1", trigger="flag", started_at="2026-09-01T00:00:00Z")
 
     with TestClient(app_for(tmp_path)) as c:
@@ -246,4 +246,4 @@ def test_persist_survives_a_restart(tmp_path: Path) -> None:
 
     with TestClient(app_for(tmp_path)) as c:
         wait_done(c, save_and_run(c, persist_project()))
-        assert RunStore(tmp_path / "blocky.db").persist_snapshot("p1") == {"count": 3}
+        assert RunStore(tmp_path / "blockyard.db").persist_snapshot("p1") == {"count": 3}

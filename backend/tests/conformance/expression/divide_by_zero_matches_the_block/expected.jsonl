@@ -12,6 +12,6 @@
 {"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
 {"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
 {"op": "block.enter", "threadId": "t1", "blockId": "blk_7"}
-{"op": "block.error", "threadId": "t1", "blockId": "blk_7", "error": {"type": "BlockyError", "code": "error", "message": "不能除以 0", "blockId": "blk_7"}}
+{"op": "block.error", "threadId": "t1", "blockId": "blk_7", "error": {"type": "BlockyardError", "code": "error", "message": "不能除以 0", "blockId": "blk_7"}}
 {"op": "thread.end", "threadId": "t1", "status": "error"}
 {"op": "run.end", "runId": "r1", "status": "error"}

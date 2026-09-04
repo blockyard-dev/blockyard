@@ -13,7 +13,7 @@
  * 偏好讀不到就用預設值，不該讓整個編輯器打不開。
  */
 
-const PREFIX = 'blocky.pref.';
+const PREFIX = 'blockyard.pref.';
 
 export function readPref<T>(key: string, fallback: T): T {
   try {

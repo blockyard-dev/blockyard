@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from blocky.conformance import check, run_case, write_case  # noqa: E402
+from blockyard.conformance import check, run_case, write_case  # noqa: E402
 from tests.corpus import CASES  # noqa: E402
 
 ROOT = Path(__file__).parent / "conformance"

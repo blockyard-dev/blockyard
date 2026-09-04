@@ -12,9 +12,13 @@ manifestVersion: 1
 id: openai
 name: OpenAI
 version: 0.1.0
-author: blocky
+author: blockyard
 description: 問 GPT。chat 回一句文字，chat_full 回完整物件（含 usage）
 color: "#10A37F"
+# 擴充功能面板那張卡上 16:9 的一格。包目錄內的相對路徑，沒宣告就畫名字的第一
+# 個字（編輯器那條 fallback 本來就在，載不出來也會退回去）。
+cover: preview.png
+
 permissions: [net]
 requirements: ["openai>=3.6,<4"]
 

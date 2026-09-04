@@ -11,7 +11,7 @@
  *
  * **明文在這裡怎麼處理**：列表只拿得到末四碼。複製按鈕會去打 `/reveal` 拿完整
  * 的那一把，但它**只進剪貼簿**——不進 React state、不進 DOM，所以畫面上永遠
- * 沒有一串躺著的金鑰可以被肩後偷看或截圖到（見 `backend/blocky/api/keys.py`
+ * 沒有一串躺著的金鑰可以被肩後偷看或截圖到（見 `backend/blockyard/api/keys.py`
  * 對 D28 這兩條線的區分）。值的輸入框是 `type="password"`，送出後立刻清掉。
  *
  * 版面照 `ProcedureModal` 的 `.modal-backdrop`/`.modal` 殼子。新增畫面是**同
@@ -29,7 +29,6 @@ import {
   Plus,
   RotateCw,
   Trash2,
-  X,
 } from 'lucide-react';
 import {
   deleteKey,
@@ -226,10 +225,10 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
         tabIndex={-1}
       >
         <header className="modal-head">
+          {/* 沒有右上角那顆叉。這個面板的底下就有一顆「關閉」（`.modal-foot`），
+              而同一個對話框裡放兩個出口，只會讓使用者在按之前先想一秒哪一顆才
+              是對的。Esc 也還在（見上面那段 `modalKeyAction`）。 */}
           <h2>{editing ? (editing.entry.configured ? '更換金鑰' : '新增金鑰') : '金鑰'}</h2>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="關閉">
-            <X size={16} strokeWidth={2.5} />
-          </button>
         </header>
 
         {editing ? (

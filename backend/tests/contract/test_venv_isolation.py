@@ -14,10 +14,10 @@ from typing import Any
 
 import pytest
 
-from blocky.errors import ExtensionError
-from blocky.extensions import CallContexts, EventSinkChannel, SubprocessHost, discover
-from blocky.extensions import venv as venv_mod
-from blocky.interpreter.events import EventSink
+from blockyard.errors import ExtensionError
+from blockyard.extensions import CallContexts, EventSinkChannel, SubprocessHost, discover
+from blockyard.extensions import venv as venv_mod
+from blockyard.interpreter.events import EventSink
 
 _REQUIREMENT = "tomli-w>=1.0,<2"
 _IMPORT_NAME = "tomli_w"
@@ -42,7 +42,7 @@ def _write_extension(root: Path) -> None:
         encoding="utf-8",
     )
     (pkg / "main.py").write_text(
-        "from blocky import block\n\n"
+        "from blockyard import block\n\n"
         "@block('needs_deps.dumps')\n"
         "async def dumps(ctx):\n"
         f"    import {_IMPORT_NAME}\n"
@@ -52,10 +52,10 @@ def _write_extension(root: Path) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _isolated_blocky_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """每個測試自己的 `~/.blocky`，不動到使用者真正的 venv 快取，也不讓測試
+def _isolated_blockyard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """每個測試自己的 `~/.blockyard`，不動到使用者真正的 venv 快取，也不讓測試
     之間互相汙染 `.requirements.lock`。"""
-    monkeypatch.setenv("BLOCKY_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("BLOCKYARD_HOME", str(tmp_path / "home"))
     venv_mod._locks.clear()
 
 

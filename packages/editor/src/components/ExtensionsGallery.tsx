@@ -6,11 +6,14 @@
  * 是拿來逛的——一張卡上要放得下名字、顏色、一句說明與「加了沒」。塞進 15rem 寬
  * 的浮動小面板裡，那四樣只剩下名字。
  *
- * **卡片上的圖案是從 manifest 長出來的**，不是每個包配一張圖：色底來自
- * `color`（工具箱分類色，所以卡片與分類欄是同一個顏色記號），中間那個字是名字
- * 的第一個字。D21 的同一條線——前端不認識任何一個積木包的 id，所以這裡不會有
- * 一張 `if (id === 'discord')` 的圖片表；積木包想長什麼樣子，說話的是它自己的
- * manifest。哪天 manifest 多一個 `icon`，換掉的只有這一格。
+ * **卡片上那塊 16:9 的預覽圖是從 manifest 長出來的**，不是前端配一張圖：manifest
+ * 宣告 `cover`（包目錄內的相對路徑）就畫那張圖，沒宣告就畫名字的第一個字。D21
+ * 的同一條線——前端不認識任何一個積木包的 id，所以這裡不會有一張
+ * `if (id === 'discord')` 的圖片表；積木包想長什麼樣子，說話的是它自己的 manifest。
+ *
+ * **色記號落在最下面那行 meta 上**（`v0.1.0 · N 顆積木`，用 manifest 的 `color`）：
+ * 卡片與工具箱分類欄因此是同一個顏色。名字與預覽圖都不上色——一整塊色底、或一
+ * 顆彩色標題乘上五張卡，這一頁就變成五種調子，而色記號一行小字就說得完。
  *
  * 清單的來源是**已註冊的分類**（`registration.groups`）：`GET /api/extensions`
  * 給了什麼就有什麼。所以這一頁誠實地只列「後端手邊有的包」——「去某個地方下載
@@ -22,10 +25,20 @@
  * 而「刪掉之前先看看還有誰在用」也是那條路上已經有的規則。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Plus, Search } from 'lucide-react';
-import type { ToolboxGroup } from '../blockly/toolbox';
+import { AlertTriangle, ArrowLeft, Check, Loader2, Plus, Search } from 'lucide-react';
+import {
+  cancelExtensionImport,
+  fetchExtensionProblems,
+  inspectExtensionZip,
+  installExtension,
+  type ExtensionProblem,
+  type ImportReview,
+} from '../api/client';
+import { ImportReviewScreen } from './ImportReview';
+import { isRemovable, type ToolboxGroup } from '../blockly/toolbox';
 import { focusableIn, modalKeyAction, nextFocusIndex } from './modalKeys';
 import { matchesQuery } from './extensionsFilter';
+import { coverUrl } from './extensionsCovers';
 import { ExtensionMenu, useExtensionMenu } from './ExtensionMenu';
 import { useExtensionsUi } from './extensionsStore';
 
@@ -42,9 +55,22 @@ export interface ExtensionsGalleryProps {
    * 只負責把「使用者在這張卡上按了刪除」講出去。
    */
   onDelete(group: ToolboxGroup): void;
+  /**
+   * 裝好了一個包。**由 `App` 去重問 `/api/extensions`**——註冊表在那裡，而
+   * 匯入這條路刻意不自己註冊：`POST /api/extensions/import/{token}` 回的只是
+   * 「它叫什麼」，形狀與 `GET /api/extensions` 不同（後者是 `exclude_defaults`
+   * 的 manifest）。走同一條路的好處是「裝一個包」與「重啟後端之後切回分頁」
+   * 在前端是同一段程式碼，不會有一條只在匯入時走的註冊分支。
+   */
+  onInstalled(id: string): Promise<void>;
 }
 
-export function ExtensionsGallery({ groups, onChanged, onDelete }: ExtensionsGalleryProps) {
+export function ExtensionsGallery({
+  groups,
+  onChanged,
+  onDelete,
+  onInstalled,
+}: ExtensionsGalleryProps) {
   const enabled = useExtensionsUi((s) => s.enabled);
   const add = useExtensionsUi((s) => s.add);
   const close = useExtensionsUi((s) => s.closeGallery);
@@ -53,6 +79,13 @@ export function ExtensionsGallery({ groups, onChanged, onDelete }: ExtensionsGal
   const { menu, openMenu, closeMenu } = useExtensionMenu();
   const dialogRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // 匯入的三個狀態：還沒選檔案（`review === null`）、審閱中、安裝中。
+  const [review, setReview] = useState<ImportReview | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [problems, setProblems] = useState<ExtensionProblem[]>([]);
 
   // 開場焦點落在搜尋框：這一頁唯一要打字的地方，而十幾張卡之後找東西一定從
   // 這裡開始。
@@ -62,7 +95,9 @@ export function ExtensionsGallery({ groups, onChanged, onDelete }: ExtensionsGal
    * **內建不列。** 它們不是「擴充功能」，是這個語言本身——「控制」「運算」沒有
    * 「要不要裝」這個問題，列出來只會讓這一頁的九成內容是不能點的卡。
    */
-  const packs = useMemo(() => groups.filter((group) => !group.builtin), [groups]);
+  // 內建不列——它們沒有「要不要裝」這個問題，列出來只是給每個人幾張永遠按不動
+  // 的卡片。
+  const packs = useMemo(() => groups.filter(isRemovable), [groups]);
   const shown = packs.filter((group) => matchesQuery(group, query));
 
   /**
@@ -76,6 +111,65 @@ export function ExtensionsGallery({ groups, onChanged, onDelete }: ExtensionsGal
    * 走的是右鍵（見檔頭）。讓同一個位置在不同狀態下做兩件相反的事，是那種按下去
    * 之前得先想一秒的介面。
    */
+  /**
+   * 讀不進來的積木包（`GET /api/extensions/problems`）。
+   *
+   * **在這一頁問，不在開場問。** 這一頁就是「這台機器上有哪些包」的目錄，而一個
+   * 讀不進來的包唯一該被提起的地方就是它本來會出現的那個位置。開場問等於為一個
+   * 幾乎永遠是空陣列的東西，讓每個人的每一次啟動多一趟請求。
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchExtensionProblems(controller.signal)
+      .then(setProblems)
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  /** 選了一個 `.zip`：上傳、解開、拿回審閱資料。**這一步還沒裝任何東西。** */
+  const pickFile = async (file: File) => {
+    setImportError(null);
+    setImporting(true);
+    try {
+      setReview(await inspectExtensionZip(file));
+    } catch (e) {
+      // 讀不進來的 `.zip` 停在這一頁，不開審閱畫面：使用者要做的事是「換一個
+      // 檔案」，而那顆按鈕就在他剛剛按的地方。
+      setImportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const install = async () => {
+    if (!review) return;
+    setImportError(null);
+    setImporting(true);
+    try {
+      await installExtension(review.token);
+      // **先讓 `App` 重新註冊，再關掉這一頁**：反過來的話，工具箱上那一格會晚
+      // 一拍才出現，而使用者的眼睛正停在他剛剛按下安裝的位置。
+      await onInstalled(review.id);
+      // 裝一個包就是要用它——刻意加進工具箱名單（D31 的「加進來」）。一個裝完
+      // 之後還要自己再點一次卡片的流程，會讓人以為安裝沒有成功。
+      add(review.id);
+      onChanged(`已裝好「${review.name}」，工具箱的分類欄最下面多了一格。`);
+      setReview(null);
+      close();
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  /** 取消審閱。**要告訴後端**，不然那份解開的暫存目錄要等到下一次有人匯入才被收掉。 */
+  const cancelImport = () => {
+    if (review) cancelExtensionImport(review.token);
+    setReview(null);
+    setImportError(null);
+  };
+
   const addPack = (group: ToolboxGroup) => {
     if (enabled.has(group.id)) return;
     add(group.id);
@@ -107,6 +201,20 @@ export function ExtensionsGallery({ groups, onChanged, onDelete }: ExtensionsGal
     }
   };
 
+  // **審閱畫面是這一頁的另一個狀態，不是另一條路。** 早退而不是疊一層：這兩頁
+  // 同時只有一個有意義，而搜尋框那個字留在 state 裡——按下取消就回到原來那一頁。
+  if (review) {
+    return (
+      <ImportReviewScreen
+        review={review}
+        busy={importing}
+        error={importError}
+        onInstall={() => void install()}
+        onCancel={cancelImport}
+      />
+    );
+  }
+
   return (
     <div
       className="gallery"
@@ -121,19 +229,63 @@ export function ExtensionsGallery({ groups, onChanged, onDelete }: ExtensionsGal
           <ArrowLeft size={20} strokeWidth={2.5} /> 返回
         </button>
         <h2>選擇擴充功能</h2>
-        {/* 位置留著、按不下去（P3 第 2 步）。從電腦裝一個包要的不只是解壓：
-            §12.1 的審閱確認、`requirements` 的 venv、壞掉的 manifest 會讓整個
-            `GET /api/extensions` 500——那條路整條還沒有。畫一顆按下去什麼都
-            沒發生的按鈕，比一顆明說自己還沒接上的暗按鈕更糟。 */}
+        {/* **檔案挑選器藏在按鈕後面**，不是畫面上一格 `<input type="file">`。
+            那一格長什麼樣子由瀏覽器決定，而這一列上另外兩個東西是我們自己畫的
+            ——三個不同的調子擠在同一行。 */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".zip,application/zip"
+          className="visually-hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            // **選完就把值清掉**：不清的話，同一個檔案選第二次不會發事件——而
+            // 「改一行程式碼、重新壓縮、再裝一次」正是寫包的人最常做的事，症狀
+            // 會是「按了沒反應」。
+            e.target.value = '';
+            if (file) void pickFile(file);
+          }}
+        />
         <button
           type="button"
           className="button gallery-import"
-          disabled
-          title="還沒接上：從電腦裝一個包要先有後端的解壓與審閱那條路（P3 第 2 步）"
+          onClick={() => fileRef.current?.click()}
+          disabled={importing}
         >
-          <Plus size={14} strokeWidth={2.5} /> 從電腦(.zip)
+          {importing ? (
+            <Loader2 size={14} strokeWidth={2.5} className="import-spin" />
+          ) : (
+            <Plus size={14} strokeWidth={2.5} />
+          )}
+          {importing ? '讀取中…' : '從電腦(.zip)'}
         </button>
       </header>
+
+      {importError && (
+        // 停在這一頁：使用者要做的事是「換一個檔案」，而那顆按鈕就在上面。
+        <p className="gallery-alert" role="alert">
+          <AlertTriangle size={14} strokeWidth={2.5} /> {importError}
+        </p>
+      )}
+
+      {problems.length > 0 && (
+        // **一個讀不進來的包會安靜地消失**（後端的 `scan()` 跳過它，不再讓整個
+        // `GET /api/extensions` 500）。這一區就是那句話的出口：這一頁是「這台
+        // 機器上有哪些包」的目錄，而它本來會出現在這裡。
+        <div className="gallery-alert is-problems">
+          <p>
+            <AlertTriangle size={14} strokeWidth={2.5} /> 有 {problems.length}{' '}
+            個資料夾讀不進來，所以它們不在下面：
+          </p>
+          <ul>
+            {problems.map((p) => (
+              <li key={p.dir}>
+                <code>{p.dir}</code> — {p.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="gallery-filters">
         <div className="gallery-search">
@@ -177,23 +329,16 @@ export function ExtensionsGallery({ groups, onChanged, onDelete }: ExtensionsGal
                   openMenu(group, e.clientX, e.clientY);
                 }}
               >
-                <span className="ext-card-art" style={{ background: group.colour }}>
-                  <span className="ext-card-initial">{[...group.name][0] ?? '?'}</span>
-                  {enabled.has(group.id) && (
-                    <span className="ext-card-check">
-                      <Check size={16} strokeWidth={3} />
-                    </span>
-                  )}
-                </span>
+                <ExtCardArt group={group} added={enabled.has(group.id)} />
                 <span className="ext-card-body">
                   <span className="ext-card-name">{group.name}</span>
                   <span className="ext-card-desc">{group.description ?? group.id}</span>
                   <span className="ext-card-foot">
-                    <span className="ext-card-meta">
+                    <span className="ext-card-meta" style={{ color: group.colour }}>
                       v{group.version} · {group.blocks.length} 顆積木
                     </span>
                     <span className="ext-card-action">
-                      {enabled.has(group.id) ? '已加入 · 右鍵可刪除' : '＋ 加入'}
+                      {enabled.has(group.id) ? '已加入 · 右鍵可刪除' : '加入'}
                     </span>
                   </span>
                 </span>
@@ -214,5 +359,44 @@ export function ExtensionsGallery({ groups, onChanged, onDelete }: ExtensionsGal
         />
       )}
     </div>
+  );
+}
+
+/**
+ * 卡片上那格 16:9。
+ *
+ * **圖載不出來就是「沒有圖」，不是一個錯誤狀態。** 兩者畫同一個東西（名字的第一
+ * 個字加那層同心圓），因為使用者能對這件事做的動作完全一樣——什麼都不做。多畫一
+ * 個破圖圖示、一句「載入失敗」，只是把一個包作者的疏漏搬到使用者眼前。
+ *
+ * 檔案在不在載入期就驗過（`_check_cover`），所以走到 `onError` 的只剩「宣告的是
+ * `.png`、放進去的其實不是圖」這種。它罕見，也正是它該安靜的理由。
+ *
+ * 字永遠在 DOM 裡、圖疊在上面：圖還在下載的那段時間畫的是字，而不是一格空白。
+ * 正常情況下那段時間是零——封面在積木包清單一到手時就預載過了
+ * （`extensionsCovers.ts`），這一頁掛載時圖已經在快取裡。
+ */
+function ExtCardArt({ group, added }: { group: ToolboxGroup; added: boolean }) {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <span className="ext-card-art">
+      <span className="ext-card-initial">{[...group.name][0] ?? '?'}</span>
+      {group.cover && !failed && (
+        <img
+          className="ext-card-cover"
+          // 與 `prefetchCovers` 共用同一個字串——差一個字元就是兩筆快取，預載
+          // 也就白做了。
+          src={coverUrl(group.id)}
+          alt=""
+          onError={() => setFailed(true)}
+        />
+      )}
+      {added && (
+        <span className="ext-card-check">
+          <Check size={16} strokeWidth={3} />
+        </span>
+      )}
+    </span>
   );
 }

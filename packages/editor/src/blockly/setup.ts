@@ -6,7 +6,12 @@
  */
 import * as Blockly from 'blockly/core';
 import * as zhHant from 'blockly/msg/zh-hant';
-import { defineManifest, defineShadowBlocks, type RegisteredBlock } from './define';
+import {
+  buildDefinitions,
+  defineManifest,
+  defineShadowBlocks,
+  type RegisteredBlock,
+} from './define';
 import {
   buildToolbox,
   groupByManifest,
@@ -53,7 +58,39 @@ export function buildProjectToolbox(
   return buildToolbox(visibleGroups(groups, enabled), configured);
 }
 
-export function registerManifests(manifests: Manifest[]): Registration {
+/**
+ * 哪幾個命名空間跟上次不一樣（新的、或宣告改過的）。
+ *
+ * 純函數，所以「重問一次後端要不要重新註冊」這條規則測得到——而它真正在守的
+ * 事情是**別去動沒有變的那些**：`defineBlocksWithJsonArray` 會覆蓋 Blockly 的
+ * 全域註冊表，把 95 顆積木全部重定義一次不只吵（每一顆都印一行覆蓋警告），
+ * 它還讓「畫布上那顆積木的定義被換掉了嗎」這個問題每次都要重新回答。
+ *
+ * 比的是整份宣告的 JSON 而不是版本號：改一句 `text` 不會有人記得動 `version`，
+ * 而那正是開發時最常改的東西。
+ */
+export function changedManifestIds(
+  previous: readonly Manifest[],
+  next: readonly Manifest[],
+): Set<string> {
+  const before = new Map(previous.map((m) => [m.id, JSON.stringify(m)]));
+  return new Set(next.filter((m) => before.get(m.id) !== JSON.stringify(m)).map((m) => m.id));
+}
+
+/**
+ * 註冊一批宣告。
+ *
+ * `previous` 有給的時候只重新註冊**變過的**那幾個命名空間（見
+ * `changedManifestIds`）；沒給就是全部註冊，也就是開場那一次。
+ *
+ * **消失的積木這裡不處理。** 後端拿掉一顆積木之後，畫布上那一顆仍然活著（它的
+ * 定義早就套用過了），要到下次載入才會退化成 §13.3 的佔位符。這是知情的：
+ * 在使用者沒有要求的時候把他畫布上的積木換成佔位符，比晚一點才說更糟。
+ */
+export function registerManifests(
+  manifests: Manifest[],
+  previous?: readonly Manifest[],
+): Registration {
   if (!localeReady) {
     Blockly.setLocale(zhHant as unknown as Record<string, string>);
     localeReady = true;
@@ -61,7 +98,13 @@ export function registerManifests(manifests: Manifest[]): Registration {
 
   defineShadowBlocks();
 
-  const blocks = manifests.flatMap((manifest) => defineManifest(manifest));
+  const changed = previous ? changedManifestIds(previous, manifests) : null;
+  const blocks = manifests.flatMap((manifest) =>
+    // 沒變的那些走純函數版本：拿得到一樣的 `blocks`，但不碰全域註冊表。
+    changed === null || changed.has(manifest.id)
+      ? defineManifest(manifest)
+      : buildDefinitions(manifest).blocks,
+  );
   const groups = groupByManifest(blocks);
   return { blocks, groups, toolbox: buildToolbox(groups) };
 }

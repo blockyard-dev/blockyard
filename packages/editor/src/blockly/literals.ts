@@ -126,7 +126,7 @@ export function registerLiteralContextMenu(): void {
   const registry = Blockly.ContextMenuRegistry.registry;
 
   ORDER.forEach((kind, index) => {
-    const id = `blocky_literal_${kind}`;
+    const id = `blockyard_literal_${kind}`;
     if (registry.getItem(id)) return;
 
     registry.register({

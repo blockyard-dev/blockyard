@@ -13,8 +13,8 @@ from typing import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from blocky.api.app import create_app
-from blocky.extensions import secret_store
+from blockyard.api.app import create_app
+from blockyard.extensions import secret_store
 
 SECRET_VALUE = "sk-imported-value"  # pragma: allowlist secret
 
@@ -44,7 +44,7 @@ def _write_vault_extension(root: Path) -> None:
 def client(tmp_path: Path) -> Iterator[TestClient]:
     ext_root = tmp_path / "extensions"
     _write_vault_extension(ext_root)
-    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=ext_root)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=ext_root)
     with TestClient(app) as c:
         yield c
 

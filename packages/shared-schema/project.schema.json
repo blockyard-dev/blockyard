@@ -458,9 +458,9 @@
       "type": "object"
     }
   },
-  "title": "Blocky Project IR",
+  "title": "Blockyard Project IR",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://blocky.dev/schema/project.schema.json",
+  "$id": "https://blockyard.dev/schema/project.schema.json",
   "description": "積木專案的中介表示（IR）。設計文件 §4。"
 }

@@ -6,8 +6,8 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from blocky.errors import BlockyError, ValidationError
-from blocky.ir.template import evaluate, has_interpolation, parse, validate_name
+from blockyard.errors import BlockyardError, ValidationError
+from blockyard.ir.template import evaluate, has_interpolation, parse, validate_name
 
 DATA = {"i": 3, "items": [10, 20, 30], "o": {"a": {"b": "深"}}, "s": "文字"}
 R = DATA.__getitem__
@@ -55,7 +55,7 @@ def test_malformed_rejected(src):
 
 def test_string_attribute_error_suggests_parse_json():
     """§4.7 說這是「整份設計裡投入產出比最高的一行字」。"""
-    with pytest.raises(BlockyError) as e:
+    with pytest.raises(BlockyardError) as e:
         evaluate(parse("${s.foo}"), R)
     assert "是文字不是物件" in e.value.message
     assert "解析 JSON" in (e.value.hint or "")

@@ -1,8 +1,19 @@
 :root {
   --topbar-h: 3rem;
-  --fg: #33333d;
-  --muted: #6b6f80;
-  --line: #dcdfeb;
+  /* 分類欄寬。同一個數字有三個地方要對齊：欄本身、欄裡的分類清單（它要撐滿
+     整欄，捲軸才不會擠開內容——見細捲軸那段）、還有疊在欄底的擴充按鈕。 */
+  --toolbox-w: 60px;
+  /* 這三個原本都帶一點藍（#33333d／#6b6f80／#dcdfeb）。改成純中性：這一套
+     設計裡顏色不負責分階層，藍味只會讓「黑白灰」讀起來像沒調好的黑白灰。
+     只換色，尺寸與版面一個沒動。 */
+  --fg: #000;
+  --muted: #6b6b6b;
+  --line: #e5e5e5;
+  /* 按鈕那一套（`.gallery` 的同一組）：黑、一階淺灰。工具列上的按鈕全部只用
+     這兩個色，剩下的階層交給字重與留白——顏色在按鈕上只回答一件事：「這顆是
+     主要的嗎」。 */
+  --ink: #000;
+  --surface-alt: #f1f1f1;
   font-family: system-ui, -apple-system, 'Noto Sans TC', sans-serif;
   color: var(--fg);
 }
@@ -78,7 +89,7 @@ body,
 }
 
 .notice code {
-  background: #f2f3f8;
+  background: var(--surface-alt);
   padding: 0.1em 0.35em;
   border-radius: 0.25rem;
 }
@@ -100,18 +111,41 @@ body,
 
 /* 有圖示的按鈕（執行 / 停止 / 安裝積木包）：圖示與文字要對齊在同一條基線上，
    而 icon 是一個 SVG box，不是一個字——inline 排版會讓它坐在基線上、往下凸。
-   `inline-flex` + `align-items: center` 是這件事唯一乾淨的做法。 */
+   `inline-flex` + `align-items: center` 是這件事唯一乾淨的做法。
+
+   形狀是**全膠囊**（999px），只有兩階：這一顆（次要）是淺灰底黑字，主要那階
+   （`.button-run`／`.button-primary`）是黑底白字。沒有外框按鈕、沒有第三個
+   顏色——「這顆能不能按、是不是主要的」由填色回答，不由邊框回答。
+
+   邊留著、但是透明的：拿掉 `border` 會讓每一顆按鈕縮 2px，而工具列上這一排
+   是照著現在的尺寸排的。 */
 .button {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   font: inherit;
   font-size: 0.8125rem;
+  font-weight: 500;
   padding: 0.3rem 0.9rem;
-  border: 1px solid var(--line);
-  border-radius: 0.35rem;
-  background: #f7f8fc;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--ink);
   cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: #e6e6e6;
+}
+
+/* 主要那一階。`KeysPanel` 的「新增金鑰」用的就是這顆。 */
+.button-primary {
+  background: var(--ink);
+  color: #fff;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: #1f1f1f;
 }
 
 .button:disabled {
@@ -138,12 +172,20 @@ body,
   justify-content: center;
 }
 
-/* 監聽中：整顆綠起來。這是工具列上唯一一個「它還在背景做事」的狀態，而
-   狀態要靠**顏色**說，不是靠旁邊多一行字——字會被當成說明讀過去。 */
+/* 監聽中：整顆填起來（黑底白字）。這是工具列上唯一一個「它還在背景做事」的
+   狀態，而狀態要靠**填色**說，不是靠旁邊多一行字——字會被當成說明讀過去。
+
+   從綠改成黑：這一排的其他按鈕全是淺灰底，所以一顆填實的黑已經是最強的一級
+   ——「開著」不需要另一個顏色才說得出口。它跟「執行」同樣是黑，但兩者隔著
+   分隔線、圖示也不同（耳朵 vs 三角形），而且它們講的本來就是同一種事：正在
+   進行中。 */
 .button-listening {
-  border-color: #2f9e57;
-  background: #e8f6ed;
-  color: #2f9e57;
+  background: var(--ink);
+  color: #fff;
+}
+
+.button-listening:hover {
+  background: #1f1f1f;
 }
 
 /* 監聽中、而畫布已經改過：耳朵右上角那顆星（`*耳朵`）。
@@ -210,16 +252,16 @@ body,
   opacity: 0.45;
 }
 
+/* 執行：主要那一階（黑底白字）。它是這條工具列上唯一一個「讓整份專案動起來」
+   的動作，而主要階在一個畫面裡只該有一顆。
+   `:disabled` 不另外配一個淺色——`.button:disabled` 的透明度已經說完了。 */
 .button-run {
-  background: #2f9e57;
-  border-color: #2f9e57;
+  background: var(--ink);
   color: #fff;
 }
 
-.button-run:disabled {
-  background: #9fc9ae;
-  border-color: #9fc9ae;
-  color: #fff;
+.button-run:hover:not(:disabled) {
+  background: #1f1f1f;
 }
 
 /* 「執行／停止」是同一顆，所以它得有固定寬度：兩個標籤都是兩個字，但三角形
@@ -232,13 +274,19 @@ body,
   justify-content: center;
 }
 
-/* 執行中時同一顆變成「停止」。實心紅：它跟綠色的執行是同一個位置、同一個
-   尺寸，唯一的差別就是顏色與圖示——那兩樣得夠強，強到使用者不必讀字也知道
-   自己現在按下去是在收手而不是再跑一次。 */
+/* 執行中時同一顆變成「停止」。實心紅——這是整條工具列上唯一保留的顏色。
+
+   理由跟這套配色不衝突，是它比配色更硬：停止與執行是**同一個位置、同一個
+   尺寸**的同一顆按鈕，兩者之間唯一的差別就是顏色與那個 icon。都塗成黑之後，
+   「我現在按下去是收手還是再跑一次」就只剩三角形與方塊那 1px 的差別在回答，
+   而那個問題使用者是用餘光問的。這一顆而且是短命的——只有跑著的時候在。 */
 .button-stop {
   background: #c23b3b;
-  border-color: #c23b3b;
   color: #fff;
+}
+
+.button-stop:hover {
+  background: #a93434;
 }
 
 /* 執行與監聽是兩列控制，中間要看得出斷開——不然四顆按鈕會讀成同一組，
@@ -247,7 +295,7 @@ body,
   width: 1px;
   align-self: stretch;
   margin: 0.15rem 0.25rem;
-  background: var(--line);
+  background: #e5e5e5;
 }
 
 .run-status {
@@ -305,7 +353,7 @@ body,
 
 .flyout-resizer:hover,
 .flyout-resizer:active {
-  background: rgb(77 151 255 / 45%);
+  background: rgb(0 0 0 / 25%);
 }
 
 .bubble-layer {
@@ -315,33 +363,115 @@ body,
   z-index: 20;
 }
 
+/* 氣泡分三層，每一層只做一件事：`.bubble` 定位、`.bubble-box` 是看得見的那
+   個形（含尖角與滑出來的動畫）、`.bubble-content` 負責捲。
+
+   分開的理由各有一個。定位與動畫都是 transform，擠在同一個屬性上會互相蓋
+   掉——RunBubbles 每一幀寫 `.bubble` 的 transform，動畫寫的是 `.bubble-box`
+   的。捲則是因為尖角畫在 `.bubble-box` 的偽元素上、位置在框線外面，
+   `overflow: auto` 放在同一層會把它剪掉。 */
 .bubble {
   position: absolute;
   top: 0;
   left: 0;
-  /* 積木上緣中央是定位原點（RunBubbles 算的），氣泡往上錯開一點，蓋住的是
-     空白不是積木本身；-50% 把它從「錨點在左緣」變成「錨點在中央」。 */
-  margin-top: -0.4rem;
-  transform-origin: bottom center;
-  translate: -50% -100%;
+  pointer-events: none;
+}
+
+.bubble-box {
+  --bubble-bg: #fff;
+  --bubble-border: var(--line);
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  /* 定位原點是積木的**下緣**中央（RunBubbles 算的）：氣泡長在積木底下，尖角
+     朝上指回那顆積木——像積木把值說出來，而不是憑空浮在旁邊。往下讓開的這
+     0.55rem 正好是尖角的高，所以尖端貼著積木、框本身不壓到它。
+     -50% 把錨點從左緣換到中央。 */
+  top: 0.55rem;
+  left: 0;
+  transform: translateX(-50%);
+  animation: bubble-say 140ms ease-out;
+  /* 寬度這三行是一組：先量文字的自然寬度（max-content），再被上下兩條夾住。
+     短的值貼著文字、長的值到 22rem 才折行。
+
+     `width: max-content` 不能省。`.bubble-box` 是絕對定位，而它的容器
+     `.bubble` 是個沒有寬度的定位點——少了這一行，瀏覽器算出來的「可用寬度」
+     是 0，換行一開就會把框壓到 min-content（最長的那個字那麼寬）。
+
+     min-width 則是不讓它縮到比尖角還窄：一顆回 `0` 的積木不該冒出一個比自己
+     的尖角小的框。2.75rem 是「尖角 18px + 兩邊留一點」，不是抓的整數。 */
+  min-width: 2.75rem;
+  width: max-content;
   max-width: 22rem;
-  max-height: 14rem;
-  overflow: auto;
-  padding: 0.3rem 0.55rem;
   border-radius: 0.4rem;
-  border: 1px solid var(--line);
-  background: #fff;
-  box-shadow: 0 2px 8px rgb(20 20 40 / 18%);
+  border: 1px solid var(--bubble-border);
+  background: var(--bubble-bg);
+  /* 陰影用 filter 不用 box-shadow：box-shadow 只認元素的方框，尖角是偽元素，
+     會變成「框有影子、尖角沒有」。drop-shadow 吃的是整個剪影。 */
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 16%));
   font-size: 0.75rem;
   line-height: 1.5;
   pointer-events: auto;
-  white-space: nowrap;
+  /* 長的值換行，不是橫著捲（折在哪由上面那組寬度決定）。`overflow-wrap:
+     anywhere` 是給沒有空白可折的東西用的：一條 URL、一串 base64 沒有斷點，
+     只靠 `white-space` 會撐破框然後長出一條橫捲軸。 */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.bubble-error {
-  border-color: #d46a6a;
-  background: #fff6f6;
-  white-space: normal;
+.bubble-content {
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.3rem 0.55rem;
+}
+
+/* 尖角是兩個疊起來的三角形：下面那個是框線的顏色，上面那個是底色、小一號。
+   `clip-path` 不是 border 疊出來的三角形，因為那招要把寬高寫死在 border 寬
+   度上，換個尺寸就得重算四個值。
+
+   上面那個往下多壓 1px（-7px 對 -8px），蓋掉框本身那條會橫過尖角底部的上
+   框線；剩在兩端的 1px 正好是尖角與框相接的轉角，本來就該有線。 */
+.bubble-box::before,
+.bubble-box::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.bubble-box::before {
+  top: -9px;
+  width: 18px;
+  height: 9px;
+  margin-left: -9px;
+  background: var(--bubble-border);
+}
+
+.bubble-box::after {
+  top: -7px;
+  width: 16px;
+  height: 8px;
+  margin-left: -8px;
+  background: var(--bubble-bg);
+}
+
+/* 「說出來」的樣子：從積木底下滑出一小段，同時淡入。位移只有 0.35rem——這是
+   一個提示不是一段轉場，滑太遠會變成等它落定才讀得到值。 */
+@keyframes bubble-say {
+  from {
+    transform: translateX(-50%) translateY(-0.35rem);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+.bubble-error .bubble-box {
+  --bubble-bg: #fff6f6;
+  --bubble-border: #d46a6a;
 }
 
 .bubble-error-message {
@@ -365,19 +495,19 @@ body,
    這裡的積木顏色來自每個積木包自己的 manifest（§8.1），黃框畫在橘色的
    `control` 積木上幾乎看不見——顏色是別人決定的，高亮就不能假設底色。
    白邊負責在深色積木上分界，發光負責在淺色積木上分界，兩者互補。 */
-.blocky-run-running>.blocklyPath,
-.blocky-run-hot>.blocklyPath {
+.blockyard-run-running>.blocklyPath,
+.blockyard-run-hot>.blocklyPath {
   stroke: #fff;
   stroke-width: 2px;
 }
 
-.blocky-run-running,
-.blocky-run-hot {
+.blockyard-run-running,
+.blockyard-run-hot {
   filter: drop-shadow(0 0 2px #f3bc17) drop-shadow(0 0 5px #f3bc17);
 }
 
-.blocky-run-hot {
-  animation: blocky-pulse 0.9s ease-in-out infinite;
+.blockyard-run-hot {
+  animation: blockyard-pulse 0.9s ease-in-out infinite;
 }
 
 /* 錯誤的紅框**會淡出**（第九輪回饋），與值氣泡同一組時間：2 秒 + 400ms。
@@ -392,32 +522,32 @@ body,
 
    代價（明知而接受）：框的淡出是 CSS 的，氣泡的是 `RunBubbles` 的 rAF 迴圈，
    於是滑鼠停在氣泡上凍得住氣泡、凍不住框。框是提示、氣泡才是內容。 */
-.blocky-run-error>.blocklyPath {
+.blockyard-run-error>.blocklyPath {
   stroke: #fff;
   stroke-width: 3px;
-  animation: blocky-error-stroke 0.4s ease 2s forwards;
+  animation: blockyard-error-stroke 0.4s ease 2s forwards;
 }
 
-.blocky-run-error {
+.blockyard-run-error {
   filter: drop-shadow(0 0 3px #e03b3b) drop-shadow(0 0 7px #d43b3b);
-  animation: blocky-error-glow 0.4s ease 2s forwards;
+  animation: blockyard-error-glow 0.4s ease 2s forwards;
 }
 
 /* 描邊與外發光在兩個不同的元素上（`>` 的理由見上），所以是兩段。發光那段
    淡到透明而不是 `none`：filter 只在前後的函式串一樣時才補得出中間格。 */
-@keyframes blocky-error-stroke {
+@keyframes blockyard-error-stroke {
   to {
     stroke-opacity: 0;
   }
 }
 
-@keyframes blocky-error-glow {
+@keyframes blockyard-error-glow {
   to {
     filter: drop-shadow(0 0 3px rgb(224 59 59 / 0%)) drop-shadow(0 0 7px rgb(212 59 59 / 0%));
   }
 }
 
-@keyframes blocky-pulse {
+@keyframes blockyard-pulse {
 
   0%,
   100% {
@@ -430,7 +560,9 @@ body,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .blocky-run-hot {
+
+  .blockyard-run-hot,
+  .bubble-box {
     animation: none;
   }
 }
@@ -469,7 +601,7 @@ body,
 
 .run-panel-resizer:hover,
 .run-panel-resizer:active {
-  background: rgb(77 151 255 / 45%);
+  background: rgb(0 0 0 / 25%);
 }
 
 .run-section {
@@ -544,8 +676,12 @@ body,
  * JSON tree（§8.3：object / list 不截斷成字串）
  * ------------------------------------------------------------------ */
 
+/* 字串裡本來就有的換行要看得見（`pre-wrap` 而不是 `normal`）。一顆 LLM 積木
+   回三段話，摺成一整片就讀不出它原本分了段——輸出面板的 log 也是同一條規則
+   （見 `.log-list li`）。折行照樣會發生，`pre-wrap` 只多保住既有的斷行。 */
 .json-string {
   color: #2f7a4d;
+  white-space: pre-wrap;
 }
 
 .json-number {
@@ -626,7 +762,7 @@ body,
   margin-left: auto;
   padding: 0 0.35rem;
   border-radius: 0.6rem;
-  background: #eceef5;
+  background: var(--surface-alt);
   font-weight: 400;
 }
 
@@ -645,7 +781,7 @@ body,
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 60px;
+  width: var(--toolbox-w);
   /* 高過 Blockly 的工具箱（`.blocklyToolbox` 是 z-index 70）。 */
   z-index: 80;
   display: flex;
@@ -670,8 +806,11 @@ body,
  * ------------------------------------------------------------------ */
 
 .blocklyToolbox {
-  width: 60px;
+  width: var(--toolbox-w);
   box-sizing: border-box;
+  /* 原生捲軸整根藏起來，改由 `ToolboxScrollbar` 畫一根疊在上面的（理由見下面
+     那段）。捲動本身不受影響，滾輪、觸控板、鍵盤都照舊。 */
+  scrollbar-width: none;
   /* Blockly 預設 `padding: 4px 0`。上緣那 4px 要拿掉：第一個分類被選取時，那塊
      灰底會從一條白邊底下開始，看起來像對不齊。 */
   padding-top: 0;
@@ -681,6 +820,110 @@ body,
      的 flex group 上：後者的 padding 不算進捲動範圍。高度要跟 `.ext-button`
      對齊（2.5rem），多了會在欄底留一段空白。 */
   padding-bottom: 2.5rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * 細捲軸（積木面板、輸出面板、擴充圖庫、歷史）。
+ *
+ * 分類欄不在這份名單裡：它太窄，細到 6px 也還是會擠開內容，所以那一根是自己
+ * 畫的（見下面「分類欄的捲軸」）。這裡的面板都夠寬，被扣掉 6px 沒有人看得出
+ * 來，不值得為它們各養一根。
+ *
+ * 兩套語法都要：`scrollbar-width` 是標準的那一份（Firefox 與新版 Chrome），
+ * `::-webkit-scrollbar` 是 Safari 與舊版 Chrome 唯一認得的那一份。只寫一套的
+ * 症狀是「在我這台機器上是好的」。
+ * ------------------------------------------------------------------ */
+
+.blocklyFlyout,
+.run-section,
+.gallery,
+.history-list,
+.history-main {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(0 0 0 / 18%) transparent;
+}
+
+.blocklyFlyout::-webkit-scrollbar,
+.run-section::-webkit-scrollbar,
+.gallery::-webkit-scrollbar,
+.history-list::-webkit-scrollbar,
+.history-main::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.blocklyFlyout::-webkit-scrollbar-thumb,
+.run-section::-webkit-scrollbar-thumb,
+.gallery::-webkit-scrollbar-thumb,
+.history-list::-webkit-scrollbar-thumb,
+.history-main::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.blocklyFlyout::-webkit-scrollbar-track,
+.run-section::-webkit-scrollbar-track,
+.gallery::-webkit-scrollbar-track,
+.history-list::-webkit-scrollbar-track,
+.history-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------------ *
+ * 分類欄的捲軸是**自己畫的**（`ToolboxScrollbar.tsx`），原生那根藏起來。
+ *
+ * 走到這一步是被逼的。原生捲軸沒有「不佔位」的開關（`overflow: overlay` 已經
+ * 廢掉，而只要動了 `::-webkit-scrollbar`，WebKit 就會從系統的浮動捲軸切回佔位
+ * 的那種），所以在一個**寫死 60px** 的欄上，它一出現就從內容寬度裡扣走 6~15px，
+ * 整排置中的圓點與分類名往左跳一下。
+ *
+ * 中間試過一版純 CSS 的：讓分類清單撐滿整欄、溢出捲軸的那幾 px 用
+ * `overflow-x: hidden` 切掉。它在「內容右緣是空白」的前提下成立，而那個前提是
+ * 錯的——**被選取的那一格有整條的灰底**，切掉的就是那條灰底的右端，看起來像
+ * 沒畫完。
+ *
+ * 自己畫就沒有這個問題：原生那根不佔位（`scrollbar-width: none` 與
+ * `::-webkit-scrollbar { display: none }`），內容永遠是完整的 60px，thumb 是一
+ * 個 `pointer-events: none` 的方塊疊在最上面。代價是**它不能拖**——它只是一個
+ * 指示器，捲動要靠滾輪／觸控板／鍵盤。
+ * ------------------------------------------------------------------ */
+
+.blocklyToolbox::-webkit-scrollbar {
+  display: none;
+}
+
+/* 疊在分類欄上的一條，跟 `.ext-entry` 同一個手法（絕對定位對齊那一欄，不插進
+   Blockly 自己的 DOM）。`pointer-events: none` 是關鍵：它蓋在分類上面，能點的
+   必須還是分類。 */
+.toolbox-scrollbar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--toolbox-w);
+  /* 壓過 Blockly 的工具箱（z-index 70），讓過欄底的擴充按鈕（80）。 */
+  z-index: 75;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+/* 碰到那一欄、或正在捲的時候才浮出來。這個 class 由 `ToolboxScrollbar` 開關，
+   不是 CSS 的 `:hover`——這一條蓋在分類欄上而且不吃事件，`:hover` 到不了它，
+   而該反應的是**分類欄**被碰到。 */
+.toolbox-scrollbar-visible {
+  opacity: 1;
+}
+
+/* 位置與高度由 JS 每次捲動時寫進 `transform` / `height`。這裡只交代形：4px 寬、
+   貼著欄的最右邊（`right: 2px` 是離邊那一點點呼吸）。 */
+.toolbox-thumb {
+  position: absolute;
+  right: 0px;
+  top: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: rgb(0 0 0 / 28%);
 }
 
 /* 一格的高度由內容決定（Blockly 預設寫死 22px 的單行列高）。`white-space` 要
@@ -727,7 +970,7 @@ body,
 /* 選取的那一格。continuous-toolbox 的 `setSelected` 是直接寫 inline
    `background-color: gray`（ContinuousCategory.ts），只有 `!important` 蓋得掉。 */
 .blocklyToolbox .blocklyToolboxCategory.blocklyToolboxSelected {
-  background-color: #e9eef2 !important;
+  background-color: #ececec !important;
 }
 
 /* Blockly 預設選取時把分類名轉白——那是給深色工具箱用的，這裡的底是淺灰。 */
@@ -752,13 +995,15 @@ body,
   padding: 0;
   border: none;
   border-radius: 0;
-  background: #e8574a;
+  /* 黑底白字，跟工具列上主要那階的按鈕同一個記號。不做成膠囊：它是釘在分類欄
+     底下、撐滿那 60px 的一條，圓角會讓它跟欄邊之間冒出四個缺角。 */
+  background: var(--ink);
   color: #fff;
   cursor: pointer;
 }
 
 .ext-button:hover {
-  background: #f0685c;
+  background: #1f1f1f;
 }
 
 .ext-button-icon {
@@ -779,82 +1024,118 @@ body,
  * ------------------------------------------------------------------ */
 
 .gallery {
+  /* 這一頁自己的一套色：黑、白、一階淺灰，就這三個。階層交給字級、字重與
+     留白去說——顏色在這裡不負責分主次，所以也不需要第四個色。
+     `--ink`／`--surface-alt` 在 `:root` 已經是同一組值（工具列的按鈕在用），
+     這裡重寫一次只是讓這一段自己讀得完。 */
+  --ink: #000;
+  --surface: #fff;
+  --surface-alt: #f1f1f1;
+  --hairline: var(--line);
+  --ink-soft: #6b6b6b;
+  --ink-faint: #8a8a8a;
+
   position: fixed;
   inset: 0;
   z-index: 190;
   display: flex;
   flex-direction: column;
   overflow: auto;
-  background: #eef2f8;
+  background: var(--surface);
+  color: var(--ink);
+  letter-spacing: -0.01em;
 }
 
 /* 標頭。三欄：返回、置中的標題、右邊的匯入。標題用 `grid` 置中而不是靠兩側
    等寬的留白——左右兩顆按鈕的寬度不一樣（而且「從電腦(.zip)」的字數會變），
-   flex 的置中會跟著它們一起飄。 */
+   flex 的置中會跟著它們一起飄。
+
+   底下那條分隔線與整條紅色標頭一起拿掉了：這一頁的段落界線由「白 → 淺灰」
+   那次換底色去畫（卡片那一段是灰的），線與色帶都只是同一件事再說一次。 */
 .gallery-head {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 1rem;
-  padding: 0.75rem 1.25rem;
-  background: #e8574a;
-  color: #fff;
+  padding: 1.5rem 2rem 1.25rem;
 }
 
+/* 標題：500 而不是 700。大小負責喊，字重不用跟著喊——一個 700 的標題會立刻
+   讀成「預設樣式」。字距收 -0.02em，行高壓到 1.1，這樣它才站得住。 */
 .gallery-head h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.375rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
   text-align: center;
   white-space: nowrap;
 }
 
+/* 這一頁的按鈕只有兩階，而且都是全膠囊（999px）：主要＝黑底白字，次要＝
+   淺灰底黑字。沒有外框按鈕、沒有幽靈按鈕、沒有第三個顏色。
+
+   膠囊的「非常圓」與卡片的「幾乎不圓」（10px）是互相對照的——兩邊放在一起，
+   才讀得出圓角是挑過的，而不是隨手給的預設值。 */
 .gallery-back {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   justify-self: start;
   font: inherit;
-  font-size: 0.9375rem;
-  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.55rem 1.1rem;
   border: none;
-  border-radius: 0.35rem;
-  background: none;
-  color: inherit;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--ink);
   cursor: pointer;
 }
 
 .gallery-back:hover {
-  background: rgb(255 255 255 / 16%);
+  background: #e6e6e6;
 }
 
-/* 匯入按鈕。暗的時候仍然看得出是一顆按鈕（`.button:disabled` 只降透明度），
-   而它為什麼按不下去由 title 交代。 */
+/* 匯入按鈕。這一頁唯一一個「會產生新東西」的動作，所以它是主要那一階（黑底
+   白字）。暗的時候仍然看得出是一顆按鈕（`.button:disabled` 只降透明度），而
+   它為什麼按不下去由 title 交代。 */
 .gallery-import {
   justify-self: end;
-  border-color: rgb(255 255 255 / 45%);
-  background: rgb(255 255 255 / 18%);
-  color: #fff;
+  padding: 0.55rem 1.2rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 
-/* 搜尋與膠囊那一列。底色比標頭淺一階：它屬於標頭那一組（都是「找東西」的
-   工具），但它不是標題。 */
+/* 搜尋與膠囊那一列。原本膠囊左邊那條豎線拿掉了——兩者做的事不一樣（打字 vs
+   選一類）本來就靠間距說得完，而這一頁的規則是留白優先於分隔線。 */
 .gallery-filters {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
-  padding: 0.75rem 1.25rem;
-  background: #f4b6b0;
+  gap: 0.75rem;
+  padding: 0 2rem 1.5rem;
 }
 
 .gallery-search {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.9rem;
+  gap: 0.5rem;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--hairline);
   border-radius: 999px;
-  background: #fff;
-  color: var(--muted);
-  min-width: 12rem;
+  background: var(--surface);
+  color: var(--ink-faint);
+  min-width: 16rem;
+}
+
+/* 對焦時邊變黑。整頁沒有強調色可以用，而「游標在這裡」需要一個看得見的答案
+   ——髮絲灰轉黑就是這套配色裡最重的一級。 */
+.gallery-search:focus-within {
+  border-color: var(--ink);
 }
 
 .gallery-search input {
@@ -863,51 +1144,62 @@ body,
   border: none;
   outline: none;
   background: none;
-  color: var(--fg);
+  color: var(--ink);
   width: 100%;
 }
 
+/* 只有一顆膠囊。分類（誰做的、哪一類）要等包多到一個畫面裝不下才有意義。 */
 .gallery-chips {
   display: flex;
   gap: 0.5rem;
-  /* 膠囊與搜尋框之間那條分隔線：兩者做的是不同的事（打字 vs 選一類），
-     而它們在同一列。 */
-  padding-left: 1.25rem;
-  border-left: 1px solid rgb(255 255 255 / 60%);
 }
 
 .gallery-chip {
-  padding: 0.35rem 1.1rem;
+  padding: 0.55rem 1.1rem;
   border-radius: 999px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  background: rgb(255 255 255 / 45%);
-  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background: var(--surface-alt);
+  color: var(--ink);
 }
 
 .gallery-chip.is-on {
-  background: #f5a623;
+  background: var(--ink);
+  color: var(--surface);
 }
 
+/* 卡片那一段（含沒東西可列的時候）換成淺灰底：整頁的段落界線就是這一次換
+   底色。`flex: 1` 讓它一路鋪到頁底——卡片只有四張時，灰底不該在半途斷掉。 */
 .gallery-empty {
+  flex: 1;
   margin: 0;
-  padding: 2.5rem 1.25rem;
-  color: var(--muted);
+  padding: 4rem 2rem;
+  background: var(--surface-alt);
+  color: var(--ink-soft);
+  line-height: 1.6;
   text-align: center;
 }
 
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  align-content: start;
+  gap: 1rem;
+  flex: 1;
   margin: 0;
-  padding: 1.5rem 1.25rem 3rem;
+  padding: 2rem;
+  background: var(--surface-alt);
   list-style: none;
 }
 
 /* 一張卡。整張是一顆按鈕——卡上沒有第二個可以點的東西，所以「點卡片」與
-   「點加入」不該是兩個判定範圍。 */
+   「點加入」不該是兩個判定範圍。
+
+   白底、1px 髮絲邊、圓角 10px，**沒有陰影**：把兩張卡分開的是那條邊與周圍
+   的留白，不是浮起來的高度。`padding: 0` + `overflow: hidden`，因為預覽圖那
+   一格是滿版的——它要貼齊卡片的邊，圓角由卡片裁。 */
 .ext-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -915,106 +1207,143 @@ body,
   font: inherit;
   text-align: left;
   padding: 0;
-  border: 2px solid transparent;
-  border-radius: 0.6rem;
-  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface);
   color: inherit;
   overflow: hidden;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgb(20 20 40 / 10%);
 }
 
 .ext-card:hover {
-  box-shadow: 0 4px 14px rgb(20 20 40 / 16%);
+  border-color: #c9c9c9;
 }
 
+/* 已經加進來的那張：邊變黑。這一頁沒有強調色可用，而在灰底白卡之間，一條
+   黑邊已經是最重的一級。
+   左鍵不做事（拿掉走右鍵）——所以游標也不該說它可以按。 */
 .ext-card.is-on {
-  border-color: #4c97ff;
+  border-color: var(--ink);
+  cursor: default;
 }
 
-/* 圖案那一格。色底是 manifest 的 `color`（inline style），所以它與分類欄上
-   那顆圓點永遠是同一個顏色；同心圓與中間那個字是這裡畫的——**積木包不提供
-   圖片**（D21 的同一條線：前端不認識任何一個包的 id）。 */
+/* 預覽圖那一格。16:9 的滿版方框——它是「這個積木包長什麼樣子」的位置，哪天
+   manifest 多一個 `icon`／截圖，換掉的只有這一格，卡片其他部分不動。
+
+   在圖還沒有之前，這裡畫的是名字的第一個字。底色不是 manifest 的 `color` 而是
+   那階淺灰：一整塊色底乘上五張卡，這一頁就變成五種調子，剩下的克制全部白做。
+   積木包的顏色沒有消失，它在最下面那行 meta 上（`.ext-card-meta`）——色記號要
+   說的只是「這張卡與工具箱那一欄是同一個顏色」，一行小字就說得完。
+
+   同心圓那層是灰的、而且很淡（3%）：它讓這一格看得出是一塊「還沒放圖」的版
+   面，而不是一塊忘了填色的空白。
+
+   宣告了 `cover` 的包，圖疊在這一層上面（`.ext-card-cover`）；圖還在下載、或
+   載不出來的時候，看到的就是這一格本來的樣子。 */
 .ext-card-art {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   aspect-ratio: 16 / 9;
+  background: var(--surface-alt);
   background-image: repeating-radial-gradient(circle at 50% 50%,
-      rgb(255 255 255 / 10%) 0 1.25rem,
-      rgb(255 255 255 / 0%) 1.25rem 2.5rem);
+      rgb(0 0 0 / 3%) 0 1.25rem,
+      rgb(0 0 0 / 0%) 1.25rem 2.5rem);
+}
+
+/* manifest 宣告的封面。滿版蓋掉底下那格字，`object-fit: cover` 而不是 contain：
+   卡片是 16:9，而包作者交來的圖不一定是——留白的那兩條邊會讓每張卡的重心各自
+   跑掉，裁掉一點反而讓這一頁齊。 */
+.ext-card-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .ext-card-initial {
-  font-size: 2.75rem;
-  font-weight: 700;
-  color: #fff;
+  font-size: 3rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
   line-height: 1;
 }
 
-/* 「已加入」的勾。在圖案的角上而不是名字旁邊：一眼掃過去要數的是「哪幾張已經
-   加了」，而卡片的圖案是這一頁裡最先被看到的東西。 */
+/* 「已加入」的勾。黑底白勾，壓在預覽圖的右上角：一眼掃過去要數的是「哪幾張
+   已經加了」，而預覽圖是這一頁最先被看到的東西。 */
 .ext-card-check {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.75rem;
+  right: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 1.6rem;
   height: 1.6rem;
   border-radius: 50%;
-  background: #fff;
-  color: #2f9e57;
+  background: var(--ink);
+  color: var(--surface);
 }
 
 .ext-card-body {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.4rem;
   flex: 1;
-  padding: 0.75rem 0.9rem 0.85rem;
+  padding: 1.25rem 1.5rem 1.5rem;
 }
 
 .ext-card-name {
-  font-size: 0.9375rem;
-  font-weight: 600;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
+/* 說明文字比標題鬆：行高 1.6、字距幾乎不收。收緊的標題配上放鬆的內文，是
+   這一頁不靠顏色也讀得出階層的原因。 */
 .ext-card-desc {
-  font-size: 0.8125rem;
-  color: var(--muted);
-  line-height: 1.5;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  letter-spacing: -0.01em;
 }
 
 .ext-card-foot {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.75rem;
   margin-top: auto;
-  padding-top: 0.5rem;
+  padding-top: 1.25rem;
   font-size: 0.75rem;
 }
 
+/* 這一行是積木包自己的顏色（inline style ＝ manifest 的 `color`），也是整頁唯一
+   一處非黑白灰：它讓這張卡與工具箱那一欄認得出是同一個包。放在最下面那行小字
+   上而不是標題或整塊底色——色記號只要認得出來，不需要搶。 */
 .ext-card-meta {
-  color: var(--muted);
+  font-weight: 500;
 }
 
+/* 「加入」長得像一顆膠囊，但它不是按鈕——整張卡才是。做成膠囊是因為它講的
+   就是這張卡按下去會發生的事，而這一頁裡「按得下去」的形狀只有膠囊一種。 */
 .ext-card-action {
-  font-weight: 600;
-  color: #4c97ff;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--surface);
+  font-weight: 500;
   white-space: nowrap;
 }
 
+/* 已加入：降到次要那一階（淺灰底）。它現在講的是狀態，不是下一步。 */
 .ext-card.is-on .ext-card-action {
-  color: var(--muted);
-}
-
-/* 已經加進來的卡，左鍵不做事（拿掉走右鍵）——所以游標也不該說它可以按。 */
-.ext-card.is-on {
-  cursor: default;
+  background: var(--surface-alt);
+  color: var(--ink-soft);
 }
 
 /* 一張卡的右鍵選單。`position: fixed` 因為座標來自 `clientX/clientY`，而
@@ -1028,7 +1357,7 @@ body,
   border: 1px solid var(--line);
   border-radius: 0.4rem;
   background: #fff;
-  box-shadow: 0 6px 20px rgb(20 20 40 / 20%);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 16%);
 }
 
 .ext-menu-item {
@@ -1047,7 +1376,7 @@ body,
 }
 
 .ext-menu-item:hover:not(:disabled) {
-  background: #eef2f8;
+  background: var(--surface-alt);
 }
 
 .ext-menu-item:disabled {
@@ -1065,43 +1394,43 @@ body,
  * ------------------------------------------------------------------ */
 
 /* `${路徑}` 的膠囊。底圖是一顆 rect，文字疊在上面。 */
-.blocky-pill {
+.blockyard-pill {
   fill: #e4e8ff;
 }
 
-.blocklyEditableField>text.blocky-ref {
+.blocklyEditableField>text.blockyard-ref {
   fill: #3b45a8;
 }
 
 /* §4.7 的「整格取值」：這一格回傳的是原值（可能是物件或清單），不是文字。
    換一個色系而不是換深淺——深淺會被讀成「同一件事的程度差別」。 */
-.blocky-pill-whole {
+.blockyard-pill-whole {
   fill: #d7efe2;
 }
 
-.blocklyEditableField>text.blocky-ref-whole {
+.blocklyEditableField>text.blockyard-ref-whole {
   fill: #1d6b4a;
 }
 
 /* `${a+b}`、運算式的語法錯誤。紅線畫在字底下，字本身也轉紅——只有底線的話
    在小字級上幾乎看不見。存檔仍然由後端的 422 擋（§4.7），這只是提早說。 */
-.blocklyEditableField>text.blocky-bad {
+.blocklyEditableField>text.blockyard-bad {
   fill: #c23b3b;
 }
 
-.blocky-squiggle {
+.blockyard-squiggle {
   stroke: #d43b3b;
   stroke-width: 1.5;
 }
 
-.blocky-field-bad {
+.blockyard-field-bad {
   stroke: #d43b3b;
   stroke-width: 1.5;
 }
 
 /* 運算式欄位用等寬字：`(${a} + 1) * 2` 的括號要對得起來。 */
-.blocklyEditableField>text.blocky-mono,
-.blocky-mono-input {
+.blocklyEditableField>text.blockyard-mono,
+.blockyard-mono-input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -1119,7 +1448,7 @@ body,
    `caret-color` 它沒寫，所以那兩條照一般權重就蓋得過。實測過：不加的話
    `color` 會停在主題的 `#575E75`（一個深藍灰），畫在深紅上糊成一團，而圓角
    會停在 12.5px，也就是旁邊那顆名稱格的膠囊。 */
-.blocky-bare-input.blocklyHtmlInput {
+.blockyard-bare-input.blocklyHtmlInput {
   background: transparent;
   color: #fff !important;
   border-radius: 3px !important;
@@ -1129,7 +1458,7 @@ body,
 /* 選取的反白：預設的瀏覽器藍畫在深紅上會髒掉，而這一格的選取又特別常用到
    （預設文字是「積木名稱」，使用者第一件事就是全選重打）。反白往**深**的
    那一邊走，白字才留得住——往淺的走等於白字配淺底。 */
-.blocky-bare-input.blocklyHtmlInput::selection {
+.blockyard-bare-input.blocklyHtmlInput::selection {
   background: rgb(0 0 0 / 35%);
   color: #fff;
 }
@@ -1141,7 +1470,7 @@ body,
  * 相對於欄位本身；字級寫死，因為 WidgetDiv 的 font-size 是依畫布縮放算出來的。
  * ------------------------------------------------------------------ */
 
-.blocky-autocomplete {
+.blockyard-autocomplete {
   position: absolute;
   top: 100%;
   left: 0;
@@ -1153,20 +1482,20 @@ body,
   border: 1px solid var(--line);
   border-radius: 0.4rem;
   background: #fff;
-  box-shadow: 0 4px 14px rgb(20 20 40 / 18%);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 14%);
   font: 400 0.8125rem/1.6 system-ui, -apple-system, 'Noto Sans TC', sans-serif;
   color: var(--fg);
   text-align: left;
   white-space: nowrap;
 }
 
-.blocky-autocomplete-item {
+.blockyard-autocomplete-item {
   padding: 0.1rem 0.5rem;
   border-radius: 0.25rem;
   cursor: pointer;
 }
 
-.blocky-autocomplete-item-on {
+.blockyard-autocomplete-item-on {
   background: #e4e8ff;
 }
 
@@ -1190,7 +1519,7 @@ body,
   justify-content: center;
   overflow: auto;
   padding: 2rem 0;
-  background: rgb(20 20 40 / 35%);
+  background: rgb(0 0 0 / 35%);
 }
 
 .modal {
@@ -1199,30 +1528,52 @@ body,
   width: min(38rem, calc(100vw - 3rem));
   border-radius: 0.75rem;
   background: #fff;
-  box-shadow: 0 12px 40px rgb(20 20 40 / 28%);
+  /* 對話框是唯一留著陰影的東西：它真的浮在別的東西上面（背景那一層還在），
+     而「浮起來」是它跟卡片之間唯一的差別。 */
+  box-shadow: 0 12px 40px rgb(0 0 0 / 22%);
+  overflow: hidden;
 }
 
 .modal-head {
-  position: relative;
   display: flex;
   align-items: center;
-  padding: 0.6rem 1rem;
+  /* 標題靠左、動作（重新整理／關閉）成一組靠右——`h2` 的 `margin-right: auto`
+     就是這一列的 space-between。關閉鈕以前是 `position: absolute; right: 1rem`
+     浮在上面，所以只要標頭裡多一顆按鈕（執行紀錄的「重新整理」），叉叉就會直接
+     壓在那顆按鈕的字上。 */
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
   border-top-left-radius: 0.75rem;
   border-top-right-radius: 0.75rem;
-  /* 與工具箱按鈕同一個藍：這個對話框是從那顆按鈕開出來的。 */
-  background: #4d97ff;
-  color: #fff;
+  /* 白底 + 一條髮絲線，不是一條藍色帶。整個編輯器裡「一條標頭」的做法統一成
+     這一種（同 `.gallery-head`）：標頭與內容之間的界線由那條線畫，色帶只是把
+     同一件事再喊一次，而喊完之後標題就得改成白字、關閉鈕得改成半透明的白，
+     一路下去這個對話框自己就變成一套獨立的配色。 */
+  border-bottom: 1px solid #e5e5e5;
+  background: #fff;
+  color: var(--ink);
 }
 
+/* 500 而不是 600：這一行是標頭，不是強調。
+   `inline-flex` 是為了標題前面那顆 icon：它是一個 SVG box，不是一個字，行內
+   排版會讓它坐在基線上、比中文字低半格（同 `.button` 那段的理由）。 */
 .modal-head h2 {
-  margin: 0 auto;
-  font-size: 0.95rem;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  /* 右邊 auto ＝ 把右邊那組推到底；左右的 1rem 內距是 `.modal-head` 給的。 */
+  margin: 0 auto 0 0;
+  min-width: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  /* 標題會長（`執行紀錄 · run_…`），長到擠掉右邊那兩顆按鈕之前先自己截斷。 */
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .modal-close {
-  position: absolute;
-  right: 1rem;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1234,9 +1585,13 @@ body,
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: rgb(255 255 255 / 25%);
-  color: #fff;
+  background: var(--surface-alt);
+  color: var(--ink);
   cursor: pointer;
+}
+
+.modal-close:hover {
+  background: #e6e6e6;
 }
 
 /* 預覽區。Blockly 畫在固定尺寸的 SVG 上，所以這個容器必須有明確高度。
@@ -1274,7 +1629,7 @@ body,
   transform: translate(-50%, calc(-100% - 0.35rem));
   border-radius: 0.4rem;
   background: #fff;
-  box-shadow: 0 2px 8px rgb(20 20 40 / 22%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
 }
 
 .segment-button {
@@ -1383,6 +1738,12 @@ body,
   line-height: 1.6;
 }
 
+/* 收在對話框最底下的那一句（執行紀錄細節頁的 §6.3 註腳、讀取中／沒有輸出）：
+   `.modal` 自己沒有內距，不補的話那行字會貼著圓角的下緣。 */
+.modal-hint:last-child {
+  padding-bottom: 1rem;
+}
+
 .modal-foot {
   display: flex;
   justify-content: flex-end;
@@ -1451,15 +1812,17 @@ body,
   width: 1.75rem;
   height: 1.75rem;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 0.35rem;
-  background: #fff;
+  /* 邊透明而不是拿掉：這幾顆是 1.75rem 的方形，少 2px 就跟旁邊那排對不齊。
+     形狀跟工具列上那些按鈕同一套（膠囊，在方形上就是圓）。 */
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-alt);
   color: var(--muted);
   cursor: pointer;
 }
 
 .keys-icon-button:hover:not(:disabled) {
-  background: #f3f5f9;
+  background: #e6e6e6;
   color: inherit;
 }
 
@@ -1644,10 +2007,10 @@ body,
    文法裡一直都是「這一格的內容是資料」——說明文字不是，它會變成積木文字的
    一部分。底色留著（看得出點得到），只是往深的那一邊走。
 
-   選擇器要帶著 `.zelos-renderer.blocky-theme` 前綴，因為 zelos 對可編輯欄位
+   選擇器要帶著 `.zelos-renderer.blockyard-theme` 前綴，因為 zelos 對可編輯欄位
    的預設（白底、深字）就是掛在那個前綴下的——少了它，同分而 Blockly 的樣式
    後注入，於是這兩條看起來完全沒有作用。 */
-.zelos-renderer.blocky-theme .blocky-bare-field.blocklyEditableField>rect.blocklyFieldRect {
+.zelos-renderer.blockyard-theme .blockyard-bare-field.blocklyEditableField>rect.blocklyFieldRect {
   /* **比積木底色深，而不是比它淺**：淺的那一版（白色半透明）讀起來像一顆褪色
      的白色膠囊，而白色膠囊在這套視覺文法裡就是「這一格會變成一個孔」——說明
      文字正好相反，它會變成積木文字的一部分。用黑色半透明而不是寫死一個紅色，
@@ -1660,8 +2023,8 @@ body,
   ry: 3px;
 }
 
-.zelos-renderer.blocky-theme .blocky-bare-field.blocklyEditableField>g>text,
-.zelos-renderer.blocky-theme .blocky-bare-field.blocklyEditableField>text {
+.zelos-renderer.blockyard-theme .blockyard-bare-field.blocklyEditableField>g>text,
+.zelos-renderer.blockyard-theme .blockyard-bare-field.blocklyEditableField>text {
   fill: #fff;
 }
 
@@ -1674,29 +2037,29 @@ body,
  * 這裡：寬度是 JS 量文字算出來寫進 rect 的，CSS 碰不到。
  * ------------------------------------------------------------------ */
 
-.blocky-flyout-button>.blocklyFlyoutButtonShadow {
+.blockyard-flyout-button>.blocklyFlyoutButtonShadow {
   display: none;
 }
 
-.blocky-flyout-button>.blocklyFlyoutButtonBackground {
+.blockyard-flyout-button>.blocklyFlyoutButtonBackground {
   fill: #fff;
   stroke: var(--line);
   stroke-width: 1;
 }
 
 /* 選擇器要夠重。積木上的字是白的，而那條規則是主題發的
-   `.zelos-renderer.blocky-theme .blocklyText { fill: #fff }`（三個 class）
+   `.zelos-renderer.blockyard-theme .blocklyText { fill: #fff }`（三個 class）
    ——蓋不過去的話按鈕就是白字白底，看起來完全是空的（實測就是這樣）。 */
-.blocklyFlyout .blocky-flyout-button>text.blocklyText {
+.blocklyFlyout .blockyard-flyout-button>text.blocklyText {
   fill: var(--fg);
   font-weight: 600;
 }
 
-.blocky-flyout-button:hover>.blocklyFlyoutButtonBackground {
+.blockyard-flyout-button:hover>.blocklyFlyoutButtonBackground {
   fill: #f2f3f8;
 }
 
-.blocky-flyout-button:active>.blocklyFlyoutButtonBackground {
+.blockyard-flyout-button:active>.blocklyFlyoutButtonBackground {
   fill: #e6e8f2;
 }
 
@@ -1711,7 +2074,7 @@ body,
  * 分類邊界，段落標題必須被排除掉。
  * ------------------------------------------------------------------ */
 
-.blocklyFlyout .blocky-section-label>text.blocklyFlyoutLabelText {
+.blocklyFlyout .blockyard-section-label>text.blocklyFlyoutLabelText {
   fill: var(--muted);
   font-size: 0.9rem;
   font-weight: 500;
@@ -1771,7 +2134,7 @@ body,
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
-  box-shadow: 0 4px 16px rgb(20 20 40 / 18%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 14%);
   cursor: pointer;
 }
 
@@ -1893,7 +2256,9 @@ body,
   align-items: center;
   gap: 0.75rem;
   width: 100%;
-  padding: 0.5rem 0.35rem;
+  /* 左右跟標頭同一個 1rem：點與觸發來源要對齊標題那一行的起點，不然這一列
+     會讀起來像從對話框邊緣長出來的。 */
+  padding: 0.5rem 1rem;
   border: 0;
   border-bottom: 1px solid var(--line);
   background: none;
@@ -1907,25 +2272,34 @@ body,
   background: var(--hover, rgba(127, 127, 127, 0.08));
 }
 
+/* 狀態是一顆點，不是一個詞。
+
+   這一欄是拿來**掃**的：一列一列往下看的時候，「完成」兩個字要讀完才知道它
+   說的是狀態，而十筆裡有九筆都是完成——那九次閱讀全是噪音。一顆綠點不必讀，
+   而唯一那顆紅點會自己跳出來，那正是使用者翻這份清單的原因。
+
+   詞沒有消失，它搬到 `aria-label` 與 `title`：讀螢幕的人聽得到，滑上去的人
+   看得到。顏色是這份清單裡唯一的顏色（其餘全是黑白灰），所以它不必很大。 */
 .history-status {
   flex: none;
-  min-width: 3.5rem;
-  font-size: 0.72rem;
-  color: var(--muted);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--muted);
 }
 
 .history-status-ok {
-  color: var(--ok, #2e7d32);
+  background: var(--ok, #2e7d32);
 }
 
 .history-status-error {
-  color: var(--danger, #c62828);
+  background: var(--danger, #c62828);
 }
 
 /* 「中斷」是後端被砍掉時還在跑的那些——**不是使用者按的停止**，所以顏色
    跟 cancelled 分開：一個是意外，一個是決定。 */
 .history-status-interrupted {
-  color: var(--warn, #b26a00);
+  background: var(--warn, #b26a00);
 }
 
 .history-main {
@@ -1951,16 +2325,19 @@ body,
   color: var(--warn, #b26a00);
 }
 
+/* 細節頁的第一列（回清單 ＋ 這次是誰觸發的）。左右跟標頭、清單同一個 1rem
+   ——這三層是同一個對話框裡由上往下的三段，起點線不對齊的話，每往下一段畫面
+   都像換了一份版型。 */
 .history-detail-head {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem 0.5rem;
 }
 
 .history-events {
-  margin: 0 0 0.75rem;
-  padding: 0;
+  margin: 0;
+  padding: 0 1rem;
   list-style: none;
   max-height: 20rem;
   overflow: auto;
@@ -1969,9 +2346,19 @@ body,
 
 .history-event {
   display: flex;
-  gap: 0.6rem;
-  padding: 0.3rem 0;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
   border-bottom: 1px solid var(--line);
+}
+
+/* 最後一列不畫線：那條線底下沒有下一列，它只是把清單跟後面的說明黏在一起。 */
+.history-event:last-child {
+  border-bottom: none;
+}
+
+/* 「載入更多」跟事件清單同一條起點線。 */
+.history-more {
+  margin: 0.5rem 1rem 0;
 }
 
 .history-event-op {
@@ -2006,4 +2393,571 @@ body,
 
 .history-log-error .history-event-body {
   color: var(--danger, #c62828);
+}
+
+/* ------------------------------------------------------------------ *
+ * 分頁列與積木包的面板（§8.3、§16 Q17 的 B 路線）
+ *
+ * **分頁是宣告出來的**：`執行` + 每一個啟用中的積木包宣告的那幾格。所以這一列
+ * 的長度由「裝了幾個包」決定，不是由執行時畫了幾張圖決定——早期版本讓標題當
+ * 身分，而標題可以插值，一個迴圈就能生出無限多格。
+ *
+ * 而**編輯器不畫面板的內容**：它只給那個包一格 sandbox 的 iframe。所以這一段
+ * 沒有任何圖表、表格、數值卡的樣式——那些住在包自己的 `ui/` 裡。
+ * ------------------------------------------------------------------ */
+
+/* 底線式而不是膠囊式：窄欄裡橫向空間最貴，而底線只吃掉高度。
+
+   整條灰線由 `.run-tabs` 的 `border-bottom` 給，選中的那顆用一條更粗的黑線蓋
+   在上面——兩條線疊在同一個 y 上，靠 `margin-bottom: -1px` 對齊。 */
+.run-tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex: none;
+  padding: 0 0.9rem;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.run-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.run-tab {
+  flex: none;
+  max-width: 9rem;
+  margin-bottom: -1px;
+  padding: 0.55rem 0.3rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-tab:hover {
+  color: var(--fg);
+}
+
+.run-tab.is-on {
+  border-bottom-color: #222;
+  color: #222;
+  font-weight: 600;
+}
+
+/* 面板那一頁：**一次一格，佔滿整片**。開一格面板出來就是為了看它。 */
+.run-section-panels {
+  flex: 1;
+  min-height: 0;
+  border-bottom: none;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.panel-view {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 那個包的畫面。滿版、沒有邊框——裡面畫什麼是它的事，我們只給一塊乾淨的地。 */
+.panel-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+  background: #fff;
+}
+
+/* 跳出去那顆按鈕疊在右上角，不佔一整行——那一行在滿版的圖上很貴。疊在 iframe
+   **上面**，所以那個包畫的東西蓋不掉它。 */
+.panel-popout {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  z-index: 1;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: rgb(255 255 255 / 85%);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.panel-popout:hover {
+  color: var(--fg);
+  border-color: #b9bdcd;
+}
+
+/* 編輯器對這格面板說的話（訊息被截掉、面板沒回報 ready）。**收件人是寫那個包
+   的人**，所以疊在上面而不是取代 iframe——那個 frame 要留著，不然 devtools 裡
+   選不到它，而下一步正是去那裡看。 */
+.panel-note {
+  position: absolute;
+  inset: auto 0.5rem 0.5rem;
+  z-index: 1;
+  margin: 0;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: #fff;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.panel-note-warn {
+  border-color: #f0d9a8;
+  background: #fdf6e6;
+  color: #7a5b12;
+}
+
+/* 彈出視窗（`PanelWindow`）。**整扇窗就是那一格面板**——開它的全部理由就是讓
+   畫面變大。這兩條跟著抄過去的 CSS 一起進到那個 document。 */
+.panel-window-body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.panel-window {
+  box-sizing: border-box;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+}
+
+.panel-window > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------
+ * 從電腦匯入 `.zip`：審閱畫面與那兩條警告（§12.1、P3 第 2 步）
+ *
+ * 這一段跟著 `.gallery` 那一套走（黑、白、一階淺灰，膠囊按鈕，髮絲邊，沒有
+ * 陰影）——它是同一扇門後面的第二頁，長得像另一個 app 的話，「這是同一個地方」
+ * 就要靠使用者自己記。
+ * ------------------------------------------------------------------ */
+
+/* 檔案挑選器。`display: none` 不行——有些瀏覽器不讓一個 `display: none` 的
+   input 被程式點開。這是「看不見但仍然存在」的標準寫法。 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 匯入失敗、以及讀不進來的包。**留在原地說**，不是一個會自己消失的 toast：
+   使用者接下來要做的事（換一個檔案、去修那份 manifest）需要那句話還在。 */
+.gallery-alert {
+  margin: 0 2rem 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--ink);
+  border-radius: 8px;
+  background: var(--surface-alt);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.gallery-alert p {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.gallery-alert.is-problems ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.5rem;
+  color: var(--ink-soft);
+}
+
+.gallery-alert code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* 審閱那一頁。與 `.gallery` 同一個 `position: fixed` 的位置（它是同一扇門後面
+   的另一個狀態），但**它自己不捲**：捲的是底下兩欄各自的內容。整頁一起捲的話，
+   使用者往下讀程式碼時上面那顆「安裝」會跟著捲走——而那是這一頁唯一會改變這台
+   機器的按鈕，它應該一直在看得到的地方。 */
+.import-review {
+  --ink: #000;
+  --surface: #fff;
+  --surface-alt: #f1f1f1;
+  --hairline: var(--line);
+  --ink-soft: #6b6b6b;
+  --ink-faint: #8a8a8a;
+
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.import-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 2rem 1rem;
+}
+
+.import-title {
+  min-width: 0;
+}
+
+.import-title h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.import-version {
+  color: var(--ink-faint);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.import-title p {
+  margin: 0.15rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+
+/* 安裝：這一頁唯一會改變這台機器的動作，所以它是主要那一階（黑底白字），與
+   擴充功能面板的匯入按鈕同一顆。 */
+.import-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-self: end;
+  padding: 0.55rem 1.4rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* 已經裝過了（§16 Q24）。**不是一顆暗按鈕**：暗按鈕說的是「等一下就能按」，
+   而這件事要換掉的是那個包的 id 或那個決議，不是等待。 */
+.import-blocked {
+  justify-self: end;
+  max-width: 16rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  text-align: right;
+}
+
+.import-error,
+.import-note {
+  margin: 0 2rem 0.75rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--ink);
+  border-radius: 8px;
+  background: var(--surface-alt);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.import-note {
+  border-left-color: var(--ink-faint);
+  color: var(--ink-soft);
+}
+
+@keyframes import-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.import-spin {
+  animation: import-spin 0.9s linear infinite;
+}
+
+/* 兩欄：左邊是讀得懂的（宣告與掃描），右邊是那份程式碼。**右邊比較寬**——
+   §12.1 那句話的主詞是原始碼，而一個被擠成 20 個字寬的程式碼欄等於沒有給。 */
+.import-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(18rem, 22rem) 1fr;
+  min-height: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.import-summary {
+  overflow: auto;
+  padding: 1.5rem 1.75rem 3rem;
+  background: var(--surface-alt);
+}
+
+.import-desc {
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.import-summary h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 1.5rem 0 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+.import-summary h3:first-of-type {
+  margin-top: 0;
+}
+
+.import-perms,
+.import-list,
+.import-findings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.import-perms li {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.import-perm-label {
+  font-weight: 500;
+}
+
+.import-perm-note {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+/* 沒宣告卻掃到的那一列。整套配色裡最重的一級就是「轉黑加粗」，而這一頁刻意
+   沒有紅色——一個紅色的警告會讓每一個正常的包看起來都像出事了，而這條規則
+   的誤報率本來就不低（`codescan.py` 的第二點）。 */
+.import-perms li.is-mismatch .import-perm-note,
+.import-findings li.is-mismatch span {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.import-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.import-warn svg {
+  flex: none;
+  margin-top: 0.15rem;
+}
+
+.import-list li {
+  padding: 0.3rem 0;
+  color: var(--ink);
+}
+
+.import-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+/* 掃描命中的那幾行。檔名是一顆按鈕——點它就把右邊那一欄換到那個檔案，這是
+   「指出來」與「替他讀」之間唯一的差別。 */
+.import-findings li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.import-findings button {
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.import-findings button:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.import-findings span {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.import-none {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+
+/* 右邊那一欄：檔案清單在上、程式碼在下。清單橫排而不是側欄——一個積木包多半
+   只有三五個檔案，而一條垂直側欄會把已經很窄的程式碼再切一刀。 */
+.import-code {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.import-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--hairline);
+  max-height: 8rem;
+  overflow: auto;
+}
+
+.import-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.import-file:hover:not(:disabled) {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.import-file.is-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
+
+/* 攤不開的（圖片、字型）。仍然列出來——「這個 zip 裡到底有什麼」是這一頁要
+   回答的第一個問題——但點它沒有意義，所以它按不下去。 */
+.import-file:disabled {
+  cursor: default;
+  color: var(--ink-faint);
+  opacity: 0.65;
+}
+
+.import-file-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.import-file-size {
+  color: var(--ink-faint);
+  font-size: 0.6875rem;
+}
+
+.import-file.is-on .import-file-size {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.import-omitted {
+  width: 100%;
+  margin: 0.25rem 0 0;
+  font-size: 0.6875rem;
+  color: var(--ink-faint);
+}
+
+/* 程式碼本身。**橫向自己捲**（`overflow: auto` + 不折行）：折行的程式碼讀起來
+   像另一份程式碼，而一個裝了 200 行 Python 的欄位本來就該可以往右看。 */
+.import-source {
+  flex: 1;
+  margin: 0;
+  padding: 1.25rem 1.5rem 3rem;
+  overflow: auto;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.7;
+  tab-size: 4;
+  white-space: pre;
+}
+
+.import-source:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.import-truncated {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--hairline);
+  color: var(--ink-faint);
+  font-family: system-ui, sans-serif;
+  font-size: 0.75rem;
+}
+
+/* 窄畫面：兩欄疊成一欄。摘要在上、程式碼在下——讀得懂的先給。 */
+@media (max-width: 60rem) {
+  .import-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    overflow: auto;
+  }
+
+  .import-summary {
+    overflow: visible;
+  }
 }

@@ -22,9 +22,9 @@ from pathlib import Path
 
 import pytest
 
-from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
-from blocky.interpreter import declarations
-from blocky.interpreter.registry import (
+from blockyard.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
+from blockyard.interpreter import declarations
+from blockyard.interpreter.registry import (
     COMMANDS,
     HAT_OPCODES,
     SHAPE_COMMAND,

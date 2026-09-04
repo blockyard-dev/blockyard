@@ -20,7 +20,7 @@
  */
 import * as Blockly from 'blockly/core';
 
-const CLASS = 'blocky-autocomplete';
+const CLASS = 'blockyard-autocomplete';
 
 export interface AutocompleteHandle {
   /** 目前選中的項目，沒有就是 `null`。 */

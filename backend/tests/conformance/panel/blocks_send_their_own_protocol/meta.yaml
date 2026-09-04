@@ -1,0 +1,22 @@
+title: 每顆積木送出這個包自己定的一則訊息——形狀由它決定，不是由編輯器決定
+spec: §16 Q17 積木包能不能畫自己的面板
+tags:
+- panel
+- extension
+expect:
+  status: ok
+  logs: []
+  panels:
+    panel/chart:
+    - type: line
+      values:
+      - 3
+      - 1
+      - 4
+    - type: point
+      x: 1
+      y: 2
+    - type: clear
+    - type: stat
+      name: 總數
+      value: '42'

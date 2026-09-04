@@ -13,14 +13,35 @@ import type * as Blockly from 'blockly/core';
 import type { BlockState } from './store';
 
 const CLASS: Record<BlockState['phase'], string | null> = {
-  running: 'blocky-run-running',
-  hot: 'blocky-run-hot',
-  error: 'blocky-run-error',
+  running: 'blockyard-run-running',
+  hot: 'blockyard-run-hot',
+  error: 'blockyard-run-error',
   // 跑完的積木不留痕跡——值氣泡才是「它剛剛回傳了什麼」的表現。
   done: null,
 };
 
-const ALL = ['blocky-run-running', 'blocky-run-hot', 'blocky-run-error'];
+const ALL = ['blockyard-run-running', 'blockyard-run-hot', 'blockyard-run-error'];
+
+/**
+ * 這顆積木在哪裡。**主畫布找不到就問工具箱那一份工作區。**
+ *
+ * §5.1 的「點一下就跑」現在也認工具箱裡那一顆（`App.tsx` 的 CLICK listener），
+ * 而那顆積木從來沒有被拉出來——主畫布上永遠找不到它。少了這條退路，工具箱裡
+ * 的執行是一次完全看不見的執行：積木不亮、值氣泡貼不到東西，畫面上只剩工具列
+ * 那一句「執行成功」。
+ *
+ * `getFlyout` 只有 `WorkspaceSvg` 有；headless 的工作區（測試、預覽）走
+ * `?.()` 的那條路，回 undefined。
+ */
+export function locate(
+  workspace: Blockly.Workspace | null,
+  blockId: string,
+): Blockly.Block | null {
+  const own = workspace?.getBlockById(blockId);
+  if (own) return own;
+  const flyout = (workspace as Blockly.WorkspaceSvg | null)?.getFlyout?.();
+  return flyout?.getWorkspace().getBlockById(blockId) ?? null;
+}
 
 /**
  * 把狀態同步到工作區。記得上一次掛過哪些 class，才知道要拆掉哪些——
@@ -50,7 +71,7 @@ export class RunDecorator {
 
   private setClass(blockId: string, want: string | null): void {
     // 積木可能已經被刪掉（執行中拖走一顆）。那不是錯誤，忽略就好。
-    const root = this.workspace.getBlockById(blockId)?.getSvgRoot();
+    const root = (locate(this.workspace, blockId) as Blockly.BlockSvg | null)?.getSvgRoot();
     if (root) {
       root.classList.remove(...ALL);
       if (want) root.classList.add(want);
@@ -65,7 +86,7 @@ export function blockRect(
   workspace: Blockly.WorkspaceSvg,
   blockId: string,
 ): DOMRect | null {
-  const root = workspace.getBlockById(blockId)?.getSvgRoot();
+  const root = (locate(workspace, blockId) as Blockly.BlockSvg | null)?.getSvgRoot();
   return root ? root.getBoundingClientRect() : null;
 }
 
@@ -93,7 +114,7 @@ export function speaks(
 ): boolean {
   if (state.phase === 'error') return state.error !== undefined;
   // 積木被刪掉了（執行中拖走一顆）就當它落單：反正氣泡沒有東西可以貼。
-  if (workspace?.getBlockById(blockId)?.outputConnection?.isConnected()) return false;
+  if (locate(workspace, blockId)?.outputConnection?.isConnected()) return false;
   if (state.phase === 'hot') return true;
   return state.phase === 'done' && state.value !== undefined;
 }

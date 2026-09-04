@@ -50,8 +50,8 @@ import {
 } from '../../ir/highlight';
 import { openAutocomplete, type AutocompleteHandle } from './Autocomplete';
 
-/** Blockly JSON 裡的欄位型別名稱（`{"type": "field_blocky_text"}`）。 */
-export const FIELD_TEXT_TYPE = 'field_blocky_text';
+/** Blockly JSON 裡的欄位型別名稱（`{"type": "field_blockyard_text"}`）。 */
+export const FIELD_TEXT_TYPE = 'field_blockyard_text';
 
 /** 這個欄位的能力開關。全部關掉就是一個陽春的文字欄位。 */
 export interface FieldTextOptions {
@@ -159,7 +159,7 @@ const MIN_PILL_ASPECT = 1.6;
 const MAX_COMPLETIONS = 8;
 
 /** 積木上警告圖示的 id 前綴——見下面 `syncWarning` 對「帶 id 清除」的說明。 */
-const FIELD_WARNING_PREFIX = 'blocky-field:';
+const FIELD_WARNING_PREFIX = 'blockyard-field:';
 
 const NBSP = ' ';
 
@@ -432,7 +432,7 @@ export class FieldText extends FieldMultilineInput {
     // 外框**留著**（樣式由 CSS 換掉，見 index.css）：拿掉它，一格空的說明文字
     // 就只剩一個 NBSP，而 SVG 的命中測試打不到沒有幾何的東西——那正是這個檔案
     // 前面為影子欄位補 `clickTarget_` 的同一個坑。
-    if (this.bare) Blockly.utils.dom.addClass(this.fieldGroup_!, 'blocky-bare-field');
+    if (this.bare) Blockly.utils.dom.addClass(this.fieldGroup_!, 'blockyard-bare-field');
     this.syncWarning();
   }
 
@@ -535,7 +535,7 @@ export class FieldText extends FieldMultilineInput {
           Blockly.utils.dom.createSvgElement(
             Blockly.utils.Svg.RECT,
             {
-              class: this.analysis.whole ? 'blocky-pill blocky-pill-whole' : 'blocky-pill',
+              class: this.analysis.whole ? 'blockyard-pill blockyard-pill-whole' : 'blockyard-pill',
               x: startX + x - PILL_PAD,
               y: centerY - pillHeight / 2,
               width: w + 2 * PILL_PAD,
@@ -549,7 +549,7 @@ export class FieldText extends FieldMultilineInput {
           const y = centerY + constants.FIELD_TEXT_HEIGHT / 2 - 1;
           Blockly.utils.dom.createSvgElement(
             Blockly.utils.Svg.LINE,
-            { class: 'blocky-squiggle', x1: startX + x, y1: y, x2: startX + x + w, y2: y },
+            { class: 'blockyard-squiggle', x1: startX + x, y1: y, x2: startX + x + w, y2: y },
             marks,
           );
         }
@@ -611,14 +611,14 @@ export class FieldText extends FieldMultilineInput {
 
   private textClass(kind: RunKind): string {
     const parts = ['blocklyText', 'blocklyMultilineText'];
-    if (kind === 'ref') parts.push(this.analysis.whole ? 'blocky-ref blocky-ref-whole' : 'blocky-ref');
-    if (kind === 'error') parts.push('blocky-bad');
-    if (this.mode === 'expression') parts.push('blocky-mono');
+    if (kind === 'ref') parts.push(this.analysis.whole ? 'blockyard-ref blockyard-ref-whole' : 'blockyard-ref');
+    if (kind === 'error') parts.push('blockyard-bad');
+    if (this.mode === 'expression') parts.push('blockyard-mono');
     return parts.join(' ');
   }
 
   private borderClass(): string {
-    return this.analysis.error ? 'blocklyFieldRect blocky-field-bad' : 'blocklyFieldRect';
+    return this.analysis.error ? 'blocklyFieldRect blockyard-field-bad' : 'blocklyFieldRect';
   }
 
   /**
@@ -671,12 +671,12 @@ export class FieldText extends FieldMultilineInput {
     const input = this.htmlInput_;
     if (!input) return;
     // 運算式在編輯中也是等寬字：進出編輯狀態時字形跳一下比一路不等寬更難讀。
-    if (this.mode === 'expression') input.classList.add('blocky-mono-input');
+    if (this.mode === 'expression') input.classList.add('blockyard-mono-input');
     // 說明文字那幾格在編輯中也要維持「積木上的一段文字」的樣子。Blockly 給
     // 編輯器的預設是白底、深灰字、膠囊圓角——那正是**旁邊那顆名稱格**的樣子，
     // 於是一點進去，這一格看起來就變成了一個孔。`bare` 的整個重點是這兩者不
     // 能長得一樣（見 `FieldTextOptions.bare`），所以編輯中也要蓋掉。
-    if (this.bare) input.classList.add('blocky-bare-input');
+    if (this.bare) input.classList.add('blockyard-bare-input');
 
     this.onInput = () => {
       this.refreshCompletions();
@@ -1039,8 +1039,8 @@ export function renameVariable(
 // 右鍵選單（§8.5）
 // -------------------------------------------------------------------- //
 
-const MULTILINE_ITEM = 'blocky_field_multiline';
-const RENAME_ITEM = 'blocky_field_rename';
+const MULTILINE_ITEM = 'blockyard_field_multiline';
+const RENAME_ITEM = 'blockyard_field_rename';
 
 /**
  * 被右鍵點到的那一格。

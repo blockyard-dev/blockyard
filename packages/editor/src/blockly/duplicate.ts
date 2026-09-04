@@ -22,7 +22,7 @@
 import * as Blockly from 'blockly/core';
 
 /** `theme.ts` 的 `plugins.blockDragger` 指的就是這個名字。 */
-export const DUPLICATING_DRAGGER = 'BlockyDuplicatingDragger';
+export const DUPLICATING_DRAGGER = 'BlockyardDuplicatingDragger';
 
 class DuplicatingDragger extends Blockly.dragging.Dragger {
   /**

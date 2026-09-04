@@ -1,0 +1,18 @@
+{"op": "run.start", "runId": "r1"}
+{"op": "thread.start", "threadId": "t1", "scriptId": "sc_1"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_3"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_3", "value": [3, 1, 4]}
+{"op": "ext.panel", "threadId": "t1", "blockId": "blk_2", "extId": "panel", "panelId": "chart", "payload": {"type": "line", "values": [3, 1, 4]}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_2"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_4"}
+{"op": "ext.panel", "threadId": "t1", "blockId": "blk_4", "extId": "panel", "panelId": "chart", "payload": {"type": "point", "x": 1, "y": 2}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
+{"op": "ext.panel", "threadId": "t1", "blockId": "blk_5", "extId": "panel", "panelId": "chart", "payload": {"type": "clear"}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5"}
+{"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
+{"op": "ext.panel", "threadId": "t1", "blockId": "blk_6", "extId": "panel", "panelId": "chart", "payload": {"type": "stat", "name": "總數", "value": "42"}}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_6"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

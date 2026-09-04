@@ -23,11 +23,11 @@ import { buildContext, type ConversionContext } from './context';
 import { loadProject } from './deserialize';
 import { CheckRunner, checkWorkspace, warningId, type Warning } from './checks';
 import type { Manifest } from '../types/manifest';
-import type { Block as IRBlock, BlockyProjectIR as ProjectIR, Procedure } from '../types/project';
+import type { Block as IRBlock, BlockyardProjectIR as ProjectIR, Procedure } from '../types/project';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../backend/blocky/interpreter/builtins',
+  '../../../../backend/blockyard/interpreter/builtins',
 );
 
 let builtinBlocks: RegisteredBlock[];
@@ -675,7 +675,7 @@ describe('CheckRunner 的清除（inert.ts 的那個 bug）', () => {
     const calls = spy(s.workspace.getBlockById('get')!);
     s.runner.run({ ctx: s.ctx, procedures: s.procedures });
     expect(calls).toEqual([
-      { id: 'blocky-check:variable', text: expect.stringContaining('還沒有被設定過') },
+      { id: 'blockyard-check:variable', text: expect.stringContaining('還沒有被設定過') },
     ]);
   });
 
@@ -688,7 +688,7 @@ describe('CheckRunner 的清除（inert.ts 的那個 bug）', () => {
     const set = s.workspace.newBlock('data.set');
     set.getField('name')!.setValue('count');
     s.runner.run({ ctx: s.ctx, procedures: s.procedures });
-    expect(calls).toEqual([{ id: 'blocky-check:variable', text: null }]);
+    expect(calls).toEqual([{ id: 'blockyard-check:variable', text: null }]);
   });
 
   it('沒有變化時不重複下指令', () => {
@@ -705,11 +705,11 @@ describe('CheckRunner 的清除（inert.ts 的那個 bug）', () => {
     s.runner.run({ ctx: s.ctx, procedures: s.procedures });
     const calls = spy(s.workspace.getBlockById('get')!);
     s.runner.clear();
-    expect(calls).toEqual([{ id: 'blocky-check:variable', text: null }]);
+    expect(calls).toEqual([{ id: 'blockyard-check:variable', text: null }]);
   });
 
   it('warningId 帶前綴，不會與存檔／欄位警告的 id 撞到', () => {
-    expect(warningId('variable')).toBe('blocky-check:variable');
+    expect(warningId('variable')).toBe('blockyard-check:variable');
   });
 });
 

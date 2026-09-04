@@ -17,15 +17,15 @@ from typing import Any
 
 import pytest
 
-from blocky.errors import ExtensionError
-from blocky.extensions import (
+from blockyard.errors import ExtensionError
+from blockyard.extensions import (
     DEFAULT_EXTENSIONS_ROOT,
     CallContexts,
     EventSinkChannel,
     InProcessHost,
     discover,
 )
-from blocky.interpreter.events import EventSink
+from blockyard.interpreter.events import EventSink
 
 ROUTES: dict[str, tuple[int, str, Any]] = {
     "/json": (200, "application/json", {"items": [{"title": "一"}, {"title": "二"}]}),
@@ -184,7 +184,7 @@ async def test_request_送得出標頭(pack: Pack, base: str) -> None:
 async def test_有預設的_user_agent(pack: Pack, base: str) -> None:
     # 逾時、重試、UA 都是 host 那份共用 client 的預設值（§7.4）。
     r = await pack.call("http.request", method="POST", url=f"{base}/echo", headers={}, body={})
-    assert r["body"]["user_agent"].startswith("blocky/")
+    assert r["body"]["user_agent"].startswith("blockyard/")
 
 
 async def test_get_不送內容(pack: Pack, base: str) -> None:
@@ -248,14 +248,14 @@ async def test_一份專案裡的積木真的跑得動(base: str) -> None:
     引擎的求值、§7.5 的邊界，最後打到一個真的 socket 上。中間任何一段沒接
     起來，這一題就會紅——而前面十六題都還是綠的。
     """
-    from blocky.extensions import DEFAULT_EXTENSIONS_ROOT, open_registry
-    from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
-    from blocky.interpreter.declarations import expression_fields
-    from blocky.interpreter.engine import Interpreter
-    from blocky.interpreter.events import EventSink
-    from blocky.interpreter.registry import resolve_shape, resolve_terminal
-    from blocky.ir.schema import load
-    from blocky.testing import Tpl, blk, build
+    from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT, open_registry
+    from blockyard.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
+    from blockyard.interpreter.declarations import expression_fields
+    from blockyard.interpreter.engine import Interpreter
+    from blockyard.interpreter.events import EventSink
+    from blockyard.interpreter.registry import resolve_shape, resolve_terminal
+    from blockyard.ir.schema import load
+    from blockyard.testing import Tpl, blk, build
 
     data = build(
         extensions=[("http", "0.1.0")],

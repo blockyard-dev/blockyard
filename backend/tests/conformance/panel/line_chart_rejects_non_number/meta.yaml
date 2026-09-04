@@ -1,0 +1,10 @@
+title: 折線圖的資料要全部是數字，而錯誤要指名**第幾筆**（這一條在包裡，不在編輯器）
+spec: §16 Q17 積木包能不能畫自己的面板
+tags:
+- panel
+- extension
+- validation
+expect:
+  status: error
+  error:
+    message_contains: 第 2 筆不是

@@ -17,7 +17,7 @@ import type { BlockSpec, Manifest } from '../types/manifest';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../backend/blocky/interpreter/builtins',
+  '../../../../backend/blockyard/interpreter/builtins',
 );
 
 let ifElseSpec: BlockSpec;

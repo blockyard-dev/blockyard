@@ -17,18 +17,18 @@ from typing import Any
 
 import pytest
 
-from blocky.bindings import (
+from blockyard.bindings import (
     binder_index,
     block_label,
     creates_global,
     validate_blocks,
     yields_of,
 )
-from blocky.errors import ValidationError, UndefinedVariableError
-from blocky.extensions.manifest import BlockSpec
-from blocky.interpreter import declarations
-from blocky.interpreter.registry import resolve_spec
-from blocky.interpreter.scope import (
+from blockyard.errors import ValidationError, UndefinedVariableError
+from blockyard.extensions.manifest import BlockSpec
+from blockyard.interpreter import declarations
+from blockyard.interpreter.registry import resolve_spec
+from blockyard.interpreter.scope import (
     InMemoryPersistStore,
     RunScope,
     Scope,
@@ -330,11 +330,11 @@ async def test_two_hats_bind_the_same_message_to_their_own_names() -> None:
     同一則訊息同時落進兩顆帽子，而那兩顆積木上寫的名字本來就可以不一樣——
     payload 在 trigger 那一側改名的話，第二顆就永遠拿不到值。
     """
-    from blocky.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
-    from blocky.interpreter.engine import Interpreter
-    from blocky.interpreter.events import EventSink
-    from blocky.ir.schema import load
-    from blocky.testing import Tpl, blk, build
+    from blockyard.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
+    from blockyard.interpreter.engine import Interpreter
+    from blockyard.interpreter.events import EventSink
+    from blockyard.ir.schema import load
+    from blockyard.testing import Tpl, blk, build
 
     spec = named_hat()
 
@@ -376,7 +376,7 @@ def test_two_scripts_cannot_share_an_id() -> None:
     宣稱自己是同一條。來源是複製一整條腳本（id 記在 Blockly 的 `data` 上，而
     `data` 跟著複製走），在一份真實專案裡撞到過。
     """
-    from blocky.ir.schema import load
+    from blockyard.ir.schema import load
 
     data = {
         "blocks": {

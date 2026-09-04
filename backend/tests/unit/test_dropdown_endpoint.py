@@ -13,13 +13,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from blocky.api.app import create_app
-from blocky.extensions import DEFAULT_EXTENSIONS_ROOT, secret_store
+from blockyard.api.app import create_app
+from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT, secret_store
 
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
     with TestClient(app) as c:
         yield c
 
@@ -67,7 +67,7 @@ def _write_labeled_extension(root: Path) -> None:
         encoding="utf-8",
     )
     (pkg / "main.py").write_text(
-        "from blocky import dropdown\n\n"
+        "from blockyard import dropdown\n\n"
         "@dropdown('labeled.options')\n"
         "async def options(ctx):\n"
         "    return [{'label': ctx.config.get('token') or '（沒有金鑰）', 'value': 'x'}]\n",
@@ -79,7 +79,7 @@ def _write_labeled_extension(root: Path) -> None:
 def labeled_client(tmp_path: Path) -> Iterator[TestClient]:
     ext_root = tmp_path / "extensions"
     _write_labeled_extension(ext_root)
-    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=ext_root)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=ext_root)
     with TestClient(app) as c:
         yield c
 
@@ -125,14 +125,14 @@ def test_require_secret_reaches_the_browser_as_a_readable_sentence(tmp_path: Pat
         encoding="utf-8",
     )
     (pkg / "main.py").write_text(
-        "from blocky import dropdown\n\n"
+        "from blockyard import dropdown\n\n"
         "@dropdown('needy.things')\n"
         "async def things(ctx):\n"
         "    ctx.require_secret('token')\n"
         "    return []\n",
         encoding="utf-8",
     )
-    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=root)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=root)
     with TestClient(app) as client:
         res = client.post("/api/extensions/needy/dropdown/things")
 

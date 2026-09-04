@@ -8,11 +8,23 @@ manifestVersion: 1
 id: demo
 name: 示範
 version: 0.1.0
-author: blocky
+author: blockyard
 description: 驗證 Host 邊界用的假積木包，不打任何外部服務
 color: "#7C5CFF"
+# 擴充功能面板那張卡上 16:9 的一格。包目錄內的相對路徑，沒宣告就畫名字的第一
+# 個字（編輯器那條 fallback 本來就在，載不出來也會退回去）。
+cover: preview.png
+
 permissions: []
 requirements: []
+
+# §16 Q17 的 B 路線：積木包自己的 HTML/CSS/JS，跑在 sandbox 的 iframe 裡。
+# 這一格同時是 `/api/extensions/demo/asset/*` 那個端點的開關——沒宣告面板的包
+# 沒有一條把檔案送給瀏覽器的路。
+panels:
+  - id: demo
+    name: 示範面板
+    entry: ui/index.html
 
 config:
   - key: greeting
@@ -92,6 +104,19 @@ palette:
   - opcode: blow_up
     type: command
     text: "故意丟一個 Python 例外"
+
+  # B 路線：送一則訊息給這個包**自己宣告的**面板。payload 是它自己的協定，
+  # host 一個字都不解讀。
+  - opcode: say_to_panel
+    type: command
+    text: "跟示範面板說 %(text)"
+    args:
+      text: { type: string, default: "你好" }
+
+  # 故意送給一個沒宣告過的面板 id——收件人由 manifest 決定，不是呼叫時說的。
+  - opcode: say_to_panel_undeclared
+    type: command
+    text: "送給一個不存在的面板（故意的）"
 
   - opcode: on_tick
     type: hat

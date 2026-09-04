@@ -21,9 +21,13 @@ manifestVersion: 1
 id: discord
 name: Discord
 version: 0.1.0
-author: blocky
+author: blockyard
 description: 發訊息到頻道、讀頻道歷史
 color: "#5865F2"
+# 擴充功能面板那張卡上 16:9 的一格。包目錄內的相對路徑，沒宣告就畫名字的第一
+# 個字（編輯器那條 fallback 本來就在，載不出來也會退回去）。
+cover: preview.png
+
 permissions: [net]
 # 2.7.1 是寫這一版時裝下來的版本。範圍照 §7.2 的宣告不動：2.x 之內 `login`／
 # `get_partial_messageable`／`history` 的形狀是穩定的，3 不知道會變成什麼。

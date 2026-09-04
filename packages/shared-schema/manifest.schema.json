@@ -451,6 +451,31 @@
       "title": "OptionSpec",
       "type": "object"
     },
+    "PanelSpec": {
+      "additionalProperties": false,
+      "description": "積木包在編輯器裡的一格分頁（§8.3、§16 Q17 的 B 路線）。\n\n**分頁是宣告出來的，不是資料生出來的。** 早期版本讓「畫一塊面板」的標題就是\n身分——畫幾塊就有幾格。那條路在標題可以插值的世界裡沒有底：一個\n`在圖表 ${i} 加點` 的迴圈會生出無限多分頁，而補丁（數量上限、被擠掉的計數、\n橫向捲的分頁列）全部是在替一個錯的模型止血。宣告之後分頁數由**裝了幾個包**\n決定，那三個補丁一起消失。\n\n它同時是「面板屬於積木包、不屬於專案」這句話的落點：`project.json` 一個字\n都不記面板，它只記 `extensions`（§13.3，而且是算出來的）。\n\n`entry` 是**必填**：編輯器不畫面板的內容，它只給這格一個 `sandbox` 的\niframe。早期版本讓「不寫 entry」退回一組內建 widget（折線／表格／數值卡），\n而那條路的代價是**每加一種圖表就要改編輯器一次**——一個想畫 three.js 的包\n永遠等不到那一天。現在編輯器不知道什麼是折線圖，那是包的 `ui/` 的事。",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "entry": {
+          "title": "Entry",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "entry"
+      ],
+      "title": "PanelSpec",
+      "type": "object"
+    },
     "RepeatSpec": {
       "additionalProperties": false,
       "description": "一組**可以重複**的參數（§16 Q19）。\n\n在這個宣告出現之前，一顆積木的形狀完全由 manifest 決定，而 manifest 是靜態\n的——`args` 是一個固定的 dict（D21：內建與積木包同一條路）。可重複群組是這\n條規則的第一個例外，所以它刻意收得很窄：\n\n- **一顆積木最多一個 `repeat`。** 兩組可重複的東西要兩排 `+` `−`，而「這顆\n  `+` 加的是哪一組」在畫面上沒有便宜的答案。真的需要的話那是下一次的題目。\n- **群組裡不能再有群組。** 同上，而且巢狀的計數要進 IR 兩層。\n- **形狀不變。** 重複的是參數，不是積木的類型：一顆 command 按幾次 `+` 還是\n  command。所以 D20 的形狀驗證一行都不用改。\n\n展開後的參數名是 `<參數名>_<n>`，n 從 1 開始（見 `BlockSpec.repeat_arg_name`）。\n份數存在 IR 的 `mutation` 裡（`{\"repeat\": n}`），**不動頂層形狀**——那是\n`procedure.call` 已經在用的地方。",
@@ -520,7 +545,7 @@
     },
     "YieldSpec": {
       "additionalProperties": false,
-      "description": "hat 綁進 thread-local 的變數（§5.4 第 2 層，唯讀）。",
+      "description": "hat 綁進 thread-local 的變數（§5.4 第 2 層，唯讀）。\n\n**名字可以交給使用者取**（D32）：同一顆 hat 上宣告一格同名的\n`type: variable` + `binds: true`，那一格填什麼，這個 yield 就綁成什麼。\n沒有那一格就照這裡寫的名字綁——`when_cron` 的 `scheduled_at` 是那種。",
       "properties": {
         "name": {
           "title": "Name",
@@ -596,6 +621,18 @@
       "default": null,
       "title": "Color"
     },
+    "cover": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cover"
+    },
     "permissions": {
       "items": {
         "enum": [
@@ -622,6 +659,13 @@
         "$ref": "#/$defs/ConfigSpec"
       },
       "title": "Config",
+      "type": "array"
+    },
+    "panels": {
+      "items": {
+        "$ref": "#/$defs/PanelSpec"
+      },
+      "title": "Panels",
       "type": "array"
     },
     "palette": {
@@ -652,8 +696,8 @@
     "name",
     "version"
   ],
-  "title": "Blocky Extension Manifest",
+  "title": "Blockyard Extension Manifest",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://blocky.dev/schema/manifest.schema.json"
+  "$id": "https://blockyard.dev/schema/manifest.schema.json"
 }

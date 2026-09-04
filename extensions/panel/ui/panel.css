@@ -1,0 +1,113 @@
+/* 面板的樣式**也是這個包的**。編輯器不會把自己的 CSS 送進來——iframe 是另一個
+   document，樣式不會繼承（那是 iframe 的代價之一，換來的是隔離）。 */
+:root {
+  --chart-ink: #2563eb;
+  --chart-grid: #f1f5f9;
+  --chart-axis: #cbd5e1;
+  --chart-text: #94a3b8;
+  --line: #dcdfeb;
+  --muted: #6b6f80;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #fff;
+  font: 13px system-ui, -apple-system, 'Noto Sans TC', sans-serif;
+  color: #33333d;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+  box-sizing: border-box;
+  gap: 0.5rem;
+}
+
+/* 數值卡一排。`hidden` 由 main.js 拿掉——沒有數值時它不該佔高度。 */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex: none;
+}
+
+.stat {
+  flex: 1 1 6rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+}
+
+.stat-name {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-value {
+  display: block;
+  font-weight: 600;
+  font-size: 1.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart {
+  position: relative;
+  flex: 1;
+  min-height: 4rem;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  /* pointer capture 的前提：沒有它，觸控上的拖曳會被當成捲動。 */
+  touch-action: none;
+}
+
+canvas:active { cursor: grabbing; }
+
+/* 操作說明**一直在，不是 hover 才出現**——拖曳與滾輪在一張靜態的圖上看不出來，
+   而一個要先發現才用得到的功能等於不存在。滑到圖上時淡掉。 */
+.hint {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.3rem;
+  font-size: 0.6rem;
+  color: var(--chart-text);
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.chart:hover .hint { opacity: 0.25; }
+
+.table-wrap {
+  flex: 0 1 auto;
+  max-height: 40%;
+  overflow: auto;
+}
+
+table {
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  width: 100%;
+}
+
+th, td {
+  padding: 0.2rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+th { color: var(--muted); font-weight: 600; }
+tbody tr:last-child td { border-bottom: none; }

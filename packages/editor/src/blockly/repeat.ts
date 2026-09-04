@@ -32,7 +32,7 @@
 import * as Blockly from 'blockly/core';
 import type { ArgSpec, BlockSpec, Manifest, RepeatSpec } from '../types/manifest';
 
-/** IR 的 `mutation` 用這個 key 記份數（後端 `blocky/repeat.py` 的 `REPEAT_KEY`）。 */
+/** IR 的 `mutation` 用這個 key 記份數（後端 `blockyard/repeat.py` 的 `REPEAT_KEY`）。 */
 export const REPEAT_KEY = 'repeat';
 
 /** 展開後第 `index` 份的參數叫什麼（0-based）。**與後端同一條規則。** */
@@ -73,7 +73,7 @@ export function argSpecOf(spec: BlockSpec | undefined, name: string): ArgSpec | 
 
 /** 一個 block type 要用的 extension 名字。一個 type 一個，因為宣告不一樣。 */
 export function repeatExtensionName(type: string): string {
-  return `blocky_repeat_${type.replace(/\W/g, '_')}`;
+  return `blockyard_repeat_${type.replace(/\W/g, '_')}`;
 }
 
 /**

@@ -30,7 +30,7 @@ import re
 
 import discord
 
-from blocky import BlockError, block, dropdown, on_unload, trigger
+from blockyard import BlockError, block, dropdown, on_unload, trigger
 
 # `https://discord.com/channels/<guild>/<channel>` — 在 Discord 裡對頻道按
 # 「複製連結」拿到的就是這個。ID 在最後一段。

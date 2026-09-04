@@ -1,0 +1,10 @@
+title: '`type: list` 是嚴格宣告，不做轉換（§7.2）——由 Host 邊界擋，包裡不寫防呆'
+spec: §7.2 json 與 object / list 的差別
+tags:
+- panel
+- extension
+- validation
+expect:
+  status: error
+  error:
+    message_contains: 參數 data 需要清單，收到文字

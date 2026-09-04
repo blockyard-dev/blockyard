@@ -22,7 +22,7 @@ import type { BlockSpec, Manifest } from '../types/manifest';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../backend/blocky/interpreter/builtins',
+  '../../../../backend/blockyard/interpreter/builtins',
 );
 
 function loadBuiltins(): Manifest[] {
@@ -92,7 +92,7 @@ describe('形狀（§4.2）', () => {
     // `define.ts` 的 `registerHatExtension`）。
     expect(byType['test.hat']).toMatchObject({
       nextStatement: null,
-      extensions: ['blocky_start_hat'],
+      extensions: ['blockyard_start_hat'],
     });
     expect(byType['test.hat']).not.toHaveProperty('style');
     expect(byType['test.hat']).not.toHaveProperty('previousStatement');

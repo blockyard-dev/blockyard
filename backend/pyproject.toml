@@ -1,7 +1,7 @@
 [project]
-name = "blocky"
+name = "blockyard"
 version = "0.1.0"
-description = "Blocky Workflow — Scratch 風格的自動化工作流 runtime"
+description = "Blockyard Workflow — Scratch 風格的自動化工作流 runtime"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "pydantic>=2.9,<3",
@@ -26,14 +26,14 @@ dev = [
     # 積木包自帶的 tests/ 跟 backend 的測試跑在同一個 venv（`testpaths` 含
     # `../extensions`），而 `extensions/openai/tests/` 是用 InProcessHost 直接
     # 呼叫的，所以 `openai` 得裝在這裡。它**不是** runtime 的相依：真的執行時
-    # 這個包跑在 `~/.blocky/venvs/openai` 自己的直譯器下（§7.6）。
+    # 這個包跑在 `~/.blockyard/venvs/openai` 自己的直譯器下（§7.6）。
     #
     # 副作用要記著：`venv.py` 的 `.pth` 把這一份 site-packages 接進每一支積木
     # 包 venv，所以 backend 裝了什麼，每個包都看得到。`openai` 自己宣告了
     # `requirements`，它那支 venv 裡的版本優先，但沒宣告的包會吃到這一份。
     "openai>=3.6,<4",
     # 同上：`extensions/discord/tests/` 也是用 InProcessHost 直接呼叫的。
-    # 真的執行時它跑在 `~/.blocky/venvs/discord` 自己的直譯器下（§7.6）——
+    # 真的執行時它跑在 `~/.blockyard/venvs/discord` 自己的直譯器下（§7.6）——
     # 這個包更需要那份隔離，因為它帶的是 aiohttp 那一整棵樹。
     "discord.py>=2.3,<3",
     "pytest-asyncio>=0.24",
@@ -42,14 +42,14 @@ dev = [
 ]
 
 [project.scripts]
-blocky = "blocky.cli:main"
+blockyard = "blockyard.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["blocky"]
+packages = ["blockyard"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

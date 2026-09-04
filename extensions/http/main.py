@@ -18,7 +18,7 @@ from urllib.parse import quote
 
 import httpx
 
-from blocky import BlockError, block, dropdown, redact_url
+from blockyard import BlockError, block, dropdown, redact_url
 
 METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]
 

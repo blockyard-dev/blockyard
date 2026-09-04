@@ -16,17 +16,17 @@ from typing import Any
 
 import pytest
 
-from blocky.errors import ExtensionError
-from blocky.extensions import (
+from blockyard.errors import ExtensionError
+from blockyard.extensions import (
     DEFAULT_EXTENSIONS_ROOT,
     CallContexts,
     EventSinkChannel,
     SubprocessHost,
     discover,
 )
-from blocky.extensions.rpc import JsonRpcPeer
-from blocky.extensions.subprocess_worker import Worker
-from blocky.interpreter.events import EventSink
+from blockyard.extensions.rpc import JsonRpcPeer
+from blockyard.extensions.subprocess_worker import Worker
+from blockyard.interpreter.events import EventSink
 
 
 def _make_host() -> tuple[SubprocessHost, CallContexts]:

@@ -32,11 +32,11 @@ import {
   renameVariable,
 } from './FieldText';
 import type { Manifest } from '../../types/manifest';
-import type { BlockyProjectIR as ProjectIR } from '../../types/project';
+import type { BlockyardProjectIR as ProjectIR } from '../../types/project';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../../backend/blocky/interpreter/builtins',
+  '../../../../../backend/blockyard/interpreter/builtins',
 );
 
 let ctx: ConversionContext;
@@ -55,7 +55,7 @@ function setBlock(workspace: Blockly.Workspace, id: string, name: string, value:
       type: 'data.set',
       id,
       fields: { name },
-      inputs: { value: { shadow: { type: 'blocky.shadow.text', fields: { VALUE: value } } } },
+      inputs: { value: { shadow: { type: 'blockyard.shadow.text', fields: { VALUE: value } } } },
     },
     workspace,
   );

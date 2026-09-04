@@ -27,15 +27,15 @@ from urllib.parse import parse_qs, urlparse
 import discord
 import pytest
 
-from blocky.errors import ExtensionError, InvalidSecretError, MissingSecretError
-from blocky.extensions import (
+from blockyard.errors import ExtensionError, InvalidSecretError, MissingSecretError
+from blockyard.extensions import (
     DEFAULT_EXTENSIONS_ROOT,
     CallContexts,
     EventSinkChannel,
     InProcessHost,
     discover,
 )
-from blocky.interpreter.events import EventSink
+from blockyard.interpreter.events import EventSink
 
 GUILD = "111111111111111111"
 CHANNEL = "222222222222222222"

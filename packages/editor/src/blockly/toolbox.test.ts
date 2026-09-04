@@ -27,7 +27,7 @@ import type { Procedure } from '../types/project';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../backend/blocky/interpreter/builtins',
+  '../../../../backend/blockyard/interpreter/builtins',
 );
 
 let registration: Registration;
@@ -70,7 +70,7 @@ describe('工具箱按鈕（D25）', () => {
     expect(first).toEqual({
       kind: 'button',
       text: '建立一個積木',
-      'web-class': 'blocky-flyout-button',
+      'web-class': 'blockyard-flyout-button',
       callbackKey: buttonCallbackKey('procedure', 'create'),
     });
   });
@@ -268,7 +268,7 @@ describe('分段與間隔（§8.1）', () => {
     const [first, before, label, after, second] = contents;
     expect(first).toEqual({ kind: 'block', type: 'demo_section.a', gap: BLOCK_GAP });
     expect(before).toMatchObject({ kind: 'sep' });
-    expect(label).toEqual({ kind: 'label', text: '第二段', 'web-class': 'blocky-section-label' });
+    expect(label).toEqual({ kind: 'label', text: '第二段', 'web-class': 'blockyard-section-label' });
     expect(after).toMatchObject({ kind: 'sep' });
     expect(second).toEqual({ kind: 'block', type: 'demo_section.b', gap: BLOCK_GAP });
     // 換一段比同一段遠；標題與它說明的那一段又比同一段更近
@@ -293,7 +293,7 @@ describe('分段與間隔（§8.1）', () => {
       // **刻意取一個與分類同名的標題**：擋在 `theme.ts` 那條覆寫，不是靠「標題
       // 不准跟分類同名」的規則，所以這裡產得出來是對的
       text: '運算',
-      'web-class': 'blocky-section-label',
+      'web-class': 'blockyard-section-label',
     });
   });
 });

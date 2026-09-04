@@ -7,7 +7,7 @@ Host 邊界的工作（§7.5、D10），這裡拿到的 `body` 保證已經是 d
 
 import asyncio
 
-from blocky import block, dropdown, on_load, on_unload, trigger
+from blockyard import block, dropdown, on_load, on_unload, trigger
 
 FRUIT_COLORS = {"apple": "紅色", "banana": "黃色", "grape": "紫色"}
 
@@ -32,6 +32,19 @@ async def echo(ctx, text: str) -> str:
 @block("demo.announce")
 async def announce(ctx, text: str) -> None:
     ctx.log(text, level="info")
+
+
+@block("demo.say_to_panel")
+async def say_to_panel(ctx, text: str) -> None:
+    """B 路線：送一則訊息給這個包**自己宣告的**面板。payload 是它自己的協定，
+    host 一個字都不解讀。"""
+    ctx.send_panel("demo", {"type": "say", "text": text})
+
+
+@block("demo.say_to_panel_undeclared")
+async def say_to_panel_undeclared(ctx) -> None:
+    """故意送給一個沒宣告過的 id——收件人由 manifest 決定，不是呼叫時說的。"""
+    ctx.send_panel("nope", {"hi": 1})
 
 
 @block("demo.wrap")

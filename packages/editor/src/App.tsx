@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Ear, History, Link2, Play, Save, Square } from 'lucide-react';
 import * as Blockly from 'blockly/core';
 import { ApiError, fetchExtensions, fetchKeys, fetchProject, saveProject } from './api/client';
+import { prefetchCovers } from './components/extensionsCovers';
 import { ProjectSocket, RunSocket, startRun, stopRun } from './api/runs';
 import {
   NOT_LISTENING,
@@ -27,7 +28,13 @@ import {
   type ListeningState,
 } from './api/triggers';
 import type { RunSummary } from './api/runs';
-import { buildProjectToolbox, registerManifests, type Registration } from './blockly/setup';
+import {
+  buildProjectToolbox,
+  changedManifestIds,
+  registerManifests,
+  type Registration,
+} from './blockly/setup';
+import { isRemovable } from './blockly/toolbox';
 import type { RegisteredBlock } from './blockly/define';
 import {
   callType,
@@ -48,7 +55,7 @@ import { ProcedureModal, type ProcedureDialogTarget } from './components/Procedu
 import { CheckRunner } from './ir/checks';
 import { buildContext, type ConversionContext } from './ir/context';
 import { loadProject } from './ir/deserialize';
-import { serializeWorkspace } from './ir/serialize';
+import { serializeBlock, serializeWorkspace, type ScratchIR } from './ir/serialize';
 import { RunDecorator } from './run/decorate';
 import { useRunStore } from './run/store';
 import { ExtensionsEntry } from './components/ExtensionsEntry';
@@ -59,12 +66,13 @@ import { KeysEntry } from './components/KeysPanel';
 import { configuredIds, useKeysUi, type KeysTarget } from './components/keysStore';
 import { RunBubbles } from './components/RunBubbles';
 import { FlyoutResizer } from './components/FlyoutResizer';
+import { ToolboxScrollbar } from './components/ToolboxScrollbar';
 import { WebhookPanel } from './components/WebhookPanel';
 import { HistoryPanel } from './components/HistoryPanel';
 import { RunPanel } from './components/RunPanel';
 import { WorkspaceView } from './components/WorkspaceView';
-import type { ButtonSpec } from './types/manifest';
-import type { BlockyProjectIR as ProjectIR, Procedure } from './types/project';
+import type { ButtonSpec, Manifest } from './types/manifest';
+import type { BlockyardProjectIR as ProjectIR, Procedure } from './types/project';
 
 const PROJECT_ID = 'prj_local';
 
@@ -73,7 +81,7 @@ const PROJECT_ID = 'prj_local';
  * 各自一個 id——**清除時一定要帶 id**：`setWarningText(null)` 不帶 id 是
  * 「把整顆警告圖示拆掉」，會連 `FieldText.ts` 的欄位警告也一起清掉。
  */
-const SAVE_WARNING_ID = 'blocky-save';
+const SAVE_WARNING_ID = 'blockyard-save';
 
 /**
  * 靜態檢查（`ir/checks.ts`）的節流。
@@ -213,6 +221,11 @@ export function App() {
    * 會再畫一份一模一樣的工具箱，而 `updateToolbox` 會把 flyout 捲回頂端。
    */
   const toolboxFor = useRef({ configured, enabled: null as ReadonlySet<string> | null });
+  /** 上一次從後端拿到的宣告。已知缺口 1 的比較基準，見下面那條 effect。 */
+  const manifestsRef = useRef<Manifest[]>([]);
+  // `syncExtensions` 同時只跑一個。ref 而不是 state：它不畫任何東西，而一個
+  // 會觸發 render 的旗標會讓那個 callback 每次都是新的。
+  const extSyncingRef = useRef(false);
 
   /**
    * 工具箱上有哪幾個積木包（`extensionsStore`、D31）。
@@ -256,7 +269,12 @@ export function App() {
     const controller = new AbortController();
     (async () => {
       const manifests = await fetchExtensions(controller.signal);
+      manifestsRef.current = manifests;
       const registration = registerManifests(manifests);
+      // 封面先抓進快取。擴充功能面板是按下去才掛載的，等到那時候才發請求，看到的
+      // 就是「面板先出來、圖晚一拍補上」——而現在使用者正在看畫布，這幾個請求不跟
+      // 任何東西搶。
+      prefetchCovers(registration.groups);
       const loaded = await fetchProject(PROJECT_ID, controller.signal);
       const project = loaded ?? blankProject();
       const procedures = project.procedures ?? {};
@@ -295,6 +313,85 @@ export function App() {
     });
     return () => controller.abort();
   }, []);
+
+  /**
+   * **後端的積木集合變了，這個分頁自己會發現**（PROGRESS 已知缺口 1）。
+   *
+   * `/api/extensions` 原本只在開場問一次，所以重啟後端之後那個分頁的工具箱與
+   * 擴充功能面板都還是舊的，而畫面上**沒有任何訊號說它過期了**——症狀是「照你
+   * 說的做，可是沒有那顆積木」。
+   *
+   * 掛在**視窗重新取得焦點**上，因為那就是那件事發生的形狀：改一份宣告 → 切到
+   * 終端機重啟後端 → 切回瀏覽器。這一刻問一次，比任何輪詢都準，而且不改宣告的
+   * 日子裡它一次網路請求都不會多發（回應一樣就什麼都不做）。
+   *
+   * 只重新註冊**變過的**那幾個命名空間（`changedManifestIds`）。整批重定義會把
+   * Blockly 的全域註冊表洗一遍，而畫布上那些積木的定義早就套用過了——洗它們既
+   * 沒有效果，又讓「這顆積木用的是哪一版定義」變成一個每次都要重新回答的問題。
+   *
+   * **畫布不動。** 這條路只換工具箱與轉換 context：新的積木拉得出來、改過的積木
+   * 從工具箱拉出來就是新形狀，而已經在畫布上的那些維持原樣（消失的那些要等下次
+   * 載入才會退化成 §13.3 的佔位符）。在使用者沒要求的時候動他的畫布，比晚一點
+   * 才說更糟。
+   */
+  /**
+   * 重問一次後端的積木集合，變了就重新註冊。
+   *
+   * **兩個呼叫端共用同一段**：視窗重新取得焦點（下面那個 effect），以及從電腦
+   * 裝好一個包的那一刻（`ExtensionsGallery` 的 `onInstalled`）。兩件事在後端是
+   * 同一件事——`/api/extensions` 的回應變了——所以它們在前端也該是同一段程式碼。
+   * 為匯入另寫一條註冊路，等於讓「裝一個包」與「重啟後端」有兩種可能不一樣的
+   * 結果，而那種差異只有在其中一條壞掉時才會被發現。
+   */
+  const syncExtensions = useCallback(async () => {
+    // 同時只跑一個：切走切回很快的時候，第二次問到的東西會比第一次舊。
+    if (extSyncingRef.current) return;
+    extSyncingRef.current = true;
+    try {
+      const next = await fetchExtensions();
+      const previous = manifestsRef.current;
+      if (changedManifestIds(previous, next).size === 0 && previous.length === next.length) {
+        return;
+      }
+      manifestsRef.current = next;
+      const registration = registerManifests(next, previous);
+      // 這條是「後端的包變了」那一路（多了一個包、或作者換掉了封面）。
+      prefetchCovers(registration.groups);
+      setState((prev) =>
+        prev.status === 'ready'
+          ? {
+            ...prev,
+            registration,
+            ctx: buildContext([...registration.blocks, ...prev.procedureBlocks]),
+            toolbox: buildProjectToolbox(
+              registration,
+              prev.procedureBlocks,
+              toolboxFor.current.configured,
+              toolboxFor.current.enabled ?? undefined,
+            ),
+          }
+          : prev,
+      );
+    } catch {
+      // 後端還沒起來就是問不到——下次切回來再問。這條路上沒有值得打斷
+      // 使用者的東西：他手上那份畫布完全沒有受影響。
+      //
+      // 匯入那條路不吞錯：裝好了卻沒出現在工具箱上是**看得見**的失敗，而它
+      // 已經有一個負責說話的地方（審閱畫面）。這裡吞掉的是「重問失敗」，而
+      // 那一刻包已經在磁碟上了——重新整理就會有。
+    } finally {
+      extSyncingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (state.status !== 'ready') return;
+    const onFocus = () => {
+      if (!document.hidden) void syncExtensions();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [state.status, syncExtensions]);
 
   // 事件 → 積木外框。§8.2 說 workspace 是 uncontrolled，所以這條路徑刻意不經過
   // React 的 render：store 的 Map 換掉時直接改 SVG 的 class。
@@ -543,14 +640,15 @@ export function App() {
   }, []);
 
   /**
-   * 開一次 Run。`blockId` 給了就是 §5.1 的「點一下就跑」。
+   * 開一次 Run。`blockId` 給了就是 §5.1 的「點一下就跑」，再帶一份 `scratch`
+   * 就是**在工具箱裡**點的那一顆（那顆積木不在存檔裡，見 `runs/scratch.py`）。
    *
    * 綠旗與點擊走同一條路——差別只有多送一個 `blockId`。前一個 Run 先停掉：
    * 編輯器同時只顯示一個 Run（一個 socket、一份高亮），不停的話畫面上看不見
    * 的那個 `forever` 迴圈會繼續在後端轉。
    */
   const beginRun = useCallback(
-    async (blockId?: string) => {
+    async (blockId?: string, scratch?: ScratchIR) => {
       const store = useRunStore.getState();
       const previous = store.runId;
       if (previous && (store.status === 'running' || store.status === 'starting')) {
@@ -567,7 +665,7 @@ export function App() {
       }
 
       try {
-        attach(await startRun(PROJECT_ID, { blockId }));
+        attach(await startRun(PROJECT_ID, { blockId, scratch }));
       } catch (error: unknown) {
         store.fail(describe(error));
       }
@@ -671,8 +769,9 @@ export function App() {
    * `toolboxitemid` 設成 group 的 id，所以這裡不必去讀分類名的文字（名字是
    * manifest 寫的，可以重複，而且會被 i18n 換掉）。
    *
-   * 內建分類不接（`!group.builtin`）：它們沒有「刪掉」這個選項，攔下右鍵只會
-   * 給出一個兩條都不能點的選單。
+   * 收不起來的分類不接（`isRemovable`）：它們沒有「刪掉」這個選項，攔下右鍵
+   * 只會給出一個兩條都不能點的選單。**判準跟卡片牆共用同一個函式**——第一版
+   * 這裡寫死 `!builtin`，於是 `panel` 在面板上加得進來、右鍵卻刪不掉。
    */
   useEffect(() => {
     if (!workspace || !groups) return;
@@ -682,7 +781,9 @@ export function App() {
       const target = e.target as Element | null;
       if (!toolbox || !target) return;
       const item = toolbox.getToolboxItems().find((entry) => entry.getDiv()?.contains(target));
-      const group = item ? groups.find((g) => g.id === item.getId() && !g.builtin) : undefined;
+      const group = item
+        ? groups.find((g) => g.id === item.getId() && isRemovable(g))
+        : undefined;
       if (!group) return;
       e.preventDefault();
       openExtMenu(group, e.clientX, e.clientY);
@@ -849,6 +950,8 @@ export function App() {
 
     delete usageWalkRef.current[group.id];
     useExtensionsUi.getState().remove(group.id);
+    // 它宣告的面板分頁也跟著不見——那份清單是從 `enabled` 算出來的
+    // （見下面 `<RunPanel declared=…>`），所以這裡不必額外做什麼。
     setToast(`已刪除擴充功能「${group.name}」。它還在面板上，隨時可以再加回來。`);
   };
 
@@ -914,13 +1017,6 @@ export function App() {
   useEffect(() => registerEditMenu(editRef), []);
   useEffect(() => registerDeleteMenu(deleteRef), []);
 
-  /**
-   * §5.1 的「點一下就跑」。
-   *
-   * 點到影子積木時往上找一顆真的積木：影子的值存在父積木的 `inputs` 裡
-   * （§4.2），它自己沒有 blockId 可以送給後端。點欄位不會走到這裡——Blockly
-   * 的 gesture 對欄位發的是 `doFieldClick`，不發 CLICK 事件。
-   */
   /**
    * 監聽中：接上**專案**通道，後端自己起的那些 Run 就會自己送過來（§9）。
    *
@@ -1021,21 +1117,60 @@ export function App() {
     };
   }, [workspace, state, snapshotProject]);
 
+  /**
+   * §5.1 的「點一下就跑」。**畫布上與工具箱裡的都算。**
+   *
+   * 點到影子積木時往上找一顆真的積木：影子的值存在父積木的 `inputs` 裡
+   * （§4.2），它自己沒有 blockId 可以送給後端。點欄位不會走到這裡——Blockly
+   * 的 gesture 對欄位發的是 `doFieldClick`，不發 CLICK 事件。
+   *
+   * **工具箱裡那一顆也跑得動**，而那是「拉一顆出來點一下」的下一步：試一顆
+   * 積木不必先在畫布上留下它，試完也不必收拾。差別只在那顆積木不在存檔裡，
+   * 所以它自己那一小段 IR 要跟著請求走（`serializeBlock` → `scratch`），由
+   * 後端併進載入用的那一份（`runs/scratch.py`）——存檔的檔案不動，畫布也不動。
+   * 高亮與值氣泡照樣冒在那顆積木身上（`run/decorate.ts` 會問工具箱那一份
+   * 工作區）。
+   */
   useEffect(() => {
     if (!workspace || state.status !== 'ready') return;
+    const ctx = state.ctx;
+    // flyout 裡的積木有**自己的**工作區，而事件只送給它自己的 listener——所以
+    // 兩邊各掛一次，同一個 handler 靠 `workspaceId` 分辨這一下點在哪裡。
+    const flyout = workspace.getFlyout()?.getWorkspace() ?? null;
 
     const listener = (event: Blockly.Events.Abstract) => {
       if (event.type !== Blockly.Events.CLICK) return;
       const click = event as Blockly.Events.Click;
-      // flyout 裡的積木有自己的 workspace：點工具箱是「拿一顆出來」，不是執行
-      if (click.targetType !== 'block' || click.workspaceId !== workspace.id) return;
-      let block = click.blockId ? workspace.getBlockById(click.blockId) : null;
+      if (click.targetType !== 'block' || !click.blockId) return;
+
+      const inFlyout = click.workspaceId !== workspace.id;
+      const source = inFlyout ? flyout : workspace;
+      if (!source || click.workspaceId !== source.id) return;
+
+      let block = source.getBlockById(click.blockId);
       while (block?.isShadow()) block = block.getParent();
-      if (block) void beginRun(block.id);
+      if (!block) return;
+
+      if (!inFlyout) {
+        void beginRun(block.id);
+        return;
+      }
+
+      // **工具箱裡的帽子不跑。** 帽子的意思是「外面發生事情的時候」，它自己
+      // 從來不被執行（§5.1），而工具箱裡那一顆底下什麼都沒接——跑它等於開一個
+      // 註定空手而回的 Run。順帶擋掉一件看不出來的事：一顆與畫布上同路徑的
+      // `when_webhook` 併進去會撞上「同路徑兩顆」那條驗證（§9.3），於是點一下
+      // 帽子換來一句 422，而使用者其實什麼都沒做錯。
+      if (ctx.blockOf(block.type)?.spec.type === 'hat') return;
+      void beginRun(block.id, serializeBlock(block, ctx));
     };
 
     workspace.addChangeListener(listener);
-    return () => workspace.removeChangeListener(listener);
+    flyout?.addChangeListener(listener);
+    return () => {
+      workspace.removeChangeListener(listener);
+      flyout?.removeChangeListener(listener);
+    };
   }, [workspace, state, beginRun]);
 
   /**
@@ -1052,15 +1187,16 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <span className="brand">Blocky Workflow</span>
+        <span className="brand">Blockyard Workflow</span>
         {/* 「已加入 N」是這一行唯一會動的數字（D31）。少了它，標頭說的是
             「載入了 12 個命名空間」而工具箱上只有 10 個——兩句話都對，中間那個
             差額沒有人負責解釋。 */}
         {state.status === 'ready' && (
           <span className="summary">
             {state.registration.groups.length} 個命名空間（內建{' '}
-            {state.registration.groups.filter((g) => g.builtin).length} · 已加入積木包{' '}
-            {state.registration.groups.filter((g) => !g.builtin && enabled.has(g.id)).length}）·{' '}
+            {state.registration.groups.filter((g) => !isRemovable(g)).length} · 已加入積木包{' '}
+            {state.registration.groups.filter((g) => isRemovable(g) && enabled.has(g.id)).length}）
+            ·{' '}
             {state.registration.blocks.length} 顆積木
           </span>
         )}
@@ -1227,7 +1363,7 @@ export function App() {
           <strong>連不上後端。</strong>
           <p>{state.message}</p>
           <p>
-            先在另一個終端機跑 <code>cd backend &amp;&amp; .venv/bin/python -m blocky.cli serve</code>
+            先在另一個終端機跑 <code>cd backend &amp;&amp; .venv/bin/python -m blockyard.cli serve</code>
             ，它會綁在 <code>127.0.0.1:8787</code>（dev server 代理過去）。
           </p>
         </Notice>
@@ -1237,6 +1373,7 @@ export function App() {
         <div className="stage">
           <WorkspaceView toolbox={state.toolbox} onReady={handleWorkspaceReady} />
           <FlyoutResizer workspace={workspace} />
+          <ToolboxScrollbar workspace={workspace} />
           <ExtensionsEntry />
           {extMenu && (
             <ExtensionMenu
@@ -1253,10 +1390,24 @@ export function App() {
               groups={state.registration.groups}
               onChanged={setToast}
               onDelete={(group) => deleteExtensionRef.current(group)}
+              onInstalled={() => syncExtensions()}
             />
           )}
           <RunBubbles workspace={workspace} />
-          <RunPanel />
+          {/* 分頁列上那幾格是**宣告**出來的：已啟用的包的 `panels`。它們與
+              「執行時畫出來的那些」是兩本帳（身分不同），在 `RunPanel` 併起來。 */}
+          <RunPanel
+            declared={state.registration.groups
+              .filter((g) => !isRemovable(g) || enabled.has(g.id))
+              .flatMap((g) =>
+                g.panels.map((p) => ({
+                  extId: g.id,
+                  panelId: p.id,
+                  name: p.name,
+                  entry: p.entry,
+                })),
+              )}
+          />
           {toast !== null && (
             <button type="button" className="toast" onClick={() => setToast(null)}>
               {toast}
@@ -1405,12 +1556,12 @@ function runButton(button: ButtonSpec): void {
     default:
       // 只剩 `call`（§7.3 的 @button）：它要打後端，而目前沒有包宣告得出來。
       // 一句誠實的「還沒接上」而不是一個假的成功。
-      console.warn(`[blocky] 按鈕動作 ${button.action} 還沒接上`);
+      console.warn(`[blockyard] 按鈕動作 ${button.action} 還沒接上`);
   }
 }
 
-const EDIT_MENU_ID = 'blocky_procedure_edit';
-const DELETE_MENU_ID = 'blocky_procedure_delete';
+const EDIT_MENU_ID = 'blockyard_procedure_edit';
+const DELETE_MENU_ID = 'blockyard_procedure_delete';
 
 /**
  * 「編輯這個積木」：定義帽子的右鍵選單。

@@ -96,8 +96,11 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
         // 不存在了（見 `speaks`）。留著中央的新理由比較單純：冒泡的是一整顆
         // 積木，而靠左的氣泡在一顆很寬的積木上會偏到它的一端，看起來像在說
         // 那一格的事——值氣泡唯一的工作是「說清楚是誰回了什麼」。
-        // 往左收半個氣泡寬由 CSS 的 translate 做（見 index.css 的 .bubble）。
-        node.style.transform = `translate(${rect.left + rect.width / 2}px, ${rect.top}px)`;
+        //
+        // 錨的是**下緣**：氣泡帶尖角、長在積木底下往上指，像積木把值說出來。
+        // 往左收半個氣泡寬、讓開尖角那一段、滑出來的動畫都在 CSS 的
+        // `.bubble-box`——這裡只給那一個點。
+        node.style.transform = `translate(${rect.left + rect.width / 2}px, ${rect.bottom}px)`;
         // 最後 400ms 淡出
         const left = bubble.until - now;
         node.style.opacity = left < 400 ? String(Math.max(0, left) / 400) : '1';
@@ -127,7 +130,11 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
             if (hovered.current === bubble.blockId) hovered.current = null;
           }}
         >
-          <BubbleBody state={bubble.state} />
+          <div className="bubble-box">
+            <div className="bubble-content">
+              <BubbleBody state={bubble.state} />
+            </div>
+          </div>
         </div>
       ))}
     </div>

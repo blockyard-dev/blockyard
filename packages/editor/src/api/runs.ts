@@ -35,9 +35,9 @@ export interface RunSummary {
   logsTruncated?: boolean;
 }
 
-/** §5.6 的錯誤形狀（`backend/blocky/errors.py` 的 `BlockyError.to_dict`）。 */
+/** §5.6 的錯誤形狀（`backend/blockyard/errors.py` 的 `BlockyardError.to_dict`）。 */
 /**
- * 錯誤附帶的**可點擊補救動作**（後端 `BlockyError.action`）。
+ * 錯誤附帶的**可點擊補救動作**（後端 `BlockyardError.action`）。
  *
  * `hint` 是給人讀的一句話，這個是給 UI 讀的一個結構——「還沒設定金鑰」那句話
  * 的正確結局是一顆把你送到設定畫面、而且欄位已經填好的按鈕。
@@ -73,7 +73,22 @@ export type RunEvent =
   | { op: 'block.error'; threadId: string; blockId: string | null; error: BlockError }
   | { op: 'block.hot'; blockId: string; count: number; lastValue?: unknown; truncated?: boolean }
   | { op: 'var.set'; threadId?: string; name: string; value: unknown }
-  | { op: 'log'; threadId?: string; level: string; text: string; blockId?: string | null };
+  | { op: 'log'; threadId?: string; level: string; text: string; blockId?: string | null }
+  /**
+   * 送給積木包**宣告**的那一格面板（§16 Q17 的 B 路線）。
+   *
+   * `payload` 是那個包自己的協定，我們**一個字都不解讀**——編輯器只負責把它
+   * 原樣轉給那個 iframe，順序不動。這是 A 路線（封頂的 widget 字彙表）與 B
+   * 路線唯一的分界：A 的 payload 我們畫得出來，B 的我們不知道它是什麼。
+   */
+  | {
+      op: 'ext.panel';
+      threadId?: string;
+      extId: string;
+      panelId: string;
+      payload: unknown;
+      blockId?: string | null;
+    };
 
 /**
  * 一個 WS frame。§6.2 一個 frame 裝一個 50ms 窗口的事件陣列——**不是**一個事件
@@ -92,15 +107,23 @@ export interface RunFrame {
  * `blockId` 給了就是 §5.1 的「點一下就跑」：從那顆積木所在的堆疊頂端起跑，
  * 起點是 reporter 時只求值那一顆。**同一個端點**——同一份事件、同一個停止
  * API、同一套 §6.2 流量控制。
+ *
+ * `scratch` 是**工具箱裡**點的那一顆（`ir/serialize.ts::serializeBlock`）：
+ * 它不在存檔裡，所以它自己那一小段 IR 得跟著請求走。後端併進去只活在那個
+ * Run 裡，硬碟上的專案不動（`runs/scratch.py`）。
  */
 export async function startRun(
   projectId: string,
-  opts: { blockId?: string; signal?: AbortSignal } = {},
+  opts: { blockId?: string; scratch?: unknown; signal?: AbortSignal } = {},
 ): Promise<RunSummary> {
   const res = await fetch('/api/runs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(opts.blockId ? { projectId, blockId: opts.blockId } : { projectId }),
+    body: JSON.stringify({
+      projectId,
+      ...(opts.blockId ? { blockId: opts.blockId } : {}),
+      ...(opts.scratch ? { scratch: opts.scratch } : {}),
+    }),
     signal: opts.signal,
   });
   if (!res.ok) throw await toApiError(res, `POST /api/runs → ${res.status}`);

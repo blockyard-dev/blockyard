@@ -17,15 +17,15 @@ from typing import Any
 
 import pytest
 
-from blocky.errors import ExtensionError, MissingSecretError
-from blocky.extensions import (
+from blockyard.errors import ExtensionError, MissingSecretError
+from blockyard.extensions import (
     DEFAULT_EXTENSIONS_ROOT,
     CallContexts,
     EventSinkChannel,
     InProcessHost,
     discover,
 )
-from blocky.interpreter.events import EventSink
+from blockyard.interpreter.events import EventSink
 
 # 伺服器下一次要回什麼。每題自己設，不用為了一個變化多起一台伺服器。
 NEXT: dict[str, Any] = {}

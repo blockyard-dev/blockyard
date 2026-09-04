@@ -21,20 +21,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from blocky.extensions.manifest import Manifest  # noqa: E402
-from blocky.ir.schema import Project  # noqa: E402
+from blockyard.extensions.manifest import Manifest  # noqa: E402
+from blockyard.ir.schema import Project  # noqa: E402
 
 OUT_DIR = Path(__file__).resolve().parents[2] / "packages" / "shared-schema"
 
 TARGETS = {
     "project.schema.json": (
         Project,
-        "Blocky Project IR",
+        "Blockyard Project IR",
         "積木專案的中介表示（IR）。設計文件 §4。",
     ),
     "manifest.schema.json": (
         Manifest,
-        "Blocky Extension Manifest",
+        "Blockyard Extension Manifest",
         "一個命名空間的積木宣告。內建與積木包共用（設計文件 §7.2、D21）。",
     ),
 }
@@ -43,7 +43,7 @@ TARGETS = {
 def build(model: type, title: str, description: str, filename: str) -> str:
     schema = model.model_json_schema(mode="validation")
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-    schema["$id"] = f"https://blocky.dev/schema/{filename}"
+    schema["$id"] = f"https://blockyard.dev/schema/{filename}"
     schema["title"] = title
     schema["description"] = description
     return json.dumps(schema, ensure_ascii=False, indent=2) + "\n"

@@ -27,8 +27,8 @@ export const SEGMENT_PREFIX = 's';
 export const DECLARATION_TYPE = 'procedure.declaration#draft';
 
 /** 參數名稱格：白色膠囊（一般孔）與白色六角（布林孔）。 */
-const DECL_SHADOW_TEXT = 'blocky.declaration.name';
-const DECL_SHADOW_BOOLEAN = 'blocky.declaration.name.boolean';
+const DECL_SHADOW_TEXT = 'blockyard.declaration.name';
+const DECL_SHADOW_BOOLEAN = 'blockyard.declaration.name.boolean';
 const SHADOW_COLOUR = '#FFFFFF';
 
 /**

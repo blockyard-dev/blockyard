@@ -25,8 +25,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from blocky.api.app import create_app
-from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.api.app import create_app
+from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
 
 
 def tick_project(project_id: str = "p_tick") -> dict[str, Any]:
@@ -69,7 +69,7 @@ def flag_project(project_id: str = "p_flag") -> dict[str, Any]:
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
     with TestClient(app) as client:
         yield client
 
@@ -214,7 +214,7 @@ def test_沒有_hat_的專案不開任何子行程(client: TestClient, monkeypat
     是三個子行程開起來只為了立刻被關掉。判斷「有沒有 hat」只需要磁碟上的
     manifest（資料），不需要 `main.py`（程式碼），所以這個成本是可以整個省掉的。
     """
-    from blocky.runs import triggers as mod
+    from blockyard.runs import triggers as mod
 
     opened = 0
 
@@ -243,7 +243,7 @@ def test_沒有_hat_的專案不開任何子行程(client: TestClient, monkeypat
 
 
 def app_for(tmp_path: Path) -> Any:
-    return create_app(db_path=tmp_path / "blocky.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    return create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
 
 
 def test_沒在跑的專案問得到答案而不是_404(client: TestClient) -> None:
@@ -263,7 +263,7 @@ def test_沒在跑的專案問得到答案而不是_404(client: TestClient) -> N
 
 def test_active_跨後端重啟存活(tmp_path: Path) -> None:
     """§9.2 最後一句。**這是「關掉瀏覽器仍會準時執行」（§1.3）的前半段**——
-    沒有它，使用者設好的流程活不過一次 `blocky serve` 的重開。"""
+    沒有它，使用者設好的流程活不過一次 `blockyard serve` 的重開。"""
     with TestClient(app_for(tmp_path)) as c:
         pid = save(c, tick_project())
         assert c.post("/api/triggers", json={"projectId": pid}).status_code == 201
@@ -299,14 +299,14 @@ def test_停掉之後重啟就不再跑了(tmp_path: Path) -> None:
 
 def test_專案在後端沒開的時候被刪掉_啟動不會炸(tmp_path: Path) -> None:
     """啟動路徑上一個壞掉的 active 紀錄不該擋住整個後端起來。"""
-    from blocky.storage import ActiveStore
+    from blockyard.storage import ActiveStore
 
-    ActiveStore(tmp_path / "blocky.db").activate("p_ghost")
+    ActiveStore(tmp_path / "blockyard.db").activate("p_ghost")
 
     with TestClient(app_for(tmp_path)) as c:
         assert c.get("/api/triggers").json() == []
         # 順手清掉，不留一筆永遠恢復不了的紀錄
-        assert ActiveStore(tmp_path / "blocky.db").list() == []
+        assert ActiveStore(tmp_path / "blockyard.db").list() == []
 
 
 def test_刪掉專案會一起停掉它的_trigger(client: TestClient) -> None:
@@ -345,7 +345,7 @@ def test_改一顆無關的積木不會重接那條連線(client: TestClient, mo
     訊息，而且要花好幾秒。沒有 diff 的話「重新對齊」就等於「全部重來」，而那在
     畫面上跟壞掉沒有兩樣。
     """
-    from blocky.extensions.registry import ExtensionRegistry
+    from blockyard.extensions.registry import ExtensionRegistry
 
     starts = 0
     original = ExtensionRegistry.start_trigger

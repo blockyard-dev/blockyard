@@ -41,7 +41,7 @@ const PARAM_PREFIX = `${NAMESPACE}.param#`;
  *
  * 程式仍然刪得掉（`dispose()` 不看這個旗標）：它擋的是使用者，不是我們。
  */
-const UNDELETABLE_EXTENSION = 'blocky_procedure_definition';
+const UNDELETABLE_EXTENSION = 'blockyard_procedure_definition';
 
 function registerUndeletableExtension(): void {
   if (Blockly.Extensions.isRegistered(UNDELETABLE_EXTENSION)) return;

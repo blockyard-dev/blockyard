@@ -41,15 +41,15 @@ const TARGETS = [
     schema: resolve(here, '../../shared-schema/manifest.schema.json'),
     out: resolve(here, '../src/types/manifest.ts'),
     rootName: 'Manifest',
-    entryType: 'BlockyExtensionManifest',
+    entryType: 'BlockyardExtensionManifest',
     entryComment: 'schema 的 `title` 決定了上面那個名字。',
   },
   {
     schema: resolve(here, '../../shared-schema/project.schema.json'),
     out: resolve(here, '../src/types/project.ts'),
     rootName: 'ProjectIR',
-    entryType: 'BlockyProjectIR',
-    entryComment: 'schema 的 `title`（"Blocky Project IR"）決定了上面那個名字。',
+    entryType: 'BlockyardProjectIR',
+    entryComment: 'schema 的 `title`（"Blockyard Project IR"）決定了上面那個名字。',
   },
 ];
 

@@ -38,7 +38,7 @@ import { hasInterpolation, isWholeTemplate } from './template';
 import type {
   Block as IRBlock,
   BlockInput,
-  BlockyProjectIR as ProjectIR,
+  BlockyardProjectIR as ProjectIR,
   LiteralInput,
   Procedure,
   Script,
@@ -138,7 +138,7 @@ export function serializeWorkspace(
   return {
     formatVersion: opts.formatVersion ?? 1,
     meta: opts.meta ?? {},
-    extensions: usedExtensions(workspace, ctx),
+    extensions: usedExtensions(workspace.getAllBlocks(false), ctx),
     // §4.5：只是索引，刪掉重新產生不影響執行語意。變數監看面板要用到之前
     // 都先留空——比起算出一份跟語意無關、卻可能跟這裡的規則慢慢漂移的索引，
     // 空值更誠實。
@@ -146,6 +146,53 @@ export function serializeWorkspace(
     procedures,
     scripts,
     blocks,
+  };
+}
+
+/**
+ * 工具箱裡那一顆積木自己的一小段 IR（§5.1 的「點一下就跑」）。
+ *
+ * `POST /api/runs` 的 `scratch`，後端那一側是 `runs/scratch.py`。形狀是一份
+ * 專案 IR 的**三個 key**，因為它就是那三個 key：這顆積木、它掛的那條腳本、
+ * 以及它用到的積木包。剩下的（`variables`、`procedures`、`meta`）一律以存檔
+ * 那一份為準——工具箱裡的一顆積木沒有資格改專案的宣告。
+ */
+export interface ScratchIR {
+  blocks: Record<string, IRBlock>;
+  scripts: Script[];
+  extensions: ProjectIR['extensions'];
+}
+
+/**
+ * 一顆**不在畫布上**的積木 → 一段跑得動的 IR（§5.1）。
+ *
+ * 與 `serializeWorkspace` 走同一條 `flattenBlock`，所以工具箱裡那一顆與拉出來
+ * 之後的那一顆存出來一模一樣——兩條路各寫一份攤平的話，「拉出來會動、在工具箱
+ * 裡點卻不會」這種 bug 就有地方住了。
+ *
+ * `workspace` 傳的是**這顆積木自己的**工作區（flyout 有它自己的一個），
+ * `readUi` 才查得到它。
+ */
+export function serializeBlock(block: Blockly.Block, ctx: ConversionContext): ScratchIR {
+  const state = Blockly.serialization.blocks.save(block, {
+    addCoordinates: false,
+    addInputBlocks: true,
+    addNextBlocks: true,
+    doFullSerialization: true,
+  });
+  if (!state?.id) throw new Error(`積木（type=${block.type}）存不出來`);
+
+  const blocks: Record<string, IRBlock> = {};
+  flattenBlock(state, null, blocks, ctx, block.workspace);
+
+  return {
+    blocks,
+    // **每次點都是一個新的 id，而且不寫回 `block.data`。** 寫回去的話那個 id
+    // 會跟著「從工具箱拖出去」複製到畫布上的那一顆身上（`data` 是會被複製
+    // 的，見 `scriptIdOf`），於是畫布上憑空多出一條宣稱自己叫 `sc_…` 的腳本
+    // ——而那個 id 這輩子只活過一次 Run。
+    scripts: [{ id: `sc_${Blockly.utils.idGenerator.genUid()}`, top: state.id, x: 0, y: 0 }],
+    extensions: usedExtensions(block.getDescendants(false), ctx),
   };
 }
 
@@ -181,11 +228,11 @@ function scriptIdOf(top: Blockly.Block, state: BlockState, seen: Set<string>): s
  * 用的宣告，代價是「那個包後來被移除」時一份根本用不到它的專案會打不開。
  */
 function usedExtensions(
-  workspace: Blockly.Workspace,
+  blocks: Blockly.Block[],
   ctx: ConversionContext,
 ): ProjectIR['extensions'] {
   const used = new Map<string, string>();
-  for (const block of workspace.getAllBlocks(false)) {
+  for (const block of blocks) {
     // §13.3：佔位符**照定義就查不到 manifest**（那個包沒裝）。照一般規則走的
     // 話它的宣告會在存檔時安靜消失，於是那份專案從此忘了自己需要哪個包——
     // 「一鍵安裝」沒有東西可以裝，而在裝了那個包的機器上打開也不會載入它。

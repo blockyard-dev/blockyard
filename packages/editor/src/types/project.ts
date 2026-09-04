@@ -54,7 +54,7 @@ export type Ui = {
 /**
  * 積木專案的中介表示（IR）。設計文件 §4。
  */
-export interface BlockyProjectIR {
+export interface BlockyardProjectIR {
   formatVersion?: Formatversion;
   meta?: Meta;
   extensions?: Extensions;
@@ -173,5 +173,5 @@ export interface Fields {
   [k: string]: unknown;
 }
 
-/** 這份檔案的入口型別。schema 的 `title`（"Blocky Project IR"）決定了上面那個名字。 */
-export type ProjectIR = BlockyProjectIR;
+/** 這份檔案的入口型別。schema 的 `title`（"Blockyard Project IR"）決定了上面那個名字。 */
+export type ProjectIR = BlockyardProjectIR;

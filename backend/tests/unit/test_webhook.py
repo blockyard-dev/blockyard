@@ -10,10 +10,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from blocky.api.app import create_app
-from blocky.errors import ValidationError
-from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
-from blocky.webhook import WebhookSpec, parse
+from blockyard.api.app import create_app
+from blockyard.errors import ValidationError
+from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.webhook import WebhookSpec, parse
 
 
 def hook_project(project_id: str = "p_hook", *, path: str = "github") -> dict[str, Any]:
@@ -33,7 +33,7 @@ def hook_project(project_id: str = "p_hook", *, path: str = "github") -> dict[st
 
 
 def app_for(tmp_path: Path) -> Any:
-    return create_app(db_path=tmp_path / "blocky.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    return create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
 
 
 @pytest.fixture
@@ -260,7 +260,7 @@ def test_credentials_never_reach_the_payload(client: TestClient) -> None:
     """`authorization` 進了 payload 就會沿著事件流廣播出去（§8.5 的 `block.enter`
     帶展開後的字串），而 §12.2 的遮蔽只認得「這次 Run 用到的 secret」——它不
     認識別人送來的 token。"""
-    from blocky.api.hooks import _STRIPPED_HEADERS
+    from blockyard.api.hooks import _STRIPPED_HEADERS
 
     assert {"authorization", "cookie"} <= _STRIPPED_HEADERS
 
@@ -304,7 +304,7 @@ def test_query_and_method_are_in_the_payload(client: TestClient) -> None:
 def test_a_non_json_body_stays_text(client: TestClient) -> None:
     """D10「parse 不自動」：一個送 `text/plain` 但內容剛好長得像 JSON 的請求，
     解開之後積木上拿到的型別會跟它宣告的不一樣。"""
-    from blocky.api.hooks import _parse_body
+    from blockyard.api.hooks import _parse_body
 
     assert _parse_body(b'{"a": 1}', "text/plain") == '{"a": 1}'
     assert _parse_body(b'{"a": 1}', "application/json") == {"a": 1}
@@ -314,7 +314,7 @@ def test_a_non_json_body_stays_text(client: TestClient) -> None:
 
 def test_an_oversized_body_is_413(client: TestClient) -> None:
     """沒有上限的話，任何人都能拿這條路徑把記憶體吃光。"""
-    from blocky.api.hooks import MAX_BODY_BYTES
+    from blockyard.api.hooks import MAX_BODY_BYTES
 
     save(client, hook_project())
     url = activate(client)["webhooks"][0]["url"]

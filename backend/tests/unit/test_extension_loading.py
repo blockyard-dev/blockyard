@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from blocky.errors import ExtensionError
-from blocky.extensions import CallContexts, EventSinkChannel, InProcessHost, discover
-from blocky.interpreter.events import EventSink
+from blockyard.errors import ExtensionError
+from blockyard.extensions import CallContexts, EventSinkChannel, InProcessHost, discover
+from blockyard.interpreter.events import EventSink
 
 MANIFEST = """\
 manifestVersion: 1
@@ -58,7 +58,7 @@ async def test_implemented_block_without_a_declaration(tmp_path) -> None:
         tmp_path,
         "p2",
         main=(
-            "from blocky import block\n"
+            "from blockyard import block\n"
             "@block('p2.go')\n"
             "async def go(ctx): pass\n"
             "@block('p2.ghost')\n"
@@ -88,7 +88,7 @@ async def test_dropdown_source_without_an_implementation(tmp_path) -> None:
             '  - opcode: go\n    type: command\n    text: "go %(x)"\n'
             "    args:\n      x: { type: dropdown, source: options }\n"
         ),
-        main="from blocky import block\n@block('p4.go')\nasync def go(ctx, x): pass\n",
+        main="from blockyard import block\n@block('p4.go')\nasync def go(ctx, x): pass\n",
     )
     with pytest.raises(ExtensionError, match="沒有對應的 @dropdown"):
         await make_host(tmp_path).load("p4")
@@ -115,7 +115,7 @@ async def test_on_load_and_on_unload_run(tmp_path) -> None:
         tmp_path,
         "p7",
         main=(
-            "from blocky import block, on_load, on_unload\n"
+            "from blockyard import block, on_load, on_unload\n"
             "@on_load\n"
             "async def setup(ctx): ctx.state['n'] = 1\n"
             "@on_unload\n"
@@ -140,7 +140,7 @@ async def test_sync_implementations_are_allowed(tmp_path) -> None:
         tmp_path,
         "p8",
         blocks='  - opcode: go\n    type: reporter\n    returns: number\n    text: "go"\n',
-        main="from blocky import block\n@block('p8.go')\ndef go(ctx): return 42\n",
+        main="from blockyard import block\n@block('p8.go')\ndef go(ctx): return 42\n",
     )
     contexts = CallContexts()
     host = InProcessHost(discover(tmp_path), EventSinkChannel(EventSink(), contexts), contexts)
@@ -152,7 +152,7 @@ async def test_sync_implementations_are_allowed(tmp_path) -> None:
 
 HTTP_BLOCK = '  - opcode: go\n    type: reporter\n    returns: number\n    text: "go"\n'
 TOUCH_HTTP = (
-    "from blocky import block\n"
+    "from blockyard import block\n"
     "@block('{id}.go')\n"
     "async def go(ctx): return id(ctx.http)\n"
 )
@@ -198,7 +198,7 @@ async def test_no_client_until_someone_asks(tmp_path) -> None:
     write_pack(
         tmp_path,
         "p11",
-        main="from blocky import block\n@block('p11.go')\nasync def go(ctx): pass\n",
+        main="from blockyard import block\n@block('p11.go')\nasync def go(ctx): pass\n",
     )
     contexts = CallContexts()
     host = InProcessHost(discover(tmp_path), EventSinkChannel(EventSink(), contexts), contexts)
@@ -219,7 +219,7 @@ async def test_載到一半失敗時前面那幾個包要被卸載(tmp_path) -> 
     用 `InProcessHost` 驗（子行程數量在測試裡量不準）：`on_unload` 有沒有跑，
     就是「有沒有被收拾」這件事在這一層的樣子。
     """
-    from blocky.extensions import open_registry
+    from blockyard.extensions import open_registry
 
     marker = tmp_path / "unloaded.txt"
 
@@ -229,7 +229,7 @@ async def test_載到一半失敗時前面那幾個包要被卸載(tmp_path) -> 
         MANIFEST.format(id="aaa", permissions="", blocks=ONE_BLOCK), encoding="utf-8"
     )
     (good / "main.py").write_text(
-        "from blocky import block, on_unload\n\n"
+        "from blockyard import block, on_unload\n\n"
         "@block('aaa.go')\n"
         "async def go(ctx):\n"
         "    return None\n\n"

@@ -22,8 +22,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from blocky.errors import ValidationError
-from blocky.ir import expression, template
+from blockyard.errors import ValidationError
+from blockyard.ir import expression, template
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "field_messages.yaml"
 

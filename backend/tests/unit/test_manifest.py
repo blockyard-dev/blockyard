@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from blocky.errors import ExtensionError
-from blocky.extensions import DEFAULT_EXTENSIONS_ROOT, Manifest, discover, parse_manifest
+from blockyard.errors import ExtensionError
+from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT, Manifest, discover, parse_manifest, scan
 
 BASE = {"manifestVersion": 1, "id": "demo2", "name": "示範", "version": "0.1.0"}
 
@@ -153,6 +153,19 @@ def test_demo_pack_is_valid() -> None:
     assert isinstance(sources["demo"].manifest, Manifest)
 
 
+def assert_problem(root, dirname: str, match: str) -> None:
+    """這個包讀不進來，而且**其他包不受影響**（P3 第 2 步）。
+
+    這幾條規則一個字都沒有變，變的是它們怎麼被回報：`discover()` 原本整批拋，
+    於是一份手滑的 manifest 就讓 `GET /api/extensions` 回 500。現在壞的那個
+    走 `scan().problems`，由 `GET /api/extensions/problems` 端到擴充功能面板上。
+    """
+    found = scan(root)
+    assert dirname not in found.sources
+    assert [p.dir for p in found.problems] == [dirname]
+    assert match in found.problems[0].message
+
+
 def test_directory_name_must_match_the_id(tmp_path) -> None:
     """專案 IR 只記 id；若目錄名可以不同，「這顆積木是誰提供的」就不好回答。"""
     d = tmp_path / "notdemo"
@@ -160,8 +173,7 @@ def test_directory_name_must_match_the_id(tmp_path) -> None:
     (d / "manifest.yaml").write_text(
         "manifestVersion: 1\nid: demo\nname: x\nversion: 0.1.0\n", encoding="utf-8"
     )
-    with pytest.raises(ExtensionError, match="不一致"):
-        discover(tmp_path)
+    assert_problem(tmp_path, "notdemo", "不一致")
 
 
 # ---- 內建與積木包的界線（D21）----
@@ -178,8 +190,7 @@ def test_a_pack_cannot_call_itself_builtin(tmp_path) -> None:
         "manifestVersion: 1\nid: sneaky\nname: x\nversion: 0.1.0\nbuiltin: true\n",
         encoding="utf-8",
     )
-    with pytest.raises(ExtensionError, match="不能標記 builtin"):
-        discover(tmp_path)
+    assert_problem(tmp_path, "sneaky", "不能標記 builtin")
 
 
 def test_builtin_id_must_be_a_builtin_namespace() -> None:
@@ -501,3 +512,38 @@ def test_packs_cannot_open_the_editors_own_dialogs() -> None:
         mf(palette=[{"button": "create", "label": "創建積木", "action": "create_procedure"}]),
         "只有內建能宣告",
     )
+
+
+# ---- 封面（§8.1、D31）----
+#
+# `cover` 與 `PanelSpec.entry` 是同一件事的兩個入口：manifest 說一個檔名，後端
+# 把 bytes 交給瀏覽器。所以路徑規則共用一段（`_inside_pack`），而這幾題是那段
+# 在 `cover` 這一側也接上了的證據。
+
+
+def test_cover_only_takes_images() -> None:
+    """`<img>` 是它唯一的用途，所以白名單比面板 asset 的還窄。"""
+    bad(mf(cover="preview.html"), "封面只收")
+    bad(mf(cover="preview.svg"), "封面只收")
+
+
+def test_cover_cannot_escape_the_pack() -> None:
+    bad(mf(cover="../../etc/x.png"), "跳出包目錄")
+    bad(mf(cover="/etc/x.png"), "相對路徑")
+
+
+def test_cover_is_optional() -> None:
+    """沒宣告不是錯——那格畫名字的第一個字，那條路本來就在。"""
+    assert parse_manifest(mf(), where="test").cover is None
+
+
+def test_declared_cover_must_exist(tmp_path) -> None:
+    """載入期就要說。不然症狀是擴充功能面板上一格破圖，而破圖說不出它是
+    「還沒放」還是「路徑打錯了」。"""
+    import yaml
+
+    d = tmp_path / "demo2"
+    d.mkdir()
+    (d / "manifest.yaml").write_text(yaml.safe_dump(mf(cover="preview.png")))
+
+    assert_problem(tmp_path, "demo2", "找不到封面")

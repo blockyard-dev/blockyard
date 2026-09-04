@@ -21,11 +21,11 @@ import { buildContext, type ConversionContext } from './context';
 import { loadProject } from './deserialize';
 import { serializeWorkspace } from './serialize';
 import type { Manifest } from '../types/manifest';
-import type { Block as IRBlock, BlockyProjectIR as ProjectIR } from '../types/project';
+import type { Block as IRBlock, BlockyardProjectIR as ProjectIR } from '../types/project';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../backend/blocky/interpreter/builtins',
+  '../../../../backend/blockyard/interpreter/builtins',
 );
 
 let ctx: ConversionContext;

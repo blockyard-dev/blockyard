@@ -8,8 +8,8 @@
 
 from __future__ import annotations
 
-from blocky.conformance import Case
-from blocky.testing import Stack, Tpl, blk, build, var
+from blockyard.conformance import Case
+from blockyard.testing import Stack, Tpl, blk, build, var
 
 FLAG = "event.when_flag_clicked"
 
@@ -1171,7 +1171,7 @@ case(
             }
         },
     ),
-    # `回傳` 繼承 BaseException，所以 `except BlockyError` 天然攔不到它——與
+    # `回傳` 繼承 BaseException，所以 `except BlockyardError` 天然攔不到它——與
     # `try_catch` 是同一條界線，不是這顆積木自己的特例。
     {"status": "ok", "logs": ["1"]},
     tags=["control", "retry", "unwind", "procedure"],
@@ -1781,7 +1781,7 @@ case(
 # §4.2 積木形狀（載入期驗證）
 #
 # 形狀錯誤留到執行期有兩個後果：if 的另一半可以躺著錯好幾個月才被走到，
-# 而且它以 ValidationError 的形式從 Thread 漏出來——那不是 BlockyError，
+# 而且它以 ValidationError 的形式從 Thread 漏出來——那不是 BlockyardError，
 # 發不出 block.error，前端只看到一個安靜停掉的 Thread。
 # ==========================================================================
 
@@ -1893,4 +1893,112 @@ case(
         },
     },
     tags=["validation", "shape", "unknown_block"],
+)
+
+
+# ==========================================================================
+# §8.3 面板（`panel` **積木包**，§16 Q17 的 B 路線）
+#
+# 畫圖的是那個包的 `ui/`，編輯器**一個字都不解讀** payload——所以題庫測得到
+# 的、也唯一該測的，是**送出去的是什麼**。「那張圖長得對不對」不是題庫回答得了
+# 的問題（那要一個瀏覽器），它靠實測。
+# ==========================================================================
+
+PANEL = [("panel", "2.0.0")]
+
+
+def panel(*blocks):
+    return build(scripts=[hat(*blocks)], extensions=PANEL)
+
+
+def _json(text):
+    """題目裡的字面清單／物件。順帶示範真正的用法：資料先解析，再進面板。"""
+    return blk("object.parse_json", text=text)
+
+
+case(
+    "panel/blocks_send_their_own_protocol",
+    "每顆積木送出這個包自己定的一則訊息——形狀由它決定，不是由編輯器決定",
+    "§16 Q17 積木包能不能畫自己的面板",
+    panel(
+        blk("panel.line_chart", data=_json("[3, 1, 4]")),
+        blk("panel.add_point", x=1, y=2),
+        blk("panel.clear"),
+        blk("panel.stat", name="總數", value=42),
+    ),
+    {
+        "status": "ok",
+        "logs": [],
+        "panels": {
+            "panel/chart": [
+                {"type": "line", "values": [3, 1, 4]},
+                {"type": "point", "x": 1, "y": 2},
+                {"type": "clear"},
+                {"type": "stat", "name": "總數", "value": "42"},
+            ]
+        },
+    },
+    tags=["panel", "extension"],
+)
+
+case(
+    "panel/points_in_a_loop",
+    "迴圈裡加點：三圈三則訊息，**依序**——面板重掛時就是照這個順序重播",
+    "§6.2 流量控制",
+    panel(
+        blk("data.set", fields={"name": "i"}, value=0),
+        blk(
+            "control.repeat",
+            times=3,
+            body=Stack([
+                blk("data.change", fields={"name": "i"}, value=1),
+                blk("panel.add_point", x=var("i"), y=var("i")),
+            ]),
+        ),
+    ),
+    {
+        "status": "ok",
+        "panels": {
+            "panel/chart": [
+                {"type": "point", "x": 1, "y": 1},
+                {"type": "point", "x": 2, "y": 2},
+                {"type": "point", "x": 3, "y": 3},
+            ]
+        },
+    },
+    tags=["panel", "extension"],
+)
+
+case(
+    "panel/table_columns_come_from_all_rows",
+    "欄位是所有列的聯集，順序照第一次出現——缺的那一格由面板畫成空白",
+    "§16 Q17 積木包能不能畫自己的面板",
+    panel(blk("panel.table", data=_json('[{"a": 1}, {"b": 2}]'))),
+    {
+        "status": "ok",
+        "panels": {
+            "panel/chart": [
+                {"type": "table", "columns": ["a", "b"], "rows": [{"a": "1"}, {"b": "2"}]}
+            ]
+        },
+    },
+    tags=["panel", "extension"],
+)
+
+case(
+    "panel/line_chart_rejects_non_number",
+    "折線圖的資料要全部是數字，而錯誤要指名**第幾筆**（這一條在包裡，不在編輯器）",
+    "§16 Q17 積木包能不能畫自己的面板",
+    panel(blk("panel.line_chart", data=_json('[1, "兩", 3]'))),
+    {"status": "error", "error": {"message_contains": "第 2 筆不是"}},
+    tags=["panel", "extension", "validation"],
+)
+
+case(
+    "panel/data_must_be_a_list",
+    "`type: list` 是嚴格宣告，不做轉換（§7.2）——由 Host 邊界擋，包裡不寫防呆",
+    "§7.2 json 與 object / list 的差別",
+    panel(blk("panel.line_chart", data="[1, 2, 3]")),
+    {"status": "error", "error": {"message_contains": "參數 data 需要清單，收到文字"}},
+    tags=["panel", "extension", "validation"],
 )

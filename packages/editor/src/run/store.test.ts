@@ -6,7 +6,7 @@
  * 哪些積木該發光、哪些該冒氣泡、以及「跑完之後別繼續發光」。
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { RunEvent, RunFrame } from '../api/runs';
+import type { RunEvent, RunFrame, RunSummary } from '../api/runs';
 import { useRunStore } from './store';
 
 function frame(...events: RunEvent[]): RunFrame {
@@ -22,6 +22,9 @@ beforeEach(() => {
   // `begin()` 不動 `ownedRunId`——那一格的主人是 `App.tsx` 的 socket，不是
   // 「按下執行」這個動作。所以測試自己清。
   useRunStore.getState().own(null);
+  // `extPanels` 也不動：面板跨 Run 累積（見 `store.ts` 的 `emptyRun`），而那
+  // 正是使用者要的——但它讓每一題都看得到前一題留下的東西，所以測試自己清。
+  useRunStore.setState({ extPanels: new Map() });
 });
 
 describe('積木狀態', () => {
@@ -236,5 +239,99 @@ describe('專案通道（§9）', () => {
     expect(s.runId).toBe('r_9');
     expect(s.variables.get('json')).toEqual({ content: '嗨' });
     expect(s.dropped).toBe(12);
+  });
+});
+
+describe('積木包宣告的面板（§16 Q17 的 B 路線）', () => {
+  const say = (extId: string, panelId: string, payload: unknown): RunEvent => ({
+    op: 'ext.panel',
+    threadId: 't_1',
+    extId,
+    panelId,
+    payload,
+  });
+
+  it('訊息依序留著——面板重掛時就是照這個順序重播', () => {
+    // 編輯器**一個字都不解讀** payload，所以它唯一的責任就是順序不動。
+    apply(say('panel', 'chart', { type: 'point', x: 1 }), say('panel', 'chart', { type: 'clear' }));
+
+    expect(useRunStore.getState().extPanels.get('panel/chart')?.messages).toEqual([
+      { type: 'point', x: 1 },
+      { type: 'clear' },
+    ]);
+  });
+
+  it('不同的包、不同的面板各記各的', () => {
+    apply(say('panel', 'chart', 1), say('demo', 'demo', 2));
+
+    expect([...useRunStore.getState().extPanels.keys()]).toEqual(['panel/chart', 'demo/demo']);
+  });
+
+  it('訊息有上限，丟最舊的，而且**要說出來**（§6.2）', () => {
+    // 一個掛整天的迴圈會把記憶體吃光。丟掉可以，靜靜地丟掉不行——重播出來的
+    // 畫面因此不完整，而面板自己說不出這件事（它只看得到收到的那幾則）。
+    for (let i = 0; i < 2400; i++) apply(say('panel', 'chart', i));
+
+    const entry = useRunStore.getState().extPanels.get('panel/chart');
+    expect(entry?.messages.length).toBe(2000);
+    expect(entry?.messages[0]).toBe(400);
+    expect(entry?.truncated).toBe(true);
+  });
+
+  it('沒滿就不算截掉', () => {
+    apply(say('panel', 'chart', 1));
+
+    expect(useRunStore.getState().panelTruncated('panel/chart')).toBe(false);
+  });
+
+  it('begin() **不清**面板——它跨 Run 累積，清空由使用者拉一顆積木要求', () => {
+    // §5.1 的「點一下就跑」：每次執行都清的話，點一顆 `加一個點` 只會看到一個
+    // 點，那顆積木等於不能單獨點——而單獨點正是那條規則存在的意義。
+    apply(say('panel', 'chart', 1));
+    useRunStore.getState().begin();
+    apply(say('panel', 'chart', 2));
+
+    expect(useRunStore.getState().extPanels.get('panel/chart')?.messages).toEqual([1, 2]);
+  });
+
+  it('log 與變數照樣每次執行清掉——只有面板是跨 Run 的', () => {
+    // 兩本帳的分界要有人守：面板的畫布是使用者疊出來的，log 與高亮是「這一次
+    // 執行發生了什麼」。
+    apply(say('panel', 'chart', 1), { op: 'log', threadId: 't_1', level: 'info', text: '一' });
+    useRunStore.getState().begin();
+
+    expect(useRunStore.getState().logs).toEqual([]);
+    expect(useRunStore.getState().extPanels.size).toBe(1);
+  });
+});
+
+describe('attach 與已經結束的 Run', () => {
+  it('POST 回來之前就結束的 Run，attach 不會把它推回「執行中」', () => {
+    // 監聽開著時「點一下就跑」不開 run 通道（D33），事件走專案通道——而一次
+    // 1 毫秒的 Run 比一趟 HTTP 往返快得多。後端那一列寫著 ok，而按鈕卡在
+    // 「停止」，因為那個 Run 不會再有任何事件來把它關掉。
+    const store = useRunStore.getState();
+    store.begin();
+    store.applyProject({
+      runId: 'r_9',
+      events: [
+        { op: 'run.start', runId: 'r_9' },
+        { op: 'run.end', runId: 'r_9', status: 'ok' },
+      ],
+    });
+    expect(useRunStore.getState().status).toBe('ok');
+
+    store.attach({ runId: 'r_9' } as RunSummary);
+
+    expect(useRunStore.getState().status).toBe('ok');
+  });
+
+  it('還在跑的那個照樣接得起來', () => {
+    const store = useRunStore.getState();
+    store.begin();
+    store.attach({ runId: 'r_10' } as RunSummary);
+
+    expect(useRunStore.getState().status).toBe('running');
+    expect(useRunStore.getState().runId).toBe('r_10');
   });
 });

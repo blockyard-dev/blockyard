@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import pytest
 
-from blocky.errors import BlockyError, TypeCoercionError, ValidationError
-from blocky.ir.expression import evaluate, parse
-from blocky.ir.values import divide, modulo
+from blockyard.errors import BlockyardError, TypeCoercionError, ValidationError
+from blockyard.ir.expression import evaluate, parse
+from blockyard.ir.values import divide, modulo
 
 DATA = {"a": 10, "b": "4", "o": {"x": 3}, "l": [1, 2, 3], "s": "文字", "t": True}
 R = DATA.__getitem__
@@ -145,7 +145,7 @@ def test_missing_variable_propagates_from_the_resolver() -> None:
 
 @pytest.mark.parametrize("src", ["1/0", "${a}/(2-2)", "1%0"])
 def test_division_by_zero_is_an_error_not_infinity(src: str) -> None:
-    with pytest.raises(BlockyError):
+    with pytest.raises(BlockyardError):
         run(src)
 
 

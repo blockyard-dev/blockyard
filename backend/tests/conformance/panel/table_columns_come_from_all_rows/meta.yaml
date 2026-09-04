@@ -1,0 +1,16 @@
+title: 欄位是所有列的聯集，順序照第一次出現——缺的那一格由面板畫成空白
+spec: §16 Q17 積木包能不能畫自己的面板
+tags:
+- panel
+- extension
+expect:
+  status: ok
+  panels:
+    panel/chart:
+    - type: table
+      columns:
+      - a
+      - b
+      rows:
+      - a: '1'
+      - b: '2'

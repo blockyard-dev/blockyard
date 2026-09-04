@@ -23,11 +23,11 @@ import { loadProject } from '../ir/deserialize';
 import { serializeWorkspace } from '../ir/serialize';
 import type { RegisteredBlock } from './define';
 import type { Manifest } from '../types/manifest';
-import type { BlockyProjectIR as ProjectIR, Procedure } from '../types/project';
+import type { BlockyardProjectIR as ProjectIR, Procedure } from '../types/project';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../backend/blocky/interpreter/builtins',
+  '../../../../backend/blockyard/interpreter/builtins',
 );
 
 let builtins: RegisteredBlock[];

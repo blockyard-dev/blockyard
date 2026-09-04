@@ -42,7 +42,7 @@ import {
 import type { ConversionContext } from './context';
 import type {
   Block as IRBlock,
-  BlockyProjectIR as ProjectIR,
+  BlockyardProjectIR as ProjectIR,
 } from '../types/project';
 
 type BlockState = Blockly.serialization.blocks.State;

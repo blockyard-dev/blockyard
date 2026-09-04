@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>面板</title>
+<link rel="stylesheet" href="./panel.css" />
+<body>
+  <!-- 這一整頁是**這個積木包的**，不是編輯器的。編輯器只給一格 sandbox 的
+       iframe，裡面畫什麼由這裡決定——換成 three.js 也不必動編輯器一行。 -->
+  <div id="stats" class="stats" hidden></div>
+  <div class="chart">
+    <canvas id="canvas"></canvas>
+    <span class="hint">兩指拖曳平移 · 捏合或 ⌘滾輪縮放 · 雙擊回到自動</span>
+  </div>
+  <div id="table-wrap" class="table-wrap" hidden><table id="table"></table></div>
+  <script type="module" src="./main.js"></script>
+</body>

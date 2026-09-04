@@ -10,6 +10,8 @@ import { useCallback, useRef, useState } from 'react';
 import { readPref, writePref } from '../prefs';
 import { useRunStore, type LogLine } from '../run/store';
 import { JsonTree } from './JsonTree';
+import { ExtPanel } from './ExtPanel';
+import { PanelWindow } from './PanelWindow';
 import { useKeysUi } from './keysStore';
 
 /** §8.3：變數面板預設開著，但要能關。開關記在偏好裡，**不進 IR**（§16 Q15）。 */
@@ -27,11 +29,43 @@ const MIN_WIDTH = 180;
 /** 拉太寬就不是「面板」了。畫布至少要留這麼多（跟 `FlyoutResizer` 同一個數）。 */
 const CANVAS_MIN_PX = 240;
 
-export function RunPanel() {
+/** 現在看的是哪一頁。記在偏好裡，與寬度、變數開關同一本帳（§16 Q15）。 */
+const TAB_PREF = 'runPanelTab';
+
+/** `執行` 那一頁，或某一塊面板的標題。 */
+const RUN_TAB = '\u0000run';
+
+/**
+ * 分頁列：`執行` + **每一塊面板各一格**，一次看一塊、佔滿整片。
+ *
+ * **變數與輸出刻意留在同一頁**（`執行`）。除錯時最常見的動作是「看變數變成
+ * 什麼，同時看 log 說了什麼」（§15 驗收 1 那句「積木逐顆高亮、變數面板即時
+ * 變動」講的就是這個同時性）；拆成兩頁就是逼人二選一。
+ *
+ * 分頁的數量因此由**資料**決定，而標題是使用者打的字、還可以插值——所以分頁列
+ * 橫向捲（CSS 那邊），而塊數上限在 store（`PANEL_LIMIT`）。這是知情的取捨：
+ * 一次看一塊、每塊都滿版，比一疊擠在一起的小卡片有用。
+ */
+
+/** 已啟用的包宣告的那幾格（§8.3）。分頁列把它們與資料生出來的那些併起來顯示。 */
+export interface DeclaredPanel {
+  extId: string;
+  panelId: string;
+  name: string;
+  entry: string;
+}
+
+/** 分頁的 key。用 `extId/panelId` 而不是名字——名字是 manifest 寫的，會重複。 */
+const keyOf = (p: DeclaredPanel) => `${p.extId}/${p.panelId}`;
+
+export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
   const status = useRunStore((s) => s.status);
   const variables = useRunStore((s) => s.variables);
   const logs = useRunStore((s) => s.logs);
   const dropped = useRunStore((s) => s.dropped);
+  const extPanels = useRunStore((s) => s.extPanels);
+  const [windowOpen, setWindowOpen] = useState(false);
+  const [tab, setTab] = useState<string>(() => readPref<string>(TAB_PREF, RUN_TAB));
   const [varsOpen, setVarsOpen] = useState(() => readPref(VARIABLES_OPEN, true));
   const [width, setWidth] = useState(() => readPref(WIDTH_PREF, DEFAULT_WIDTH));
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -43,11 +77,28 @@ export function RunPanel() {
     return clamped;
   }, []);
 
+  const pick = (next: string) => {
+    setTab(next);
+    writePref(TAB_PREF, next);
+  };
+
   const toggleVars = () => {
     setVarsOpen((open) => {
       writePref(VARIABLES_OPEN, !open);
       return !open;
     });
+  };
+
+  // **分頁就是宣告出來的那幾格。** 一個包啟用著，它宣告的面板就在——不會因為
+  // 這次執行沒畫東西就消失，也不會因為標題插值長出第二十四格。
+  const activeDeclared = declared.find((d) => keyOf(d) === tab) ?? null;
+  const showRun = !activeDeclared;
+  const panelProps = activeDeclared && {
+    extId: activeDeclared.extId,
+    panelId: activeDeclared.panelId,
+    entry: activeDeclared.entry,
+    outbox: extPanels.get(tab)?.messages ?? [],
+    truncated: extPanels.get(tab)?.truncated ?? false,
   };
 
   if (status === 'idle') return null;
@@ -83,6 +134,73 @@ export function RunPanel() {
           writePref(WIDTH_PREF, apply(DEFAULT_WIDTH));
         }}
       />
+      {/* 分頁列。**藏起來的那一頁發生了事，畫面上要說得出來**——這是 D33
+          修過的形狀（一則訊息的 Run 只有零點幾毫秒，使用者看到一片安靜）。
+          所以非當前分頁帶一個數字，與變數那一段摺起來時的 `section-count`
+          是同一個東西。 */}
+      <div className="run-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={showRun}
+          className={`run-tab${showRun ? ' is-on' : ''}`}
+          onClick={() => pick(RUN_TAB)}
+        >
+          執行
+        </button>
+        {declared.map((d) => {
+          const key = keyOf(d);
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              className={`run-tab${tab === key ? ' is-on' : ''}`}
+              onClick={() => pick(key)}
+              title={`${d.name}（${d.extId}）`}
+            >
+              {d.name}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeDeclared && panelProps ? (
+        <section className="run-section run-section-panels">
+          {/* **編輯器不畫面板的內容。** 它只給那個包一格 sandbox 的 iframe，
+              裡面畫什麼（折線圖、three.js、地圖）完全是那個包的 `ui/` 的事。
+              少了這條，每加一種圖表就要改編輯器一次。 */}
+          <div className="panel-view">
+            {/* 跳出去的入口。**不在積木上**——彈出視窗是「看」的動作，寫進 IR
+                的話換一台機器打開同一份專案，它會執著於在一扇不存在的窗裡畫圖。
+                而它非得是點擊不可：`window.open` 的授權會過期。 */}
+            <button
+              type="button"
+              className="panel-popout"
+              onClick={() => setWindowOpen((open) => !open)}
+              aria-label={windowOpen ? '收回這個視窗' : '在新視窗開啟'}
+              title={windowOpen ? '收回來' : '在新視窗開啟'}
+            >
+              {windowOpen ? '⤡' : '↗'}
+            </button>
+            {windowOpen ? (
+              <p className="run-empty">在彈出視窗裡顯示中。</p>
+            ) : (
+              <ExtPanel {...panelProps} />
+            )}
+          </div>
+          {windowOpen && (
+            // 搬進另一個 document 一定會重載（規格），所以那個 iframe 是新的一個
+            // ——重播把它補回來。`key` 換掉是刻意的：不換的話 React 會試著沿用
+            // 同一個 DOM 節點，而它已經不是同一份文件了。
+            <PanelWindow onClose={() => setWindowOpen(false)}>
+              <ExtPanel key={`${tab}#window`} {...panelProps} />
+            </PanelWindow>
+          )}
+        </section>
+      ) : (
+      <>
       <section className="run-section">
         {/* 執行中的即時數值對除錯很有用，但它同時是一個一直在動的東西；
             不除錯的時候它只是在旁邊閃。所以要能關（§8.3）。 */}
@@ -139,6 +257,8 @@ export function RunPanel() {
           <p className="run-dropped">跟不上，後端丟棄了 {dropped.toLocaleString()} 筆事件</p>
         )}
       </section>
+      </>
+      )}
     </aside>
   );
 }

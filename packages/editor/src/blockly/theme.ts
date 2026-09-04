@@ -18,8 +18,8 @@ import { SCROLL_MS, easeOut, prefersReducedMotion } from './motion';
 // 匯入即註冊「Alt 拖曳 = 複製」的那個 dragger（下面 `plugins.blockDragger` 指名它）。
 import { DUPLICATING_DRAGGER } from './duplicate';
 
-export const blockyTheme = Blockly.Theme.defineTheme('blocky', {
-  name: 'blocky',
+export const blockyardTheme = Blockly.Theme.defineTheme('blockyard', {
+  name: 'blockyard',
   base: Blockly.Themes.Zelos,
   componentStyles: {
     workspaceBackgroundColour: '#f7f7fb',
@@ -152,7 +152,7 @@ function placeButtonText(text: SVGTextElement, width: number, height: number): v
   let clip = root.querySelector('clipPath');
   if (!clip) {
     clip = document.createElementNS(SVG_NS, 'clipPath');
-    clip.setAttribute('id', `blocky-flyout-clip-${++clipSeq}`);
+    clip.setAttribute('id', `blockyard-flyout-clip-${++clipSeq}`);
     clip.appendChild(document.createElementNS(SVG_NS, 'rect'));
     root.appendChild(clip);
     text.setAttribute('clip-path', `url(#${clip.id})`);
@@ -320,7 +320,7 @@ class FixedScaleFlyout extends ContinuousFlyout {
     const element = item.getElement();
     if (
       element instanceof Blockly.FlyoutButton
-      && element.getSvgRoot().classList.contains('blocky-section-label')
+      && element.getSvgRoot().classList.contains('blockyard-section-label')
     ) {
       return false;
     }
@@ -433,7 +433,7 @@ class FixedScaleFlyout extends ContinuousFlyout {
  * 開頭**：在一個分類裡面自己捲了一段之後再點它一次，回到段落開頭是預期中的
  * 事，也讓這一下點擊不是完全沒反應。
  */
-class BlockyToolbox extends ContinuousToolbox {
+class BlockyardToolbox extends ContinuousToolbox {
   override setSelectedItem(newItem: Blockly.IToolboxItem | null): void {
     if (newItem === null) {
       const selected = this.getSelectedItem();
@@ -446,19 +446,19 @@ class BlockyToolbox extends ContinuousToolbox {
 
 Blockly.registry.register(
   Blockly.registry.Type.FLYOUTS_VERTICAL_TOOLBOX,
-  'BlockyFlyout',
+  'BlockyardFlyout',
   FixedScaleFlyout,
   true,
 );
 
-Blockly.registry.register(Blockly.registry.Type.TOOLBOX, 'BlockyToolbox', BlockyToolbox, true);
+Blockly.registry.register(Blockly.registry.Type.TOOLBOX, 'BlockyardToolbox', BlockyardToolbox, true);
 
 export const workspaceOptions: Partial<Blockly.BlocklyOptions> = {
   renderer: 'zelos',
-  theme: blockyTheme,
+  theme: blockyardTheme,
   plugins: {
-    toolbox: 'BlockyToolbox',
-    flyoutsVerticalToolbox: 'BlockyFlyout',
+    toolbox: 'BlockyardToolbox',
+    flyoutsVerticalToolbox: 'BlockyardFlyout',
     metricsManager: 'ContinuousMetrics',
     // 按住 Alt／Option 拖曳 = 複製這顆以下整串（`duplicate.ts`）。
     blockDragger: DUPLICATING_DRAGGER,

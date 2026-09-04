@@ -33,16 +33,16 @@ import * as Blockly from 'blockly/core';
 import type { DropdownArgs } from './dropdownCache';
 import { fetchDropdownOptions, peekDropdownOptions } from './dropdownCache';
 
-export const FIELD_DYNAMIC_DROPDOWN_TYPE = 'field_blocky_dynamic_dropdown';
+export const FIELD_DYNAMIC_DROPDOWN_TYPE = 'field_blockyard_dynamic_dropdown';
 
 /**
  * 選單裡那一行「不是選項的東西」（載入中／讀不到／一個都沒有）帶的值。
  *
  * 它一定要是一個**不可能是真值**的字串：使用者點得到那一行，而點下去在
  * `FieldDropdown` 眼裡就是一次 `setValue()`。`doClassValidation_` 認出這個值
- * 就擋掉，所以點它等於沒點——不會有一個 `\u0000blocky.notice` 被存進 IR。
+ * 就擋掉，所以點它等於沒點——不會有一個 `\u0000blockyard.notice` 被存進 IR。
  */
-const NOTICE_VALUE = '\u0000blocky.notice';
+const NOTICE_VALUE = '\u0000blockyard.notice';
 const LOADING_TEXT = '載入中…';
 
 /** 影子積木上那個欄位的名字。與 `define.ts::SHADOW_FIELD` 同一個字串——不從
@@ -352,7 +352,7 @@ Blockly.fieldRegistry.register(FIELD_DYNAMIC_DROPDOWN_TYPE, FieldDynamicDropdown
 // 右鍵選單：「重新整理選項」
 // --------------------------------------------------------------------------
 
-const REFRESH_MENU_ID = 'blocky_dynamic_dropdown_refresh';
+const REFRESH_MENU_ID = 'blockyard_dynamic_dropdown_refresh';
 
 function fieldOf(block: Blockly.Block | undefined): FieldDynamicDropdown | null {
   const field = block?.getField(SHADOW_FIELD_NAME);

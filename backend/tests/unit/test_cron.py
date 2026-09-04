@@ -15,10 +15,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from blocky.api.app import create_app
-from blocky.cron import CronSpec, parse
-from blocky.errors import ValidationError
-from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.api.app import create_app
+from blockyard.cron import CronSpec, parse
+from blockyard.errors import ValidationError
+from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
 
 
 def cron_project(
@@ -47,7 +47,7 @@ def cron_project(
 
 
 def app_for(tmp_path: Path) -> Any:
-    return create_app(db_path=tmp_path / "blocky.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    return create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
 
 
 @pytest.fixture
@@ -300,8 +300,8 @@ def test_the_payload_carries_scheduled_at_in_the_declared_timezone(tmp_path: Pat
     """`when_cron` 的 `yields` 是 `scheduled_at`（§4.9 的時間戳是 object，不是
     number）。用**排程的那個時區**算，不是 UTC——使用者設的是「早上九點」，
     那句話只在他的時區裡成立。"""
-    from blocky.cron import CronSpec
-    from blocky.runs.triggers import _cron_payload
+    from blockyard.cron import CronSpec
+    from blockyard.runs.triggers import _cron_payload
 
     payload = _cron_payload(CronSpec("0 9 * * *", "Asia/Taipei"))
 
@@ -319,7 +319,7 @@ def test_a_freshly_dragged_block_cannot_be_saved_until_the_zone_is_chosen(
     只寫著一個他沒讀的字——可攜性守住了，但意思錯了。空的則存不進去，而那句
     話他一定看得到。
     """
-    from blocky.interpreter import declarations
+    from blockyard.interpreter import declarations
 
     spec = declarations.block("event.when_cron")
     assert spec is not None
@@ -336,7 +336,7 @@ def test_concurrency_drop_skips_while_the_previous_run_is_alive(tmp_path: Path) 
 
     **`queue` 與 `restart` 還沒實作**，目前與 `parallel` 同行為。
     """
-    from blocky.runs.triggers import _forward
+    from blockyard.runs.triggers import _forward
 
     with TestClient(app_for(tmp_path)) as c:
         save(c, cron_project())

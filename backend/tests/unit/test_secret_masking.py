@@ -16,10 +16,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from blocky.api.app import create_app
-from blocky.extensions import secret_store
-from blocky.extensions.httpclient import redact_url
-from blocky.interpreter.events import EventSink, _redact
+from blockyard.api.app import create_app
+from blockyard.extensions import secret_store
+from blockyard.extensions.httpclient import redact_url
+from blockyard.interpreter.events import EventSink, _redact
 
 LEAKY_TOKEN = "sk-super-secret-value"  # pragma: allowlist secret
 
@@ -60,7 +60,7 @@ def _write_leaky_extension(root: Path) -> None:
         encoding="utf-8",
     )
     (pkg / "main.py").write_text(
-        "from blocky import block\n\n"
+        "from blockyard import block\n\n"
         "@block('leaky.spill')\n"
         "async def spill(ctx) -> None:\n"
         "    ctx.log(f'token is {ctx.config[\"token\"]}')\n",
@@ -72,7 +72,7 @@ def _write_leaky_extension(root: Path) -> None:
 def client(tmp_path: Path) -> Iterator[TestClient]:
     ext_root = tmp_path / "extensions"
     _write_leaky_extension(ext_root)
-    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=ext_root)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=ext_root)
     with TestClient(app) as c:
         yield c
 

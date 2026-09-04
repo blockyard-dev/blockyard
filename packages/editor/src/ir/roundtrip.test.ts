@@ -26,11 +26,11 @@ import { loadProject } from './deserialize';
 import { serializeWorkspace } from './serialize';
 import { hasInterpolation, isWholeTemplate } from './template';
 import type { Manifest } from '../types/manifest';
-import type { Block as IRBlock, BlockyProjectIR as ProjectIR } from '../types/project';
+import type { Block as IRBlock, BlockyardProjectIR as ProjectIR } from '../types/project';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../backend/blocky/interpreter/builtins',
+  '../../../../backend/blockyard/interpreter/builtins',
 );
 const DEMO_MANIFEST = resolve(
   dirname(fileURLToPath(import.meta.url)),

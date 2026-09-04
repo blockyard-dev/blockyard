@@ -23,9 +23,9 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from blocky.api.app import create_app
-from blocky.extensions import DEFAULT_EXTENSIONS_ROOT
-from blocky.runs.broker import HOT_THRESHOLD, ProjectHub, RunBroker, collapse
+from blockyard.api.app import create_app
+from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.runs.broker import HOT_THRESHOLD, ProjectHub, RunBroker, collapse
 
 # --------------------------------------------------------------------------
 # 題材：§15 驗收 1 的那份專案
@@ -99,7 +99,7 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
 
     進 `with` 也順便跑到 lifespan，也就是關機時 `RunManager.shutdown()` 那條路。
     """
-    app = create_app(db_path=tmp_path / "blocky.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
     with TestClient(app) as client:
         yield client
 
@@ -196,6 +196,10 @@ def test_collapse_coalesces_var_set_by_name() -> None:
         {"op": "var.set", "name": "count", "value": 3},
         {"op": "var.set", "name": "other", "value": "a"},
     ]
+
+
+
+
 
 
 def test_collapse_marks_truncated_last_value() -> None:
@@ -527,7 +531,7 @@ def test_run_of_unsaved_project_is_404(client: TestClient) -> None:
 def test_unknown_run_id_closes_the_socket(client: TestClient) -> None:
     from starlette.websockets import WebSocketDisconnect
 
-    from blocky.api.runs import WS_RUN_NOT_FOUND
+    from blockyard.api.runs import WS_RUN_NOT_FOUND
 
     with pytest.raises(WebSocketDisconnect) as excinfo:
         with client.websocket_connect("/ws/run/r_nope") as ws:
@@ -560,13 +564,121 @@ def test_runs_are_listed_newest_first(client: TestClient) -> None:
 
 
 # --------------------------------------------------------------------------
+# 5. 工具箱裡點一下（§5.1 的 `scratch`）
+#
+# 那顆積木還沒有被拉出來，存檔裡沒有它——所以它自己那一小段 IR 跟著請求走，
+# 由 `runs/scratch.py` 併進載入用的那一份。這一節守的是那個併法的四件事：
+# 跑得動、**存檔沒被動到**、id 撞了要說話、積木包的宣告要跟著補上。
+# --------------------------------------------------------------------------
+
+
+def echo_scratch(block_id: str = "sk_1") -> dict[str, Any]:
+    """工具箱裡的 `回聲 (world)`：一顆 reporter，帶著它自己的腳本與宣告。"""
+    return {
+        "blocks": {
+            block_id: {
+                "opcode": "demo.echo",
+                "inputs": {"text": {"kind": "literal", "value": "hi"}},
+            }
+        },
+        "scripts": [{"id": "sc_scratch", "top": block_id}],
+        "extensions": [{"id": "demo", "version": "0.1.0"}],
+    }
+
+
+def test_scratch_block_runs_without_touching_the_saved_project(client: TestClient) -> None:
+    """點工具箱裡那一顆：跑得動，而且硬碟上那份專案一個字都沒有變。
+
+    後者才是這條路存在的理由——「試一顆積木」不該在使用者的專案裡留下東西。
+    """
+    project = draft_project(project_id="p_scratch")
+    pid = save(client, project)
+    before = client.get(f"/api/projects/{pid}").json()
+
+    run = client.post(
+        "/api/runs",
+        json={"projectId": pid, "blockId": "sk_1", "scratch": echo_scratch()},
+    )
+    assert run.status_code == 201, run.text
+    summary = run.json()
+    assert summary["blockId"] == "sk_1"
+    assert summary["trigger"] == "manual"
+
+    with client.websocket_connect(f"/ws/run/{summary['runId']}") as ws:
+        events = drain(ws)
+
+    # reporter 的值由 `block.exit` 帶出去（§5.1），前端的值氣泡讀的就是這一筆。
+    exits = [e for e in events if e["op"] == "block.exit" and e["blockId"] == "sk_1"]
+    # `demo.echo` 回的是 `{greeting}, {text}`（見 `extensions/demo/main.py`）。
+    assert [e["value"] for e in exits] == ["hi, hi"]
+    assert events[-1]["status"] == "ok"
+
+    assert client.get(f"/api/projects/{pid}").json() == before
+
+
+def test_scratch_declares_an_extension_the_project_never_used(client: TestClient) -> None:
+    """§13.3：執行只載入**宣告過**的積木包，而畫布上從來沒有用過 demo。
+
+    宣告不跟著補上的話，點一顆 `demo.echo` 換來的是 `unknown_block`——使用者
+    做對了每一步，錯誤卻指著積木（P1 第一天撞到的那件事）。
+    """
+    project = draft_project(project_id="p_scratch_ext")
+    assert "extensions" not in project
+    pid = save(client, project)
+
+    run = client.post(
+        "/api/runs",
+        json={"projectId": pid, "blockId": "sk_1", "scratch": echo_scratch()},
+    )
+    with client.websocket_connect(f"/ws/run/{run.json()['runId']}") as ws:
+        events = drain(ws)
+
+    assert [e["op"] for e in events if e["op"] == "block.error"] == []
+    assert events[-1]["status"] == "ok"
+
+
+def test_scratch_that_reuses_a_saved_block_id_is_422(client: TestClient) -> None:
+    """id 撞了就報錯，不是覆蓋：執行紀錄、事件流與畫面上的高亮全部照 blockId
+    認人，讓兩顆積木共用一個 id 等於讓那三樣東西同時指錯人。"""
+    pid = save(client, draft_project(project_id="p_scratch_clash"))
+    res = client.post(
+        "/api/runs",
+        json={"projectId": pid, "blockId": "lone", "scratch": echo_scratch(block_id="lone")},
+    )
+
+    assert res.status_code == 422, res.text
+    assert res.json()["detail"]["blockId"] == "lone"
+    assert client.get("/api/runs").json() == []
+
+
+def test_scratch_without_a_block_id_is_422(client: TestClient) -> None:
+    """`scratch` 的意思是「跑**這一顆**」。沒有 blockId 就沒有那一顆。"""
+    pid = save(client, draft_project(project_id="p_scratch_headless"))
+    res = client.post("/api/runs", json={"projectId": pid, "scratch": echo_scratch()})
+
+    assert res.status_code == 422, res.text
+    assert "blockId" in res.json()["detail"]["message"]
+
+
+def test_scratch_cannot_rewrite_the_projects_declarations(client: TestClient) -> None:
+    """只收得下 blocks／scripts／extensions。工具箱裡的一顆積木沒有資格改
+    專案的 `procedures`——安靜忽略的話，那條界線哪天會在沒有人發現時消失。"""
+    pid = save(client, draft_project(project_id="p_scratch_keys"))
+    scratch = {**echo_scratch(), "procedures": {}}
+    res = client.post("/api/runs", json={"projectId": pid, "blockId": "sk_1", "scratch": scratch})
+
+    assert res.status_code == 422, res.text
+    assert "procedures" in res.json()["detail"]["message"]
+
+
+# --------------------------------------------------------------------------
 # §5.6：handler 自己爆掉時，事件流不能說謊
 # --------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_a_crashing_handler_reports_the_thread_as_error() -> None:
-    """handler 丟出非 `BlockyError` 的例外時（那是 runtime 的 bug，不是積木層級
+    """handler 丟出非 `BlockyardError` 的例外時（那是 runtime 的 bug，不是積木層級
     的錯誤），`finally` 仍然會發 `thread.end`。
 
     **它不能說 `ok`。** 說了的話，畫面上那條腳本會顯示成順利跑完，而它其實中途
@@ -575,11 +687,11 @@ async def test_a_crashing_handler_reports_the_thread_as_error() -> None:
     `control.throw` 的第一版正是這樣被抓到的：它拿了一個不存在的
     `Block.id`，於是 `AttributeError` 一路穿出去，而事件流說那條 thread 沒事。
     """
-    from blocky.interpreter.engine import Interpreter
-    from blocky.interpreter.events import EventSink
-    from blocky.interpreter.registry import COMMANDS
-    from blocky.ir.schema import load
-    from blocky.testing import blk, build
+    from blockyard.interpreter.engine import Interpreter
+    from blockyard.interpreter.events import EventSink
+    from blockyard.interpreter.registry import COMMANDS
+    from blockyard.ir.schema import load
+    from blockyard.testing import blk, build
 
     async def boom(t: object, b: object) -> None:
         raise AttributeError("runtime 的 bug")

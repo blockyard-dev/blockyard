@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from blocky.storage import INTERRUPTED, RunStore, SqlitePersistStore
+from blockyard.storage import INTERRUPTED, RunStore, SqlitePersistStore
 
 
 def store(tmp_path: Path) -> RunStore:
-    return RunStore(tmp_path / "blocky.db")
+    return RunStore(tmp_path / "blockyard.db")
 
 
 def start(s: RunStore, run_id: str, *, seq: int, project: str = "p1", **kw: object) -> None:

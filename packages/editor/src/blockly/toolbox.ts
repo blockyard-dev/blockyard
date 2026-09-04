@@ -6,19 +6,30 @@
  */
 import { isButtonEntry, isSectionEntry, type RegisteredBlock } from './define';
 import { keyId } from '../api/client';
-import type { ButtonSpec, ConfigSpec, Palette } from '../types/manifest';
+import type { ButtonSpec, ConfigSpec, Palette, PanelSpec } from '../types/manifest';
 
 export interface ToolboxGroup {
   id: string;
   name: string;
   colour: string;
   builtin: boolean;
+  /** 這個包宣告了哪幾格面板（§8.3）。**分頁是宣告出來的，不是資料生出來的。** */
+  panels: PanelSpec[];
   /** manifest 的 `version` 與 `description`。**擴充功能面板要它們**——那張卡片
    * 上除了名字與顏色之外的全部文字都是這兩個欄位，而面板手邊只有分類。
    * 從 `blocks[0].manifest` 撈也拿得到，但那是「這個分類某一顆積木的 manifest」
    * ——一個分類的版本不是它第一顆積木的性質（同 `secrets` 放在這裡的理由）。 */
   version: string;
   description: string | null;
+  /** manifest 的 `cover`：擴充功能面板那張卡上 16:9 那格要畫的圖，沒宣告就是
+   * `null`（那格畫名字的第一個字）。
+   *
+   * **這裡放的是 manifest 原值，但沒有人拿它組網址**——封面的端點是
+   * `/api/extensions/<id>/cover`，路徑由後端從 manifest 讀，request 一個字都不
+   * 帶（見 `api/extensions.py::get_cover`）。所以這個欄位在前端唯一的用途是
+   * 「這個包有沒有宣告封面」。留著原值而不是折成 boolean，是為了它跟
+   * `version`／`description` 一樣讀得出自己是 manifest 的哪一格。 */
+  cover: string | null;
   /** 這個分類註冊得出來的積木（`dynamic` 的不在裡面）。 */
   blocks: RegisteredBlock[];
   /** manifest 的 `palette`：積木、按鈕、分段的**順序**（§7.2）。 */
@@ -41,7 +52,7 @@ export interface ToolboxGroup {
  * `registerButtonCallback` 是**整個工作區共用一張表**。
  */
 export function buttonCallbackKey(manifestId: string, buttonId: string): string {
-  return `blocky:${manifestId}:${buttonId}`;
+  return `blockyard:${manifestId}:${buttonId}`;
 }
 
 const DEFAULT_COLOUR = '#9966FF';
@@ -77,8 +88,10 @@ export function groupByManifest(blocks: RegisteredBlock[]): ToolboxGroup[] {
         name: manifest.name,
         colour: manifest.color ?? DEFAULT_COLOUR,
         builtin: manifest.builtin === true,
+        panels: manifest.panels ?? [],
         version: manifest.version,
         description: manifest.description ?? null,
+        cover: manifest.cover ?? null,
         blocks: [],
         palette: manifest.palette ?? [],
         buttons: (manifest.palette ?? []).filter(isButtonEntry),
@@ -119,11 +132,29 @@ export function findVariableReader(blocks: RegisteredBlock[]): { type: string; a
 }
 
 /**
+ * 這個分類**收得起來嗎**（D31 的名單管不管得到它）。
+ *
+ * 抽成一份的理由是它有四個消費者——工具箱、擴充功能面板的卡片牆、分類欄右鍵
+ * 選單、標頭那行計數。曾經有一版讓某些內建也收得起來，而那一版只接了前兩個：
+ * 面板上加得進來、右鍵卻刪不掉。**一條規則的兩半分開走，其中一半會安靜地不
+ * 存在**，而這次那一半是使用者按下右鍵才發現的。判準後來簡化掉了（面板搬進
+ * `extensions/` 之後就是一般積木包），這個名字留著——四個消費者仍然在。
+ */
+export function isRemovable(group: ToolboxGroup): boolean {
+  return !group.builtin;
+}
+
+/**
  * 工具箱上**這一刻該有的**那幾個分類（D31）。
  *
  * 內建的永遠在——它們是這個語言本身，沒有「要不要裝」這個問題。積木包則要
  * 先在擴充功能面板裡加進來：後端 `discover()` 到的每一個包都會被註冊（舊專案
  * 才載得進來，§13.3），但**註冊不等於上架**。
+ *
+ * **例外是宣告了 `optional` 的內建**（`panel`）。`builtin` 一直同時兼著兩件
+ * 事：誰有權宣告內建專用的東西（D22），以及誰的分類永遠在工具箱上。這一格把
+ * 後者分出來——面板是這個語言的一部分（積木包也用得到，走 `ctx.panel()`），
+ * 但一個不畫圖表的人不需要那格分類一直佔著 60px 寬的那一直排。
  *
  * `enabled` 是 `undefined` 時全部都在。那不是「預設全開」的偏好，是**這個函式
  * 的呼叫者還沒有名單**：`registerManifests` 在載入專案之前就先畫一份工具箱，
@@ -134,8 +165,13 @@ export function visibleGroups(
   groups: ToolboxGroup[],
   enabled?: ReadonlySet<string>,
 ): ToolboxGroup[] {
-  if (!enabled) return groups;
-  return groups.filter((group) => group.builtin || enabled.has(group.id));
+  const shown = enabled
+    ? groups.filter((group) => !isRemovable(group) || enabled.has(group.id))
+    : groups;
+  // **收得起來的一律排在最後。** 使用者對這一欄的心智模型是「上面是語言、下面
+  // 是我裝的東西」，而順序來自後端的 manifest 順序——那份順序現在剛好是對的，
+  // 但這條讓它不再是「剛好」。stable partition，兩邊各自的相對順序都不動。
+  return [...shown.filter((g) => !isRemovable(g)), ...shown.filter(isRemovable)];
 }
 
 /**
@@ -160,9 +196,9 @@ export function buildToolbox(
         // `container` 會**取代**掉 Blockly 的預設 class，而不是加上去。Blockly
         // 自己那條「鍵盤導覽時把瀏覽器的預設焦點框關掉」的規則正好掛在
         // `.blocklyToolboxCategoryContainer:focus-visible` 上——只寫
-        // `blocky-category` 等於把那條規則甩掉，症狀是按方向鍵走到哪一格，那格
+        // `blockyard-category` 等於把那條規則甩掉，症狀是按方向鍵走到哪一格，那格
         // 就多一圈藍色的系統焦點框（實測）。**兩個 class 都要留著。**
-        cssConfig: { container: 'blocklyToolboxCategoryContainer blocky-category' },
+        cssConfig: { container: 'blocklyToolboxCategoryContainer blockyard-category' },
         contents: categoryEntries(group, configured),
       }))
       .filter((category) => category.contents.length > 0),
@@ -225,7 +261,7 @@ function categoryEntries(
           // 這一行標題**不是分類標題**。continuous-toolbox 靠「文字比對得到分類
           // 名」認分類邊界，所以 `theme.ts` 用這個 class 把它排除掉——否則一段叫
           // 「運算」的標題會被當成運算分類的起點，捲動定位跟著錯。
-          { kind: 'label', text: entry.section, 'web-class': 'blocky-section-label' },
+          { kind: 'label', text: entry.section, 'web-class': 'blockyard-section-label' },
           { kind: 'sep', gap: LABEL_GAP },
         );
       }
@@ -241,7 +277,7 @@ function categoryEntries(
         // Blockly 把 `web-class` 原封不動放到那個 `<g>` 上（`FlyoutButton` 的
         // `this.cssClass`）。這是**唯一**能對按鈕下樣式的掛勾——它畫的三個 SVG
         // 元素都沒有我們認得的 class。
-        'web-class': 'blocky-flyout-button',
+        'web-class': 'blockyard-flyout-button',
       });
       continue;
     }

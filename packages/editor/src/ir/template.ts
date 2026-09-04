@@ -1,7 +1,7 @@
 /**
  * `${}` 插值的**最小**前端邏輯（§4.7、§8.4）。
  *
- * 這不是 `backend/blocky/ir/template.py` 的完整移植——解析、求值、`refs` 全部
+ * 這不是 `backend/blockyard/ir/template.py` 的完整移植——解析、求值、`refs` 全部
  * 留在後端（存檔時由後端重新產生，見 §4.7「`refs` 不要在前端算」）。這裡只做
  * 存檔前端**必須**自己決定的兩件事：一格文字該存成 `literal` 還是
  * `template`，以及 `template` 的 `whole` 旗標——這兩者決定 IR 的形狀，不能

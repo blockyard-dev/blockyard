@@ -18,8 +18,8 @@ from typing import Any
 
 import pytest
 
-from blocky.errors import ExtensionError
-from blocky.extensions import (
+from blockyard.errors import BlockyardError, ExtensionError
+from blockyard.extensions import (
     DEFAULT_EXTENSIONS_ROOT,
     CallContexts,
     EventSinkChannel,
@@ -28,7 +28,7 @@ from blocky.extensions import (
     SubprocessHost,
     discover,
 )
-from blocky.interpreter.events import EventSink
+from blockyard.interpreter.events import EventSink
 
 # §7.6：一行就跑得起來——這就是那一行。
 HOSTS = ["inprocess", "subprocess"]
@@ -59,13 +59,25 @@ class Harness:
     def logs(self) -> list[str]:
         return [e["text"] for e in self.sink.dicts() if e["op"] == "log"]
 
+    def panels(self) -> list[dict[str, Any]]:
+        return [e for e in self.sink.dicts() if e["op"] == "panel.render"]
+
 
 @pytest.fixture(params=HOSTS)
 async def h(request: pytest.FixtureRequest):
     contexts = CallContexts()
     sink = EventSink()
-    channel = EventSinkChannel(sink, contexts)
     sources = discover(DEFAULT_EXTENSIONS_ROOT)
+    # `open_registry` 會注這個函式進去（見 `registry.py`）。harness 自己建
+    # channel，所以要自己注——不注的話「宣告過的面板」永遠是空的，而題目會以為
+    # 那道檢查在擋，其實是它自己沒接上。
+    channel = EventSinkChannel(
+        sink,
+        contexts,
+        lambda ext_id: tuple(
+            p.id for p in sources[ext_id].manifest.panels
+        ) if ext_id in sources else (),
+    )
 
     if request.param == "inprocess":
         host: ExtensionHost = InProcessHost(sources, channel, contexts)
@@ -249,3 +261,35 @@ async def test_trigger_yields_reach_the_sink(h: Harness) -> None:
         await asyncio.sleep(0)
     await handle.stop()
     assert got == [{"tick": 1}, {"tick": 2}, {"tick": 3}]
+
+
+# --------------------------------------------------------------------------
+# 反向通道：`ctx.send_panel()`（§8.3、§16 Q17 的 B 路線）
+# --------------------------------------------------------------------------
+
+
+async def test_send_panel_原樣送出去(h: Harness) -> None:
+    """`payload` 是積木包自己的協定，host **一個字都不解讀**——它原樣進到那個
+    包自己的 iframe。編輯器不知道什麼是折線圖。
+
+    **兩種 host 都要**：in-process 是直接呼叫，subprocess 是一個 notification
+    走回 parent，而那正是「in-process 時看不見、跨 process 時全部要重寫」的那
+    一類（§7.5）。
+    """
+    await h.call("demo.say_to_panel", text="你好")
+
+    (event,) = [e for e in h.sink.dicts() if e["op"] == "ext.panel"]
+    assert event["extId"] == "demo"
+    assert event["panelId"] == "demo"
+    assert event["payload"] == {"type": "say", "text": "你好"}
+
+
+async def test_送不進沒宣告過的面板(h: Harness) -> None:
+    """收件人由 manifest 決定，不是積木包呼叫時說的——少了這道檢查，一個包可以
+    把訊息送進別人的面板，而使用者看到的是那個包的分頁在動。
+
+    **兩邊各驗一次**：積木包那側讓它拿得到看得懂的錯誤（那條路是
+    fire-and-forget，host 端的錯誤傳不回來），host 那側才是信任邊界。
+    """
+    with pytest.raises(BlockyardError, match="沒有宣告"):
+        await h.call("demo.say_to_panel_undeclared")
