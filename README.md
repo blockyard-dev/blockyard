@@ -1,7 +1,4 @@
 
-
-https://github.com/user-attachments/assets/883b7c1a-4149-4099-a090-560e4eb8531b
-
 <p align="center">
   <img src="./icon.svg" alt="Blockyard logo" width="96" />
 </p>
