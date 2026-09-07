@@ -15,8 +15,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from blockyard.errors import BlockyardError, ExtensionError
 from blockyard.extensions.boundary import ensure_transportable, normalize_dropdown_args
@@ -24,7 +25,6 @@ from blockyard.extensions.httpclient import new_client
 from blockyard.extensions.loading import (
     Exports,
     check_coverage,
-    check_net_permission,
     collect_exports,
     import_extension_module,
     trigger_error_text,
@@ -219,7 +219,6 @@ class Worker:
         )
 
     def _http_for(self, loaded: _Loaded) -> Any:
-        check_net_permission(loaded.source.manifest)
         if loaded.http is None:
             loaded.http = new_client()
         return loaded.http

@@ -29,14 +29,15 @@ import {
   type ShadowKind,
 } from './define';
 import { shadowStateFor } from '../ir/deserialize';
+import { t } from '../i18n';
 
 /** 選單上的字。順序就是選單裡的順序。 */
-const LABELS: Record<ShadowKind, string> = {
-  text: '改成文字',
-  number: '改成數字',
-  boolean: '改成是非',
-  null: '改成空值',
-};
+const labelOf = (kind: ShadowKind): string => ({
+  text: t('blockly.literal.text'),
+  number: t('blockly.literal.number'),
+  boolean: t('blockly.literal.boolean'),
+  null: t('blockly.literal.null'),
+})[kind];
 
 const ORDER: ShadowKind[] = ['text', 'number', 'boolean', 'null'];
 
@@ -140,7 +141,7 @@ export function registerLiteralContextMenu(): void {
         // 目前就是這個型別的話不列——「改成文字」出現在一格文字上只是雜訊。
         return shadowKindOf(clickedShadow.type) === kind ? 'hidden' : 'enabled';
       },
-      displayText: () => LABELS[kind],
+      displayText: () => labelOf(kind),
       callback: () => {
         if (clickedShadow) switchLiteralKind(clickedShadow, kind);
       },

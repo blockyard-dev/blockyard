@@ -1,0 +1,10 @@
+name: Panel
+description: Display data as charts, tables, and stat cards
+blocks:
+  line_chart: {text: "draw line chart %(data) in panel"}
+  add_point: {text: "add point x %(x) y %(y) to chart"}
+  clear: {text: "clear chart"}
+  stat: {text: "show stat %(name) as %(value) in panel"}
+  table: {text: "draw table %(data) in panel"}
+panels:
+  chart: {name: Chart}

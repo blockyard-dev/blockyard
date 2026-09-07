@@ -24,7 +24,7 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     # 積木包自帶的 tests/ 跟 backend 的測試跑在同一個 venv（`testpaths` 含
-    # `../extensions`），而 `extensions/openai/tests/` 是用 InProcessHost 直接
+    # `blockyard/_bundled`），而 `_bundled/openai/tests/` 是用 InProcessHost 直接
     # 呼叫的，所以 `openai` 得裝在這裡。它**不是** runtime 的相依：真的執行時
     # 這個包跑在 `~/.blockyard/venvs/openai` 自己的直譯器下（§7.6）。
     #
@@ -32,7 +32,7 @@ dev = [
     # 包 venv，所以 backend 裝了什麼，每個包都看得到。`openai` 自己宣告了
     # `requirements`，它那支 venv 裡的版本優先，但沒宣告的包會吃到這一份。
     "openai>=3.6,<4",
-    # 同上：`extensions/discord/tests/` 也是用 InProcessHost 直接呼叫的。
+    # 同上：`_bundled/discord/tests/` 也是用 InProcessHost 直接呼叫的。
     # 真的執行時它跑在 `~/.blockyard/venvs/discord` 自己的直譯器下（§7.6）——
     # 這個包更需要那份隔離，因為它帶的是 aiohttp 那一整棵樹。
     "discord.py>=2.3,<3",
@@ -50,12 +50,16 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["blockyard"]
+# 出貨的積木包跟著 wheel 走（`blockyard/extensions/bundled.py`），但它們自帶的
+# tests/ 是這個 repo 的回歸網，不是包的內容。
+exclude = ["blockyard/_bundled/*/tests", "blockyard/_bundled/*/.venv"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-# 積木包自帶 tests/（§7.1、§17.4），而它們住在 backend/ 外面。一句 pytest 要
-# 跑得完全部：包壞掉與 runtime 壞掉是同一個回歸網的兩半。
-testpaths = ["tests", "../extensions"]
+# 官方包自帶 tests/（§7.1、§17.4）。一句 pytest 要跑得完全部：包壞掉與 runtime
+# 壞掉是同一個回歸網的兩半。（`_bundled/` 是出貨來源，不是跑起來讀的那個目錄——
+# 見 `blockyard/extensions/bundled.py`。）
+testpaths = ["tests", "blockyard/_bundled"]
 # 每個積木包自帶的 `tests/test_blocks.py` 基名都一樣，而預設的 prepend import
 # mode 靠「基名唯一」認模組——第二個包一加進來就是 `import file mismatch`。
 # importlib mode 不碰 sys.path，也不需要基名唯一，所以包的目錄結構可以一直長

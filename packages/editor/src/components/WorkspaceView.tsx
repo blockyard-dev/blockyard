@@ -56,6 +56,10 @@ export function WorkspaceView({ toolbox, onReady }: Props) {
    * 是**一條連續的捲動軸**（見 theme.ts），內容在 `init` 時就展開好了，所以
    * 換完要叫它重讀一次——沒有這一句，新的呼叫積木要等使用者點一下別的分類
    * 才會出現。
+   *
+   * **「重畫之後選著的還是同一格」不在這裡**：`render()` 會把每一個分類
+   * dispose 掉重建，所以那件事得由做這件事的人自己收尾
+   * （`theme.ts` 的 `BlockyardToolbox.render`）。
    */
   useEffect(() => {
     const workspace = workspaceRef.current;

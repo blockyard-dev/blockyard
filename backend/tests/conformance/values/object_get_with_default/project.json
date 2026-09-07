@@ -81,10 +81,6 @@
         "key": {
           "kind": "literal",
           "value": "b"
-        },
-        "default": {
-          "kind": "literal",
-          "value": "沒有"
         }
       },
       "fields": {},

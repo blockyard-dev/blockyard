@@ -19,13 +19,14 @@ import { isDefinitionType, paramRefFromType, procIdFromType } from './procedures
 import { paramsOf } from './signature';
 import type { ConversionContext } from '../ir/context';
 import type { Procedure } from '../types/project';
+import { t } from '../i18n';
 
 type BlockState = Blockly.serialization.blocks.State;
 
 /** 孤兒警告的 id。清除一律帶 id——不帶的 `setWarningText(null)` 是拆掉整顆圖示。 */
 export const ORPHAN_WARNING_ID = 'blockyard-orphan';
 
-const ORPHAN_MESSAGE = '這顆積木原本插在被改掉的那一格裡。它沒有被刪除——接到別的地方，或自己刪掉它。';
+const orphanMessage = () => t('blockly.detached');
 
 /** 孤兒被放到原位的右下角，免得整整齊齊疊在一起看不出有幾顆。 */
 const ORPHAN_OFFSET = 28;
@@ -263,7 +264,7 @@ function fillNewInputs(state: BlockState, ctx: ConversionContext): void {
  * 己記帳、自己決定什麼時候清掉。
  */
 export function markOrphan(block: Blockly.BlockSvg): void {
-  block.setWarningText(ORPHAN_MESSAGE, ORPHAN_WARNING_ID);
+  block.setWarningText(orphanMessage(), ORPHAN_WARNING_ID);
 }
 
 /**

@@ -424,6 +424,27 @@
       "title": "ConfigSpec",
       "type": "object"
     },
+    "EditorSpec": {
+      "additionalProperties": false,
+      "description": "受信任的主頁 ES module；API 版本由前端 runtime 檢查。",
+      "properties": {
+        "entry": {
+          "title": "Entry",
+          "type": "string"
+        },
+        "apiVersion": {
+          "minimum": 1,
+          "title": "Apiversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "entry",
+        "apiVersion"
+      ],
+      "title": "EditorSpec",
+      "type": "object"
+    },
     "OptionSpec": {
       "additionalProperties": false,
       "description": "靜態下拉的一個選項（內建積木用）。\n\n積木包的下拉是**動態**的（`source` 指向 `@dropdown` 函式），因為選項來自\n外部服務；內建積木的下拉是**固定**的（`unit` 只有那六個），選項就是宣告的\n一部分，沒有人可以去問。",
@@ -453,7 +474,7 @@
     },
     "PanelSpec": {
       "additionalProperties": false,
-      "description": "積木包在編輯器裡的一格分頁（§8.3、§16 Q17 的 B 路線）。\n\n**分頁是宣告出來的，不是資料生出來的。** 早期版本讓「畫一塊面板」的標題就是\n身分——畫幾塊就有幾格。那條路在標題可以插值的世界裡沒有底：一個\n`在圖表 ${i} 加點` 的迴圈會生出無限多分頁，而補丁（數量上限、被擠掉的計數、\n橫向捲的分頁列）全部是在替一個錯的模型止血。宣告之後分頁數由**裝了幾個包**\n決定，那三個補丁一起消失。\n\n它同時是「面板屬於積木包、不屬於專案」這句話的落點：`project.json` 一個字\n都不記面板，它只記 `extensions`（§13.3，而且是算出來的）。\n\n`entry` 是**必填**：編輯器不畫面板的內容，它只給這格一個 `sandbox` 的\niframe。早期版本讓「不寫 entry」退回一組內建 widget（折線／表格／數值卡），\n而那條路的代價是**每加一種圖表就要改編輯器一次**——一個想畫 three.js 的包\n永遠等不到那一天。現在編輯器不知道什麼是折線圖，那是包的 `ui/` 的事。",
+      "description": "積木包在編輯器裡的一格分頁（§8.3、§16 Q17 的 B 路線）。\n\n**分頁是宣告出來的，不是資料生出來的。** 早期版本讓「畫一塊面板」的標題就是\n身分——畫幾塊就有幾格。那條路在標題可以插值的世界裡沒有底：一個\n`在圖表 ${i} 加點` 的迴圈會生出無限多分頁，而補丁（數量上限、被擠掉的計數、\n橫向捲的分頁列）全部是在替一個錯的模型止血。宣告之後分頁數由**裝了幾個包**\n決定，那三個補丁一起消失。\n\n它同時是「面板屬於積木包、不屬於專案」這句話的落點：`project.json` 一個字\n都不記面板，它只記 `extensions`（§13.3，而且是算出來的）。\n\n`entry` 是**必填**：編輯器不畫面板的內容，它只給這格一個受信任的\niframe。早期版本讓「不寫 entry」退回一組內建 widget（折線／表格／數值卡），\n而那條路的代價是**每加一種圖表就要改編輯器一次**——一個想畫 three.js 的包\n永遠等不到那一天。現在編輯器不知道什麼是折線圖，那是包的 `ui/` 的事。",
       "properties": {
         "id": {
           "title": "Id",
@@ -535,6 +556,18 @@
             }
           ],
           "title": "Section"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
         }
       },
       "required": [
@@ -609,6 +642,11 @@
       "default": null,
       "title": "Description"
     },
+    "defaultLocale": {
+      "default": "zh-TW",
+      "title": "Defaultlocale",
+      "type": "string"
+    },
     "color": {
       "anyOf": [
         {
@@ -633,19 +671,16 @@
       "default": null,
       "title": "Cover"
     },
-    "permissions": {
-      "items": {
-        "enum": [
-          "net",
-          "fs.read",
-          "fs.write",
-          "subprocess",
-          "env"
-        ],
-        "type": "string"
-      },
-      "title": "Permissions",
-      "type": "array"
+    "editor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EditorSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "requirements": {
       "items": {

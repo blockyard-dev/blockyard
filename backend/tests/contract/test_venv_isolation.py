@@ -88,6 +88,34 @@ async def test_declared_requirements_are_installed_in_an_isolated_venv(tmp_path:
     assert probe.returncode != 0
 
 
+async def test_the_pack_venv_finds_blockyard_from_any_directory(tmp_path: Path) -> None:
+    """**子 process 不能靠 cwd 才 import 得到 `blockyard`。**
+
+    這一題是一個真的 bug 的回歸網。接 backend 的那份 `.pth` 本來寫的是一條
+    **路徑**，而路徑只會被加進 `sys.path`——Python 不會去處理那個目錄裡的
+    `.pth` 檔，於是 editable 安裝的 `blockyard`（backend 的 site-packages 裡
+    只有一份指著原始碼目錄的 `_editable_impl_blockyard.pth`）永遠找不到。
+
+    **它以前看起來是好的，靠的是一個巧合**：從 `backend/` 底下啟動時子 process
+    繼承那個 cwd，而 `python -m` 會把 cwd 放進 `sys.path`。pytest 也是從那裡跑
+    的，所以上面那幾題全都綠著——**而使用者從別的目錄啟動後端時，每一個宣告了
+    `requirements` 的積木包都會「子行程啟動失敗」**。
+
+    所以這一題的重點是 `cwd=`：把它指到一個與 repo 無關的地方，那個巧合就沒了。
+    """
+    import subprocess
+
+    _write_extension(tmp_path)
+    interpreter = await venv_mod.ensure_interpreter("needs_deps", [_REQUIREMENT])
+
+    probe = subprocess.run(
+        [str(interpreter), "-c", "import blockyard.extensions.subprocess_worker"],
+        capture_output=True,
+        cwd=tmp_path,
+    )
+    assert probe.returncode == 0, probe.stderr.decode()
+
+
 async def test_second_load_does_not_reinstall_when_requirements_are_unchanged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

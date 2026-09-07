@@ -1,0 +1,25 @@
+name: Discord
+description: Send messages to channels and read channel history
+blocks:
+  send_message:
+    text: "send %(message) to %(channel) in %(server)"
+    args:
+      server: {label: Server}
+      channel: {label: Channel}
+  get_channel_history:
+    text: "get the latest %(limit) messages from %(channel) in %(server)"
+    args:
+      server: {label: Server}
+      channel: {label: Channel}
+      limit: {help: Newest first}
+  on_message:
+    text: "when Discord receives message %(message)"
+    args:
+      message: {label: Message variable}
+buttons:
+  portal: {label: "How to setup bot token"}
+  bot_token: {label: Set Bot Token}
+config:
+  bot_token:
+    label: Bot Token
+    help: "Developer Portal → your app → Bot → Reset Token. It is shown only once"

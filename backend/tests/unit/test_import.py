@@ -22,9 +22,9 @@ from fastapi.testclient import TestClient
 from blockyard.api.app import create_app
 from blockyard.errors import ExtensionError
 from blockyard.extensions import discover, scan
-from blockyard.extensions.codescan import scan_pack
-from blockyard.extensions.install import install, stage
-from blockyard.extensions.manifest import parse_manifest
+from blockyard.extensions import install as install_mod
+from blockyard.extensions.install import install
+from blockyard.extensions.receipt import Origin
 
 MANIFEST = """\
 manifestVersion: 1
@@ -53,6 +53,16 @@ from blockyard import block
 async def hello(ctx, who):
     return f"哈囉，{who}"
 """
+
+
+#: 這些題目問的是解壓那一關，不是來源怎麼記的（那在 `test_receipt.py`）。
+#: 真的那支 `stage()` 要求呼叫者說出 bytes 從哪來——**那是刻意的**，見
+#: `extensions/receipt.py`——所以這裡包一層，把那個答案填成同一個。
+ZIP_ORIGIN = Origin(origin="zip", label="greet.zip")
+
+
+def stage(data: bytes, staging_root: Path, *, token: str) -> install_mod.Staged:
+    return install_mod.stage(data, staging_root, token=token, origin=ZIP_ORIGIN)
 
 
 def make_zip(files: dict[str, str | bytes], *, prefix: str = "") -> bytes:
@@ -150,9 +160,17 @@ def test_a_zip_bomb_is_refused(tmp_path: Path) -> None:
     assert not (tmp_path / TOKEN).exists()
 
 
-def test_not_a_zip(tmp_path: Path) -> None:
-    with pytest.raises(ExtensionError, match="不是一個 .zip"):
+def test_not_an_archive(tmp_path: Path) -> None:
+    """格式靠開頭那幾個位元組認（`_archive`），所以一段文字連「壞掉的 zip」
+    都不是——它是一個我們認不得的東西。"""
+    with pytest.raises(ExtensionError, match="認不得這個檔案"):
         stage("這只是一段文字".encode(), tmp_path, token=TOKEN)
+
+
+def test_a_broken_zip_says_it_is_broken(tmp_path: Path) -> None:
+    """開頭是 `PK` 但後面是垃圾：這一份的確想當一個 zip，只是壞了。"""
+    with pytest.raises(ExtensionError, match="壞了"):
+        stage("PK\x03\x04 然後就沒有然後了".encode(), tmp_path, token=TOKEN)
 
 
 def test_missing_manifest_says_so(tmp_path: Path) -> None:
@@ -228,83 +246,102 @@ def test_one_broken_pack_does_not_take_the_others_with_it(tmp_path: Path) -> Non
     assert "broken" in found.problems[0].message
 
 
-# --------------------------------------------------------------------------
-# 靜態掃描（§12.1）
-# --------------------------------------------------------------------------
+async def test_the_venv_is_built_before_the_pack_moves_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """宣告了 `requirements` 的包**自己會長出一支獨立環境**，而且是**在搬進去
+    之前**（`install.py` 的模組 docstring）。
 
+    `uv pip install` 是這條路上唯一真的會失敗的一步（網路、沒裝 `uv`、版本解不
+    開）。先搬再建的話，失敗留下的是一個裝在那裡、拉出來卻跑不動的包；先建再搬，
+    失敗留下的是什麼都沒有。
 
-def _scan(tmp_path: Path, code: str, *, permissions: str = "[]") -> list:
-    (tmp_path / "main.py").write_text(code, encoding="utf-8")
-    mf = parse_manifest(
-        {
-            "id": "x",
-            "name": "x",
-            "version": "0.1.0",
-            "permissions": [] if permissions == "[]" else eval(permissions),
-            "palette": [],
-        },
-        where="test",
+    這裡把那一步換掉：**真的下載那一段已經有它自己的合約測試**
+    （`tests/contract/test_venv_isolation.py` 真的裝一個套件進去、再證明
+    backend 自己的環境沒有被汙染）。這一題問的是**接線**——它有沒有被叫到、
+    帶著什麼、在哪個時間點。
+    """
+    root = tmp_path / "extensions"
+    root.mkdir()
+    seen: list[tuple[str, list[str], bool]] = []
+
+    async def fake_ensure(ext_id: str, requirements: list[str]) -> Path:
+        # 第三格是重點：這一刻那個目錄**還不該存在**。
+        seen.append((ext_id, requirements, (root / ext_id).exists()))
+        return Path("/nonexistent/python")
+
+    monkeypatch.setattr(install_mod, "ensure_interpreter", fake_ensure)
+
+    manifest = MANIFEST.replace("requirements: []", 'requirements: ["tomli-w>=1.0,<2"]')
+    staged = stage(
+        make_zip({"manifest.yaml": manifest, "main.py": MAIN}), tmp_path / "staging", token=TOKEN
     )
-    return scan_pack(tmp_path, mf)
+    await install(staged, root)
+
+    assert seen == [("greet", ["tomli-w>=1.0,<2"], False)]
+    assert (root / "greet" / "main.py").is_file()
 
 
-def test_scan_points_at_the_line(tmp_path: Path) -> None:
-    findings = _scan(tmp_path, "import os\n\nos.system('rm -rf /')\n")
-    hit = next(f for f in findings if "os.system" in f.message)
-    assert hit.line == 3
-    assert hit.permission == "subprocess"
+@pytest.mark.parametrize("ext_id", ("demo", "discord", "http", "openai", "panel"))
+def test_a_real_pack_survives_the_review_page(ext_id: str, tmp_path: Path) -> None:
+    """**把真的包送進審閱畫面走一遍**（`demo` 與 `panel` 宣告了面板，`openai`
+    宣告了金鑰，`discord` 有 `open_url` 的按鈕）。
+
+    這一題是補回來的：`review()` 那幾行是一串把 manifest 折成畫面資料的
+    comprehension，而每一格都是「那個欄位真的叫這個名字嗎」的一次賭。原本**沒有
+    任何測試餵過一個宣告了面板的包**——測試用的 `greet` 只有一顆積木——所以
+    `p.title`（`PanelSpec` 上沒有這個欄位）活到了使用者按下匯入的那一刻，
+    而症狀是 500。
+
+    直接拿出貨目錄當暫存目錄：`review()` 只需要 `Staged` 的那三格，而它不會
+    寫任何東西。這裡不經過 `stage()` 是刻意的——這一題問的是**折資料那一段**，
+    而解壓那一關已經有它自己的十幾題了。
+    """
+    from blockyard.extensions import BUNDLED_ROOT
+    from blockyard.extensions.receipt import Origin
+    from blockyard.extensions.review import review
+
+    src = install_mod.read_pack(BUNDLED_ROOT / ext_id, expect_id=ext_id)
+    staged = install_mod.Staged(
+        token=TOKEN,
+        dir=src.dir,
+        source=src,
+        origin=Origin(origin="zip", label=f"{ext_id}.zip"),
+    )
+
+    page = review(staged, installed=None)
+
+    assert page["id"] == ext_id
+    # 宣告的那幾段都折得出來，而且用的是 manifest 自己的字彙。
+    assert [p["id"] for p in page["panels"]] == [p.id for p in src.manifest.panels]
+    assert [p["name"] for p in page["panels"]] == [p.name for p in src.manifest.panels]
+    assert [c["key"] for c in page["config"]] == [c.key for c in src.manifest.config]
+    assert len(page["blocks"]) == len(src.manifest.blocks)
+    # `main.py` 一定攤得開——§12.1 那句「不可略過」講的就是它。
+    assert "sources" not in page and "findings" not in page and "permissions" not in page
 
 
-def test_scan_flags_what_the_manifest_did_not_declare(tmp_path: Path) -> None:
-    """§12.1 表格裡的「與宣告不符時警告」。一個包 `import httpx` 卻沒宣告
-    `net`，最無害的解釋是作者忘了寫——而那件事本身就值得使用者知道，因為
-    `permissions` 是他唯一拿到的摘要。"""
-    undeclared = _scan(tmp_path, "import httpx\n")[0]
-    assert undeclared.permission == "net" and not undeclared.declared
+def _bundled_manifest(ext_id: str):  # noqa: ANN202
+    from blockyard.extensions import BUNDLED_ROOT
 
-    declared = _scan(tmp_path, "import httpx\n", permissions="['net']")[0]
-    assert declared.declared
+    return install_mod.read_pack(BUNDLED_ROOT / ext_id, expect_id=ext_id).manifest
 
 
-def test_eval_is_always_worth_saying_and_never_a_mismatch(tmp_path: Path) -> None:
-    """`eval` 不對應任何一項 `permissions`，所以它永遠只是「說一聲」——把它算成
-    「宣告不符」會讓那個標記失去意思（沒有一種宣告能讓它變成相符）。"""
-    hit = _scan(tmp_path, "eval('1+1')\n")[0]
-    assert hit.permission is None and hit.declared
+def test_the_review_page_of_a_pack_with_panels_is_200(client: TestClient) -> None:
+    """同一件事，走完整條 HTTP：**一個宣告了面板的 `.zip` 不該是 500。**"""
+    from blockyard.extensions import BUNDLED_ROOT
 
+    src = BUNDLED_ROOT / "panel"
+    files: dict[str, str | bytes] = {
+        p.relative_to(src).as_posix(): p.read_bytes()
+        for p in src.rglob("*")
+        if p.is_file() and "__pycache__" not in p.parts and "tests" not in p.parts
+    }
+    res = client.post("/api/extensions/import", content=make_zip(files))
 
-def test_the_same_thing_on_one_line_is_said_once(tmp_path: Path) -> None:
-    """`os.environ.get(...)` 同時命中呼叫表與屬性表。重複的條目會讓這份清單
-    看起來比實際嚴重。"""
-    findings = _scan(tmp_path, "import os\nos.environ.get('X')\n")
-    env = [f for f in findings if f.line == 2]
-    assert len(env) == 1
-    assert "os.environ.get()" in env[0].message
-
-
-def test_a_syntax_error_is_a_finding_not_a_crash(tmp_path: Path) -> None:
-    """不說的話，症狀是工具箱裡一顆按了才報「載入 main.py 失敗」的積木——而那要
-    等到使用者真的拖出來按下去才會發生。"""
-    hit = _scan(tmp_path, "def broken(\n")[0]
-    assert "語法" in hit.message
-
-
-#: 隨附的那幾個包。**釘死一份清單，不是掃整個目錄**——使用者裝進來的包也住在
-#: `extensions/` 底下，而檢查別人的包不是這一題的工作（他的包亮紅燈是**對的**，
-#: 那正是審閱畫面要說的話）。這條界線在「擴充功能的家搬出 repo」之後會自己消失。
-OFFICIAL_PACKS = ("demo", "discord", "http", "openai", "panel")
-
-
-def test_the_official_packs_do_not_light_up_undeclared() -> None:
-    """校準用：`http` 真的 `import httpx`，而它宣告了 `net`。這一題紅掉的意思是
-    掃描表變吵了——而一份會對每個正常的包都亮紅燈的清單，使用者三次之後就不看了。"""
-    from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
-
-    found = discover(DEFAULT_EXTENSIONS_ROOT)
-    for ext_id in OFFICIAL_PACKS:
-        src = found[ext_id]
-        bad = [f for f in scan_pack(src.dir, src.manifest) if not f.declared]
-        assert bad == [], f"{src.id}：{[f.message for f in bad]}"
+    assert res.status_code == 200, res.text
+    panels = res.json()["panels"]
+    assert [p["name"] for p in panels] == [p.name for p in _bundled_manifest("panel").panels]
 
 
 # --------------------------------------------------------------------------
@@ -334,8 +371,8 @@ def test_the_whole_path(client: TestClient, tmp_path: Path) -> None:
     assert body["id"] == "greet" and body["version"] == "0.1.0"
     assert body["blocks"] == [{"opcode": "greet.hello", "text": "對 %(who) 說哈囉"}]
     assert body["installed"] is None
-    main = next(s for s in body["sources"] if s["path"] == "main.py")
-    assert main["text"] == MAIN, "原始碼要完整，不是摘要（§12.1「不可略過」）"
+    assert "sources" not in body
+    assert body["origin"]["origin"] == "zip"
 
     # 還沒裝。
     assert client.get("/api/extensions").status_code == 200
@@ -377,17 +414,19 @@ def test_an_empty_body_is_400(client: TestClient) -> None:
 
 
 def test_an_already_installed_id_is_said_before_reading_the_code(client: TestClient) -> None:
-    """使用者讀完幾百行原始碼再被拒絕，那幾分鐘是白花的——所以「已經裝過了」
-    在審閱那一步就說。"""
+    """使用者讀完幾百行原始碼才知道自己按下去會發生什麼，那幾分鐘是白花的
+    ——所以「這是一次更新」在審閱那一步就說，連差集一起（§4）。
+
+    更新本身在 `test_lifecycle.py`；這裡只確認那句話有說出口。"""
     first = client.post("/api/extensions/import", content=good_zip()).json()
     client.post(f"/api/extensions/import/{first['token']}")
 
     again = client.post("/api/extensions/import", content=good_zip()).json()
-    assert again["installed"] == {"version": "0.1.0"}
-    # 而且真的裝不進去。
-    res = client.post(f"/api/extensions/import/{again['token']}")
-    assert res.status_code == 422
-    assert "已經裝過" in res.json()["detail"]["message"]
+    assert again["installed"]["version"] == "0.1.0"
+    # 同一份 `.zip` 裝第二次：差集是空的，而空的差集也是一份差集——前端要靠它
+    # 說「這一版跟你手上那一版一模一樣」。
+    assert again["installed"]["diff"]["gone"] == []
+    assert again["installed"]["diff"]["changed"] == []
 
 
 def test_an_unknown_token_is_404(client: TestClient) -> None:

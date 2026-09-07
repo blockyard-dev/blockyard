@@ -5,6 +5,7 @@
  * 的名字。
  */
 import * as Blockly from 'blockly/core';
+import * as en from 'blockly/msg/en';
 import * as zhHant from 'blockly/msg/zh-hant';
 import {
   buildDefinitions,
@@ -19,12 +20,41 @@ import {
   type ToolboxGroup,
 } from './toolbox';
 import { isCallType } from './procedures';
+import { markRedefined } from './redefined';
 import './fields/FieldText';
 // 匯入即註冊 §16 Q16 的字面值型別切換選單。
 import './literals';
 import type { Manifest } from '../types/manifest';
+import type { Locale } from '../i18n';
 
-let localeReady = false;
+let localeReady: Locale | null = null;
+
+/**
+ * Blockly 的三角 warning icon 回報 17×17；改成 8px 紅點後若不一起改這個
+ * 尺寸，排版器仍會在左右各留 4.5px，看起來就像紅點自帶一大圈 padding。
+ *
+ * 紅點自己不再留內間距；它與下一個欄位的間隔由下面的 renderer spacing 單獨決定。
+ * 圖案幾何在 `index.css` 用同一個尺寸畫。
+ */
+export const WARNING_DOT_BOX_SIZE = 8;
+Blockly.icons.WarningIcon.prototype.getSize = () =>
+  new Blockly.utils.Size(WARNING_DOT_BOX_SIZE, WARNING_DOT_BOX_SIZE);
+
+/**
+ * Zelos 預設會在每個 row element 之間加 `MEDIUM_PADDING` (8px)。這才是紅點
+ * 右邊那大塊空白的來源，不是 SVG 本身的 padding。只收紅點與後面內容的
+ * 這一格；其他 icon、field 與 input 之間的全局間距維持 Blockly 預設。
+ */
+export const WARNING_DOT_GAP = 4;
+const zelosInfo = Blockly.zelos.RenderInfo.prototype;
+const defaultZelosInRowSpacing = zelosInfo.getInRowSpacing_;
+zelosInfo.getInRowSpacing_ = function (prev, next) {
+  const icon = prev && 'icon' in prev
+    ? (prev as Blockly.blockRendering.Icon).icon
+    : null;
+  if (next && icon instanceof Blockly.icons.WarningIcon) return WARNING_DOT_GAP;
+  return defaultZelosInRowSpacing.call(this, prev, next);
+};
 
 export interface Registration {
   blocks: RegisteredBlock[];
@@ -90,21 +120,26 @@ export function changedManifestIds(
 export function registerManifests(
   manifests: Manifest[],
   previous?: readonly Manifest[],
+  locale: Locale = 'zh-TW',
 ): Registration {
-  if (!localeReady) {
-    Blockly.setLocale(zhHant as unknown as Record<string, string>);
-    localeReady = true;
+  if (localeReady !== locale) {
+    Blockly.setLocale((locale === 'en' ? en : zhHant) as unknown as Record<string, string>);
+    localeReady = locale;
   }
 
   defineShadowBlocks();
 
   const changed = previous ? changedManifestIds(previous, manifests) : null;
-  const blocks = manifests.flatMap((manifest) =>
+  const blocks = manifests.flatMap((manifest) => {
     // 沒變的那些走純函數版本：拿得到一樣的 `blocks`，但不碰全域註冊表。
-    changed === null || changed.has(manifest.id)
-      ? defineManifest(manifest)
-      : buildDefinitions(manifest).blocks,
-  );
-  const groups = groupByManifest(blocks);
+    if (changed !== null && !changed.has(manifest.id)) return buildDefinitions(manifest).blocks;
+    const defined = defineManifest(manifest);
+    // **換過定義的 type 要留名**（`redefined.ts`）：flyout 會依 type 回收上一批
+    // 積木，而那假設同一個 type 永遠長同一個樣子。`changed === null` 是開場
+    // 那一次，不算——那時候沒有任何東西畫出來過。
+    if (changed !== null) markRedefined(defined.map((b) => b.type));
+    return defined;
+  });
+  const groups = groupByManifest(blocks, manifests);
   return { blocks, groups, toolbox: buildToolbox(groups) };
 }

@@ -1,0 +1,9 @@
+name: Functions
+description: Custom functions that can return values
+blocks:
+  definition: {text: "define function"}
+  call: {text: "call function"}
+  param: {text: "parameter"}
+  return: {text: "return %(value)"}
+buttons:
+  create: {label: Make a block}

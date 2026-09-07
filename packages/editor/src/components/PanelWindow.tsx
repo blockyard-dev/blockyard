@@ -1,20 +1,8 @@
-/**
- * 彈出視窗（§8.3）。同源的 about:blank + `createPortal`。
- *
- * **為什麼是按鈕開，不是積木開。** `window.open` 需要使用者手勢，而那個授權會
- * 過期（transient activation，Chrome 大約 5 秒）。按下執行是一個點擊沒錯，但一顆
- * 畫圖積木跑到第 30 秒才執行時授權早就用掉了——視窗會被擋掉，**而且是靜默
- * 的**。所以積木只說「想畫到哪」（`target`），開窗是這顆按鈕的事；視窗沒開時
- * `target: window` 的面板退回右側，不報錯。
- *
- * **同源同 realm 是它便宜的原因**：zustand 的 store 直接讀得到，不必為這扇窗
- * 另開一條資料通道。而同源同 realm 也正是它**絕對不能拿來跑積木包程式碼**的
- * 原因——這裡畫的永遠是編輯器自己的 React，積木包送進來的是資料（`ctx.panel()`
- * 走 `panels.py` 的封頂字彙表），不是 UI。
- */
+/** 同源彈出視窗；可容納編輯器與受信任插件的面板。 */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { readPref, writePref } from '../prefs';
+import { t } from '../i18n';
 
 const SIZE_PREF = 'panelWindowSize';
 const DEFAULT_SIZE = { w: 900, h: 640 };
@@ -41,7 +29,7 @@ export function PanelWindow({ onClose, children }: PanelWindowProps) {
       return;
     }
 
-    win.document.title = '面板 — Blockyard Workflow';
+    win.document.title = t('panel.windowTitle');
     // 樣式不會跟著 portal 走：新 document 的 head 是空的。dev 是 Vite 注入的
     // `<style>`、build 是 `<link>`，所以兩種都抄。抄的是節點的複本，原本那些
     // 留在主視窗上。

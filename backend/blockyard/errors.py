@@ -21,13 +21,19 @@ class BlockyardError(Exception):
         message: str,
         *,
         block_id: str | None = None,
+        params: dict[str, Any] | None = None,
         hint: str | None = None,
+        hint_code: str | None = None,
+        hint_params: dict[str, Any] | None = None,
         action: dict[str, Any] | None = None,
     ):
         super().__init__(message)
         self.message = message
         self.block_id = block_id
+        self.params = params or {}
         self.hint = hint
+        self.hint_code = hint_code or (f"{self.code}.hint" if hint is not None else None)
+        self.hint_params = hint_params or {}
         # 前端可以**點下去**的補救動作（§6.1）。`hint` 是給人讀的一句話，這個
         # 是給 UI 讀的一個結構——「還沒設定金鑰」那句話的正確結局是一顆把你送
         # 到設定畫面、而且欄位已經填好的按鈕，不是要使用者自己去記變數名。
@@ -41,12 +47,16 @@ class BlockyardError(Exception):
         d: dict[str, Any] = {
             "type": type(self).__name__,
             "code": self.code,
+            "params": self.params,
             "message": self.message,
         }
         if self.block_id is not None:
             d["blockId"] = self.block_id
         if self.hint is not None:
             d["hint"] = self.hint
+        if self.hint_code is not None:
+            d["hintCode"] = self.hint_code
+            d["hintParams"] = self.hint_params
         if self.action is not None:
             d["action"] = self.action
         return d
@@ -64,7 +74,10 @@ class BlockyardError(Exception):
         return target(
             d.get("message", ""),
             block_id=d.get("blockId"),
+            params=d.get("params"),
             hint=d.get("hint"),
+            hint_code=d.get("hintCode"),
+            hint_params=d.get("hintParams"),
             action=d.get("action"),
         )
 
@@ -201,11 +214,20 @@ class ValidationError(Exception):
     不是 BlockyardError——它根本不該進到執行期。
     """
 
-    def __init__(self, message: str, *, block_id: str | None = None, path: str | None = None):
+    def __init__(self, message: str, *, block_id: str | None = None, path: str | None = None,
+                 code: str = "validation.invalid", params: dict[str, Any] | None = None):
         super().__init__(message)
         self.message = message
         self.block_id = block_id
         self.path = path
+        self.code = code
+        self.params = params or {}
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"code": self.code, "params": self.params, "message": self.message}
+        if self.block_id is not None: out["blockId"] = self.block_id
+        if self.path is not None: out["path"] = self.path
+        return out
 
     def __str__(self) -> str:
         loc = self.block_id or self.path

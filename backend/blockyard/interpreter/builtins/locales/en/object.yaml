@@ -1,0 +1,11 @@
+name: Objects
+description: Object properties and JSON
+blocks:
+  get: {text: "%(key) of %(object)"}
+  set: {text: "set %(key) of %(object) to %(value)"}
+  delete: {text: "delete %(key) of %(object)"}
+  has: {text: "%(object) has %(key)"}
+  keys: {text: "all keys of %(object)"}
+  values: {text: "all values of %(object)"}
+  parse_json: {text: "parse JSON %(text)"}
+  to_json: {text: "convert %(value) to JSON %(pretty)", args: {pretty: {label: Indent}}}

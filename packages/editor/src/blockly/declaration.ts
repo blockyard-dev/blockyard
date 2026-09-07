@@ -20,6 +20,7 @@ import { FIELD_TEXT_TYPE } from './fields/FieldText';
 import { callShape, PROCEDURE_COLOUR } from './procedures';
 import { isParam, type Draft, type Segment } from '../procedures/draft';
 import type { ArgSpec, BlockSpec, Manifest } from '../types/manifest';
+import { t } from '../i18n';
 
 /** 一段 = 一個欄位或一個孔。名字用**段的位置**，不是參數 id：標籤沒有 id。 */
 export const SEGMENT_PREFIX = 's';
@@ -83,7 +84,7 @@ export interface BuiltDeclaration {
 export function buildDeclaration(draft: Draft): BuiltDeclaration {
   const manifest: Manifest = {
     id: 'procedure',
-    name: '函式',
+    name: t('blockly.functionCategory'),
     version: '1.0.0',
     color: PROCEDURE_COLOUR,
   };

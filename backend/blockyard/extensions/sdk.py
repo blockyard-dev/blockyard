@@ -177,6 +177,7 @@ class Ctx:
         what = spec.get("label") or key
         raise MissingSecretError(
             f"還沒設定「{spec['extName']}」的{what}",
+            params={"extId": spec["extId"], "extName": spec["extName"], "key": key, "label": what},
             action=self._configure_action(spec),
         )
 
@@ -198,7 +199,12 @@ class Ctx:
         from e`——原始例外要留在 `__cause__` 裡，那是 traceback 唯一說得出
         「SDK 到底丟了什麼」的地方。
         """
-        return InvalidSecretError(message, action=self._configure_action(self._secret_spec(key)))
+        spec = self._secret_spec(key)
+        return InvalidSecretError(
+            message,
+            params={"extId": spec["extId"], "extName": spec["extName"], "key": key},
+            action=self._configure_action(spec),
+        )
 
     def _secret_spec(self, key: str) -> dict[str, Any]:
         spec = self._secrets.get(key)
@@ -224,7 +230,7 @@ class Ctx:
         """共用的 httpx client（§7.4、`httpclient.py`）。
 
         每個包一份、由 host 建立與關閉——積木包不必也不該自己管它的生命週期。
-        沒宣告 `permissions: [net]` 的包在這裡就被擋下來。
+        所有插件都能使用；不需要權限宣告。
         """
         if self._http is None:
             raise ExtensionError("這個 host 沒有提供 ctx.http")

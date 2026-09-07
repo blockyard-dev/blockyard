@@ -1,5 +1,5 @@
 /**
- * 「金鑰」全域入口（D28、§12.1）。
+ * 「金鑰」入口（D28、§12.1）。**每一把都屬於現在打開的那個專案**（§16 Q23）。
  *
  * **一把一把地管**：每一列是一把金鑰，右邊是它的狀態（末四碼或「未設定」）與
  * 一顆動作按鈕。新增／更換走同一個小對話框，`.env` 匯入退到最下面收起來——
@@ -40,9 +40,19 @@ import {
   type KeyEntry,
 } from '../api/client';
 import { focusableIn, modalKeyAction, nextFocusIndex } from './modalKeys';
+import { ModalActions } from './ModalActions';
 import { configuredIds, useKeysUi, type KeysTarget } from './keysStore';
+import { currentLocale, list, number, t } from '../i18n';
+import { localizeManifest, type TranslatableManifest } from '../i18n/manifest';
+import type { Manifest } from '../types/manifest';
 
-export function KeysEntry() {
+export function KeysEntry({
+  projectName,
+  manifests = [],
+}: {
+  projectName?: string;
+  manifests?: readonly Manifest[];
+}) {
   const open = useKeysUi((s) => s.open);
   const target = useKeysUi((s) => s.target);
   const openKeys = useKeysUi((s) => s.openKeys);
@@ -55,12 +65,17 @@ export function KeysEntry() {
         type="button"
         className="button button-icon"
         onClick={() => openKeys()}
-        aria-label="金鑰"
-        title="金鑰"
+        aria-label={t('keys.label')}
+        title={t('keys.label')}
       >
         <KeyRound size={15} strokeWidth={2.5} />
       </button>
-      {open && <KeysModal target={target} onClose={closeKeys} />}
+      {open && <KeysModal
+        target={target}
+        projectName={projectName}
+        manifests={manifests}
+        onClose={closeKeys}
+      />}
     </>
   );
 }
@@ -73,7 +88,18 @@ type LoadState =
 /** 正在編輯哪一把（新增或更換都是這個）。`null` 代表回到清單。 */
 type Editing = { entry: KeyEntry; locked: boolean } | null;
 
-function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: () => void }) {
+function KeysModal({
+  target,
+  projectName,
+  manifests,
+  onClose,
+}: {
+  target: KeysTarget | null;
+  /** 這幾把是誰的。載入中／出錯時給不出名字，那時候寫的是「這個專案」。 */
+  projectName?: string;
+  manifests: readonly Manifest[];
+  onClose: () => void;
+}) {
   const setConfigured = useKeysUi((s) => s.setConfigured);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -86,7 +112,7 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
 
   const load = useCallback(async () => {
     try {
-      const keys = await fetchKeys();
+      const keys = localizeKeys(await fetchKeys(), manifests);
       setState({ status: 'ready', keys });
       // **面板是唯一會改動金鑰的地方**，所以每一次重讀都順手把名單公布出去
       // ——工具箱那顆「設定 Bot Token」就是靠它決定自己還要不要在（D25、
@@ -98,7 +124,7 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
       setState({ status: 'error', message: e instanceof Error ? e.message : String(e) });
       return null;
     }
-  }, [setConfigured]);
+  }, [manifests, setConfigured]);
 
   useEffect(() => {
     void load();
@@ -220,7 +246,7 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
         className="modal"
         role="dialog"
         aria-modal="true"
-        aria-label="金鑰"
+        aria-label={t('keys.label')}
         ref={dialogRef}
         tabIndex={-1}
       >
@@ -228,8 +254,15 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
           {/* 沒有右上角那顆叉。這個面板的底下就有一顆「關閉」（`.modal-foot`），
               而同一個對話框裡放兩個出口，只會讓使用者在按之前先想一秒哪一顆才
               是對的。Esc 也還在（見上面那段 `modalKeyAction`）。 */}
-          <h2>{editing ? (editing.entry.configured ? '更換金鑰' : '新增金鑰') : '金鑰'}</h2>
+          <h2>{editing ? (editing.entry.configured ? t('keys.change') : t('keys.add')) : t('keys.label')}</h2>
         </header>
+
+        {/* **這幾把是誰的**（§16 Q23）。少了這一行，在 A 專案填過 token 的人
+            打開 B 專案會看到一整排「未設定」，而畫面上沒有任何東西說得出為
+            什麼——那正是這個專案最不想要的那種症狀。 */}
+        <p className="modal-hint keys-scope">
+          {t('keys.scope', { project: projectName ?? t('keys.thisProject') })}
+        </p>
 
         {editing ? (
           <KeyForm
@@ -242,14 +275,17 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
           />
         ) : (
           <div className="keys-body">
-            {state.status === 'loading' && <p className="modal-hint">載入中…</p>}
-            {state.status === 'error' && <p className="modal-hint">出錯了：{state.message}</p>}
+            {state.status === 'loading' && <p className="modal-hint">{t('common.loading')}</p>}
+            {state.status === 'error' && <p className="modal-hint">{t('keys.loadError', { message: state.message })}</p>}
 
             {state.status === 'ready' && (
               <>
                 <div className="keys-toolbar">
                   <span className="keys-count">
-                    {keys.filter((k) => k.configured).length} / {keys.length} 已設定
+                    {t('keys.configuredSummary', {
+                      configured: number(keys.filter((k) => k.configured).length),
+                      total: number(keys.length),
+                    })}
                   </span>
                   <button
                     type="button"
@@ -260,12 +296,12 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
                       if (first) setEditing({ entry: first, locked: false });
                     }}
                   >
-                    <Plus size={14} strokeWidth={2.5} /> 新增金鑰
+                    <Plus size={14} strokeWidth={2.5} /> {t('keys.add')}
                   </button>
                 </div>
 
                 {keys.length === 0 ? (
-                  <p className="keys-empty">目前沒有積木包宣告需要金鑰的設定項。</p>
+                  <p className="keys-empty">{t('keys.empty')}</p>
                 ) : (
                   <ul className="keys-list">
                     {keys.map((k) => (
@@ -277,7 +313,7 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
                           {k.envVar && <code className="keys-env">{k.envVar}</code>}
                         </div>
                         <span className={`keys-state${k.configured ? ' keys-state-on' : ''}`}>
-                          {k.configured ? (k.suffix ? `…${k.suffix}` : '已設定') : '未設定'}
+                          {k.configured ? (k.suffix ? `…${k.suffix}` : t('keys.configured')) : t('keys.notConfigured')}
                         </span>
                         <div className="keys-row-actions">
                           {k.configured && <CopyKeyButton entry={k} disabled={busy} />}
@@ -285,8 +321,12 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
                             type="button"
                             className="keys-icon-button"
                             disabled={busy}
-                            title={k.configured ? '更換' : '設定'}
-                            aria-label={`${k.configured ? '更換' : '設定'} ${k.extName} 的 ${k.label ?? k.key}`}
+                            title={k.configured ? t('keys.replace') : t('keys.configure')}
+                            aria-label={t('keys.editAria', {
+                              action: k.configured ? t('keys.replace') : t('keys.configure'),
+                              extension: k.extName,
+                              key: k.label ?? k.key,
+                            })}
                             onClick={() => setEditing({ entry: k, locked: false })}
                           >
                             {k.configured ? <RotateCw size={14} /> : <Plus size={14} />}
@@ -296,8 +336,8 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
                               type="button"
                               className="keys-icon-button keys-icon-danger"
                               disabled={busy}
-                              title="刪除"
-                              aria-label={`刪除 ${k.extName} 的 ${k.label ?? k.key}`}
+                              title={t('keys.delete')}
+                              aria-label={t('keys.deleteAria', { extension: k.extName, key: k.label ?? k.key })}
                               onClick={() => void remove(k)}
                             >
                               <Trash2 size={14} />
@@ -316,7 +356,7 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
                   aria-expanded={envOpen}
                   onClick={() => setEnvOpen((v) => !v)}
                 >
-                  <span className="section-caret">{envOpen ? '▾' : '▸'}</span> 從 .env 一次匯入
+                  <span className="section-caret">{envOpen ? '▾' : '▸'}</span> {t('keys.importEnv')}
                 </button>
                 {envOpen && (
                   <>
@@ -333,24 +373,25 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
                       onClick={() => void submitImport()}
                       disabled={importing || !envText.trim()}
                     >
-                      {importing ? '匯入中…' : '匯入'}
+                      {importing ? t('keys.importing') : t('keys.import')}
                     </button>
                     {importResult && (
                       <div className="keys-import-result">
                         {importResult.written.length > 0 && (
                           <p>
-                            寫入了 {importResult.written.length} 項：
-                            {importResult.written.map((w) => w.envVar).join('、')}
+                            {t('keys.importWritten', {
+                              count: number(importResult.written.length),
+                              names: list(importResult.written.map((w) => w.envVar)),
+                            })}
                           </p>
                         )}
                         {importResult.unmatched.length > 0 && (
                           <p>
-                            這幾行沒有被吃到（沒有積木包宣告過這個變數名）：
-                            {importResult.unmatched.join('、')}
+                            {t('keys.importUnmatched', { names: list(importResult.unmatched) })}
                           </p>
                         )}
                         {importResult.written.length === 0 &&
-                          importResult.unmatched.length === 0 && <p>沒有讀到任何一行。</p>}
+                          importResult.unmatched.length === 0 && <p>{t('keys.importEmpty')}</p>}
                       </div>
                     )}
                   </>
@@ -363,7 +404,7 @@ function KeysModal({ target, onClose }: { target: KeysTarget | null; onClose: ()
         {!editing && (
           <footer className="modal-foot">
             <button type="button" className="button" onClick={onClose}>
-              關閉
+              {t('common.close')}
             </button>
           </footer>
         )}
@@ -435,8 +476,8 @@ function CopyKeyButton({ entry, disabled }: { entry: KeyEntry; disabled: boolean
       type="button"
       className={`keys-icon-button${state === 'failed' ? ' keys-icon-failed' : ''}`}
       disabled={disabled}
-      title={state === 'failed' ? '複製失敗，這個瀏覽器擋住了剪貼簿' : '複製金鑰'}
-      aria-label={`複製 ${entry.extName} 的 ${entry.label ?? entry.key}`}
+      title={state === 'failed' ? t('keys.copyFailed') : t('keys.copy')}
+      aria-label={t('keys.copyAria', { extension: entry.extName, key: entry.label ?? entry.key })}
       onClick={() => void copy()}
     >
       {/* 失敗要看得見。`failed` 畫成跟 `idle` 一樣的複製圖示，症狀就是「按了
@@ -499,7 +540,7 @@ function KeyForm({
   return (
     <div className="keys-body">
       <label className="keys-field">
-        <span className="keys-field-label">金鑰</span>
+        <span className="keys-field-label">{t('keys.fieldKey')}</span>
         {locked || candidates.length <= 1 ? (
           <div className="keys-locked">
             <span className="keys-label">
@@ -519,8 +560,8 @@ function KeyForm({
             {candidates.map((k) => (
               <option key={`${k.extId}.${k.key}`} value={`${k.extId}.${k.key}`}>
                 {k.extName} · {k.label ?? k.key}
-                {k.envVar ? `（${k.envVar}）` : ''}
-                {k.configured ? ' — 已設定' : ''}
+                {k.envVar ? t('keys.optionEnv', { envVar: k.envVar }) : ''}
+                {k.configured ? t('keys.optionConfigured') : ''}
               </option>
             ))}
           </select>
@@ -528,7 +569,7 @@ function KeyForm({
       </label>
 
       <label className="keys-field">
-        <span className="keys-field-label">值</span>
+        <span className="keys-field-label">{t('keys.fieldValue')}</span>
         <div className="keys-input-wrap">
           <input
             ref={valueRef}
@@ -550,7 +591,7 @@ function KeyForm({
             spellCheck={false}
             autoCorrect="off"
             autoCapitalize="off"
-            placeholder={entry.envVar === 'OPENAI_API_KEY' ? 'sk-…' : '貼上金鑰'}
+            placeholder={entry.envVar === 'OPENAI_API_KEY' ? 'sk-…' : t('keys.paste')}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
@@ -568,9 +609,9 @@ function KeyForm({
             type="button"
             className="keys-reveal"
             onClick={() => setReveal((v) => !v)}
-            aria-label={reveal ? '隱藏金鑰' : '顯示金鑰'}
+            aria-label={reveal ? t('keys.hideKey') : t('keys.showKey')}
             aria-pressed={reveal}
-            title={reveal ? '隱藏' : '顯示'}
+            title={reveal ? t('keys.hide') : t('keys.show')}
           >
             {reveal ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
@@ -578,23 +619,18 @@ function KeyForm({
       </label>
 
       <p className="modal-hint keys-field-hint">
-        存進這台電腦的鑰匙圈，不會寫進專案檔，所以分享專案不會把它一起送出去。
-        {entry.configured && ' 存檔後會蓋掉現在那一把。'}
+        {t('keys.storageHint')}
+        {entry.configured && t('keys.overwriteHint')}
       </p>
 
-      <footer className="modal-foot">
-        <button type="button" className="button" onClick={onCancel} disabled={busy}>
-          取消
-        </button>
-        <button
-          type="button"
-          className="button button-primary"
-          onClick={submit}
-          disabled={busy || !value.trim()}
-        >
-          {busy ? '儲存中…' : '儲存'}
-        </button>
-      </footer>
+      <ModalActions
+        confirmLabel={t('keys.save')}
+        busyLabel={t('keys.saving')}
+        busy={busy}
+        disabled={!value.trim()}
+        onConfirm={submit}
+        onCancel={onCancel}
+      />
     </div>
   );
 }
@@ -605,4 +641,22 @@ function moveFocus(root: HTMLElement | null, backwards: boolean): void {
   const current = items.findIndex((el) => el === document.activeElement);
   const next = items[nextFocusIndex(items.length, current, backwards)];
   next?.focus();
+}
+
+function localizeKeys(entries: KeyEntry[], manifests: readonly Manifest[]): KeyEntry[] {
+  const localized = new Map(manifests.map((manifest) => {
+    const view = localizeManifest(
+      manifest,
+      (manifest as TranslatableManifest).locales,
+      currentLocale(),
+    );
+    return [view.id, view] as const;
+  }));
+  return entries.map((entry) => {
+    const manifest = localized.get(entry.extId);
+    const config = manifest?.config?.find((item) => item.key === entry.key);
+    return manifest
+      ? { ...entry, extName: manifest.name, label: config?.label ?? entry.label }
+      : entry;
+  });
 }

@@ -1,4 +1,4 @@
-"""D28：右上角的「金鑰」全域入口（§12.1）。
+"""D28：右上角那個「金鑰」入口（§12.1）。**每一把都屬於某一個專案**（§16 Q23）。
 
 一把一把地管：**清單**（已設定／未設定，附末四碼）、**逐筆寫入與刪除**、
 以及仍然留著的**匯入 `.env`**（一次貼一整份還是最快的路）。
@@ -19,6 +19,12 @@
 （早期的 D28 也寫「沒有單筆刪除／編輯」。那是在只能整份貼 `.env` 的前提下
 成立的：整份匯入的介面裡單筆刪除確實沒有位置。有了逐筆新增之後，「拿掉
 一把」就是同一件事的另一半。）
+
+**每一條路都要 `?project=`**（§16 Q23、`docs/project-storage-design.md` §6）。
+一把金鑰屬於一個專案裡的一個積木包，所以「哪一把」這個問題在沒有專案的情況下
+答不完整——兩個專案各接一個 Discord bot 時，少了那一格就是後填的蓋掉先填的。
+缺參數是 400 而不是「就用預設那個專案」：後者會**寫進一個使用者沒有打開的
+專案**，而那是一句沒有人看得懂的「我明明填過了」。
 """
 
 from __future__ import annotations
@@ -29,8 +35,24 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from blockyard.extensions import discover, secret_store
 from blockyard.interpreter import declarations
+from blockyard.storage import PROJECT_ID
 
 router = APIRouter(prefix="/api/keys", tags=["keys"])
+
+
+def _project(request: Request) -> str:
+    """這一次要動的是哪個專案的鑰匙圈。**沒帶就 400**（見模組 docstring）。
+
+    形狀也驗：這個字串會被接成 keyring 的 username，而
+    `secret_store.owner_of()` 靠「專案 id 不含 `:`」來保證那一行只有一種拆法。
+    """
+    raw = request.query_params.get("project") or ""
+    if not PROJECT_ID.match(raw):
+        raise HTTPException(
+            status_code=400,
+            detail="金鑰屬於某一個專案，所以這個請求要帶 ?project=<專案 id>",
+        )
+    return raw
 
 
 def _manifests(request: Request) -> dict[str, Any]:
@@ -39,6 +61,10 @@ def _manifests(request: Request) -> dict[str, Any]:
     root = request.app.state.extensions_root
     manifests.update({ext_id: src.manifest for ext_id, src in discover(root).items()})
     return manifests
+
+
+def _owner(request: Request, ext_id: str) -> str:
+    return secret_store.owner_of(_project(request), ext_id)
 
 
 def _secret_spec(request: Request, ext_id: str, key: str) -> Any:
@@ -58,7 +84,8 @@ def _secret_spec(request: Request, ext_id: str, key: str) -> Any:
 
 @router.get("")
 async def list_keys(request: Request) -> list[dict[str, Any]]:
-    """所有已載入積木包宣告過的 `secret` 設定項。"""
+    """這個專案裡，所有已載入積木包宣告過的 `secret` 設定項。"""
+    project_id = _project(request)
     manifests = _manifests(request)
 
     out: list[dict[str, Any]] = []
@@ -73,8 +100,12 @@ async def list_keys(request: Request) -> list[dict[str, Any]]:
                     "key": spec.key,
                     "label": spec.label,
                     "envVar": spec.envVar,
-                    "configured": secret_store.is_configured(ext_id, spec.key),
-                    "suffix": secret_store.suffix(ext_id, spec.key),
+                    "configured": secret_store.is_configured(
+                        secret_store.owner_of(project_id, ext_id), spec.key
+                    ),
+                    "suffix": secret_store.suffix(
+                        secret_store.owner_of(project_id, ext_id), spec.key
+                    ),
                 }
             )
     return out
@@ -88,6 +119,7 @@ async def import_env(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     略過），且只回變數名稱，不回值——「不顯示明文」這條線在匯入回饋裡
     也要守住。
     """
+    project_id = _project(request)
     text = body.get("text")
     if not isinstance(text, str):
         return {"written": [], "unmatched": []}
@@ -108,7 +140,7 @@ async def import_env(request: Request, body: dict[str, Any]) -> dict[str, Any]:
             unmatched.append(env_var)
             continue
         ext_id, key = target
-        secret_store.set(ext_id, key, value)
+        secret_store.set(secret_store.owner_of(project_id, ext_id), key, value)
         written.append({"extId": ext_id, "key": key, "envVar": env_var})
 
     return {"written": written, "unmatched": unmatched}
@@ -124,9 +156,10 @@ async def set_key(request: Request, ext_id: str, key: str, body: dict[str, Any])
     if not isinstance(value, str) or not value.strip():
         raise HTTPException(status_code=400, detail="金鑰不能是空的")
 
-    secret_store.set(ext_id, key, value.strip())
+    owner = _owner(request, ext_id)
+    secret_store.set(owner, key, value.strip())
     return {"extId": ext_id, "key": key, "configured": True,
-            "suffix": secret_store.suffix(ext_id, key)}
+            "suffix": secret_store.suffix(owner, key)}
 
 
 @router.get("/{ext_id}/{key}/reveal")
@@ -141,7 +174,7 @@ async def reveal_key(request: Request, ext_id: str, key: str, response: Response
     快取裡。
     """
     _secret_spec(request, ext_id, key)
-    value = secret_store.get(ext_id, key)
+    value = secret_store.get(_owner(request, ext_id), key)
     if not value:
         raise HTTPException(status_code=404, detail="這一把還沒有設定")
     response.headers["Cache-Control"] = "no-store"
@@ -153,7 +186,7 @@ async def delete_key(request: Request, ext_id: str, key: str) -> dict[str, Any]:
     """拿掉一把。本來就沒有也回 200——這個端點描述的是「結束狀態」，而使用者
     連按兩下刪除不該看到一則錯誤。"""
     _secret_spec(request, ext_id, key)
-    removed = secret_store.delete(ext_id, key)
+    removed = secret_store.delete(_owner(request, ext_id), key)
     return {"extId": ext_id, "key": key, "configured": False, "removed": removed}
 
 

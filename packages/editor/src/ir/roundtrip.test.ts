@@ -2,7 +2,7 @@
  * `deserialize(serialize(ws))` 等價（§8.4、PROGRESS.md 第 4 步）。
  *
  * 測資是現成的：§17 題庫那 63 份 `project.json`，一份都不必另寫。讀的是
- * **後端真正在用的** `builtins/*.yaml` 與 `extensions/demo/manifest.yaml`
+ * **後端真正在用的** `builtins/*.yaml` 與 `_bundled/demo/manifest.yaml`
  * ——複製出來的一份會在漂移的那天繼續綠著，這與 `define.test.ts` 是同一個
  * 理由。
  *
@@ -27,6 +27,7 @@ import { serializeWorkspace } from './serialize';
 import { hasInterpolation, isWholeTemplate } from './template';
 import type { Manifest } from '../types/manifest';
 import type { Block as IRBlock, BlockyardProjectIR as ProjectIR } from '../types/project';
+import { localizeManifest } from '../i18n/manifest';
 
 const BUILTINS = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -34,7 +35,7 @@ const BUILTINS = resolve(
 );
 const DEMO_MANIFEST = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../extensions/demo/manifest.yaml',
+  '../../../../backend/blockyard/_bundled/demo/manifest.yaml',
 );
 const CORPUS = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -47,6 +48,16 @@ function loadManifests(): Manifest[] {
     .map((f) => parse(readFileSync(join(BUILTINS, f), 'utf8')) as Manifest);
   const demo = parse(readFileSync(DEMO_MANIFEST, 'utf8')) as Manifest;
   return [...builtins, demo];
+}
+
+function loadEnglishManifests(): Manifest[] {
+  return loadManifests().map((manifest) => {
+    const localePath = manifest.id === 'demo'
+      ? resolve(dirname(DEMO_MANIFEST), 'locales/en.yaml')
+      : resolve(BUILTINS, 'locales/en', `${manifest.id}.yaml`);
+    const locale = parse(readFileSync(localePath, 'utf8')) as Record<string, unknown>;
+    return localizeManifest(manifest, { en: locale }, 'en');
+  });
 }
 
 function findFixtures(dir: string): string[] {
@@ -218,6 +229,31 @@ describe('IR → Blockly → IR 等價（63 份題庫）', () => {
       workspace.dispose();
     }
   });
+});
+
+it.each([
+  ['zh-TW', loadManifests()],
+  ['en', loadEnglishManifests()],
+] as const)('%s 顯示文案不改變 IR round-trip', (_locale, manifests) => {
+  const path = fixtures.find((fixture) => fixture.includes('values/approx_equality_coerces'))!;
+  const project = JSON.parse(readFileSync(path, 'utf8')) as ProjectIR;
+  const registration = registerManifests(manifests);
+  const ctx = buildContext([
+    ...registration.blocks,
+    ...registerProcedures(project.procedures ?? {}),
+  ]);
+  const workspace = new Blockly.Workspace();
+  try {
+    loadProject(project, workspace, ctx);
+    const result = serializeWorkspace(workspace, ctx, {
+      formatVersion: project.formatVersion,
+      meta: project.meta,
+      procedures: project.procedures,
+    });
+    expect(canonicalize(result, ctx)).toEqual(canonicalize(project, ctx));
+  } finally {
+    workspace.dispose();
+  }
 });
 
 /**

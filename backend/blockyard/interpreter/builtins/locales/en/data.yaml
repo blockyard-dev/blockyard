@@ -1,0 +1,22 @@
+name: Data
+description: Variables, list operations, and values persisted across runs
+blocks:
+  set: {text: "set %(name) to %(value)"}
+  set_local: {text: "set local %(name) to %(value)", args: {name: {label: Variable name}}}
+  change: {text: "change %(name) by %(value)"}
+  get: {text: "get %(name)"}
+  new_list: {text: "empty list"}
+  new_object: {text: "empty object"}
+  list_add: {text: "add %(item) to %(name)"}
+  list_delete: {text: "delete item %(index) of %(name)"}
+  list_clear: {text: "clear %(name)"}
+  list_insert: {text: "insert %(item) at %(index) of %(name)"}
+  list_replace: {text: "replace item %(index) of %(name) with %(item)"}
+  list_item: {text: "item %(index) of %(name)"}
+  list_length: {text: "length of %(name)"}
+  list_contains: {text: "%(name) contains %(item)"}
+  list_index_of: {text: "position of %(item) in %(name)"}
+  persist_set: {text: "remember %(name) as %(value)"}
+  persist_get: {text: "remembered %(name) (default %(default))"}
+  persist_has: {text: "is %(name) remembered?"}
+  persist_delete: {text: "forget %(name)"}

@@ -8,6 +8,9 @@
  * `force` 繞過。
  */
 
+import { projectQuery } from '../../project/current';
+import { t } from '../../i18n';
+
 export interface DropdownOption {
   label: string;
   value: string;
@@ -72,15 +75,19 @@ export async function fetchDropdownOptions(
 
   let res: Response;
   try {
+    // **下拉要拿得到金鑰，而金鑰屬於某一個專案**（§16 Q23）：`discord.channels`
+    // 得先用這個專案的 bot token 連上去才問得出頻道。少了這一段，換到第二個
+    // 專案之後下拉會空的——而空白不會告訴任何人原因。
     res = await fetch(
-      `/api/extensions/${encodeURIComponent(extId)}/dropdown/${encodeURIComponent(source)}`,
+      `/api/extensions/${encodeURIComponent(extId)}/dropdown/${encodeURIComponent(source)}` +
+        `?${projectQuery()}`,
       { method: 'POST', ...body },
     );
   } catch (e) {
     // `fetch` 自己 reject 的那一句是 `Failed to fetch`——它會被原樣顯示在選單
     // 裡（見 `FieldDynamicDropdown` 的 notice），而那句話對使用者不說明任何
     // 事情。原始例外留在 `cause` 裡給 console。
-    throw new Error('連不上後端，讀不到選項', { cause: e });
+    throw new Error(t('blockly.optionsBackendUnavailable'), { cause: e });
   }
   if (!res.ok) throw new Error(await failureReason(res));
   const raw = (await res.json()) as DropdownOption[];
@@ -110,5 +117,5 @@ async function failureReason(res: Response): Promise<string> {
   } catch {
     // 落到下面那一句。
   }
-  return `讀不到選項（HTTP ${res.status}）`;
+  return t('blockly.optionsHttp', { status: String(res.status) });
 }

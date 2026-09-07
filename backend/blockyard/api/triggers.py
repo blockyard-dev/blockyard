@@ -68,7 +68,9 @@ async def activate(request: Request, body: ActivateRequest = Body(...)) -> dict[
     except ProjectNotFound:
         raise HTTPException(
             status_code=404,
-            detail={"message": f"找不到專案 {body.projectId}", "hint": "先存檔再啟用"},
+            detail={"code": "project.not_found", "params": {"projectId": body.projectId},
+                    "message": f"找不到專案 {body.projectId}",
+                    "hintCode": "project.save_before_listen", "hintParams": {}, "hint": "先存檔再啟用"},
         ) from None
     except ValidationError as e:
         raise invalid_ir(e) from None

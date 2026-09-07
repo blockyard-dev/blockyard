@@ -1,0 +1,17 @@
+name: Types
+description: Value type checks and conversions
+blocks:
+  cast:
+    text: "convert %(value) to %(type)"
+    args: {type: {options: {number: Number, string: Text, boolean: Boolean}}}
+  try_cast:
+    text: "convert %(value) to %(type), or use %(default)"
+    args: {type: {options: {number: Number, string: Text, boolean: Boolean}}}
+  is:
+    text: "type of %(value) is %(type)"
+    args: {type: {options: {number: Number, string: Text, boolean: Boolean, list: List, object: Object, 'null': "Null"}}}
+  can_cast:
+    text: "%(value) can convert to %(type)"
+    args: {type: {options: {number: Number, string: Text, boolean: Boolean}}}
+  of: {text: "type of %(value)"}
+  is_empty: {text: "%(value) is empty"}

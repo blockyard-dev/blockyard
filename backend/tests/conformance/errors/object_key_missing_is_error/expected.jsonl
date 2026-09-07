@@ -9,6 +9,8 @@
 {"op": "block.enter", "threadId": "t1", "blockId": "blk_5"}
 {"op": "block.enter", "threadId": "t1", "blockId": "blk_6"}
 {"op": "block.exit", "threadId": "t1", "blockId": "blk_6", "value": {"a": 1}}
-{"op": "block.error", "threadId": "t1", "blockId": "blk_5", "error": {"type": "KeyMissingError", "code": "key", "message": "物件沒有 \"b\" 這個欄位", "blockId": "blk_5", "hint": "你是不是要 \"a\"？"}}
-{"op": "thread.end", "threadId": "t1", "status": "error"}
-{"op": "run.end", "runId": "r1", "status": "error"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_5", "value": ""}
+{"op": "log", "threadId": "t1", "level": "info", "text": "", "blockId": "blk_4"}
+{"op": "block.exit", "threadId": "t1", "blockId": "blk_4"}
+{"op": "thread.end", "threadId": "t1", "status": "ok"}
+{"op": "run.end", "runId": "r1", "status": "ok"}

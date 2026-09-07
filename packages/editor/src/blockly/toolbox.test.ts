@@ -216,6 +216,16 @@ describe('`open_config` 的按鈕設定完就收起來', () => {
 });
 
 describe('分段與間隔（§8.1）', () => {
+  it('等於與近似是兩顆積木，不等於與不近似仍共用一顆下拉', () => {
+    const contents = category(buildProjectToolbox(registration, []), '運算').contents;
+    const byType = (type: string) => contents.find((entry) => entry.type === type);
+
+    expect(byType('operator.eq')).not.toHaveProperty('fields.op');
+    expect(byType('operator.approx')).toBeDefined();
+    expect(byType('operator.approx')).not.toHaveProperty('fields.op');
+    expect(byType('operator.neq')).toMatchObject({ fields: { op: 'exact' } });
+  });
+
   it('每顆積木都帶同一個間隔', () => {
     const toolbox = buildProjectToolbox(registration, []);
     const blocks = category(toolbox, '資料').contents.filter((c) => c.kind === 'block');

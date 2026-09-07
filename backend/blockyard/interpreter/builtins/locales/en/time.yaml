@@ -1,0 +1,18 @@
+name: Time
+description: Current time, parsing, formatting, and arithmetic
+blocks:
+  now: {text: "current time %(timezone)", args: {timezone: {help: "Leave empty for the project timezone, such as Asia/Taipei"}}}
+  timestamp: {text: "millisecond timestamp of %(time)"}
+  parse: {text: "parse time %(text) %(timezone)", args: {text: {help: "ISO 8601, such as 2026-08-27T09:00:00"}}}
+  format:
+    text: "format %(time) as %(format)"
+    args: {format: {options: {date: "Date (YYYY-MM-DD)", datetime: "Date and time (YYYY-MM-DD HH:mm:ss)", time: "Time (HH:mm:ss)", iso: ISO 8601}}}
+  add:
+    text: "add %(amount) %(unit) to %(time)"
+    args: {unit: {options: {millisecond: Milliseconds, second: Seconds, minute: Minutes, hour: Hours, day: Days, week: Weeks}}}
+  diff:
+    text: "difference between %(a) and %(b) in %(unit)"
+    args: {unit: {options: {millisecond: Milliseconds, second: Seconds, minute: Minutes, hour: Hours, day: Days, week: Weeks}}}
+  part:
+    text: "%(part) of %(time)"
+    args: {part: {options: {year: Year, month: Month, day: Day, hour: Hour, minute: Minute, second: Second, weekday: "Weekday (1=Monday)", week: Week number, yearday: Day of year}}}

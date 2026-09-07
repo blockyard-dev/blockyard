@@ -19,6 +19,7 @@ import type {
   RunFrame,
   RunSummary,
 } from '../api/runs';
+import { translatedErrorParts } from '../api/client';
 
 /** §8.3 的積木狀態。同一顆積木同時只會是其中一種。 */
 export type BlockPhase = 'running' | 'hot' | 'done' | 'error';
@@ -255,7 +256,7 @@ export const useRunStore = create<RunState>((set, get) => ({
             );
             break;
           case 'block.error':
-            message = event.error.message;
+            message = translatedErrorParts(event.error).message;
             if (event.blockId) {
               blocks.set(
                 event.blockId,
@@ -264,7 +265,7 @@ export const useRunStore = create<RunState>((set, get) => ({
             }
             logs = append(logs, {
               level: 'error',
-              text: event.error.message,
+              text: translatedErrorParts(event.error).message,
               blockId: event.blockId,
               action: event.error.action,
             });

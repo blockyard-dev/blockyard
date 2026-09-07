@@ -160,25 +160,13 @@ case(
 
 case(
     "errors/object_key_missing_is_error",
-    "object key 不存在是錯誤，不是 null",
+    "object key 不存在時回傳空白字串",
     "§4.3 索引規則",
     one(
         blk("data.set", fields={"name": "o"}, value=blk("object.parse_json", text='{"a":1}')),
         log(blk("object.get", object=var("o"), key="b")),
     ),
-    {"status": "error", "error": {"code": "key", "message_contains": "沒有 \"b\" 這個欄位"}},
-    tags=["object"],
-)
-
-case(
-    "values/object_get_with_default",
-    "object.get 接了預設值孔就不報錯",
-    "§4.3 索引規則",
-    one(
-        blk("data.set", fields={"name": "o"}, value=blk("object.parse_json", text='{"a":1}')),
-        log(blk("object.get", object=var("o"), key="b", default="沒有")),
-    ),
-    {"status": "ok", "logs": ["沒有"]},
+    {"status": "ok", "logs": [""]},
     tags=["object"],
 )
 
@@ -1324,7 +1312,7 @@ case(
 )
 
 def approx(a, b):
-    return blk("operator.eq", fields={"op": "approx"}, a=a, b=b)
+    return blk("operator.approx", a=a, b=b)
 
 
 case(

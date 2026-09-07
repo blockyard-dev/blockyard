@@ -1,0 +1,67 @@
+# HTTP 積木包（§7.1、P1 第 1 步）。
+#
+# 三個手寫包裡它排第一，因為它是**唯一一個不需要外部帳號、也不需要 SDK 依賴**
+# 的：沒有 token 要管、requirements 是空的，所以這一步錯的一定是「manifest →
+# 積木 → 執行」這條路本身，不會是別的東西。網路那一半在測試裡由本地假伺服器
+# 扮演（`tests/test_blocks.py`），不打真的 API。
+#
+# `requirements` 是空的但用得到 httpx：client 由 host 提供（`ctx.http`，§7.4）。
+# 積木包自己裝一份 httpx 等於每個包各有一組連線池與各自答錯一次的逾時預設值。
+manifestVersion: 1
+id: http
+name: HTTP
+version: 0.1.0
+author: blockyard
+description: 發 HTTP 請求、讀回應。回應是一個物件，用 ${r.body.…} 取值
+color: "#2F855A"
+# 擴充功能面板那張卡上 16:9 的一格。包目錄內的相對路徑，沒宣告就畫名字的第一
+# 個字（編輯器那條 fallback 本來就在，載不出來也會退回去）。
+cover: preview.png
+
+requirements: []
+
+palette:
+  # 最短的一顆：一個網址就能按下去跑（§5.1 的「點一下就跑」）。
+  - opcode: get
+    type: reporter
+    returns: object
+    text: "GET %(url)"
+    args:
+      url: { type: string, default: "https://httpbin.org/json" }
+
+  - opcode: post
+    type: reporter
+    returns: object
+    text: "POST %(url) 內容 %(body)"
+    args:
+      url: { type: string, default: "https://httpbin.org/post" }
+      body: { type: json, default: "{}" }
+
+  - section: true
+
+  # 說明文件就放在完整版那顆積木前面：要決定 method、要看懂 `${r.status}` 的
+  # 那一刻就在這裡，而不是在分類的最上面。
+  - button: status_codes
+    label: "方法與狀態碼說明"
+    action: open_url
+    url: "https://developer.mozilla.org/zh-TW/docs/Web/HTTP/Status"
+
+  # 完整版。method 是 dropdown 而不是 string：選項是封閉的一組，而積木包的
+  # 下拉一律動態（D22——靜態 options 只有內建能宣告），所以它指向 @dropdown。
+  - opcode: request
+    type: reporter
+    returns: object
+    text: "%(method) %(url) 標頭 %(headers) 內容 %(body)"
+    args:
+      method: { type: dropdown, source: methods, default: "GET" }
+      url: { type: string, default: "https://httpbin.org/json" }
+      headers: { type: json, default: "{}" }
+      body: { type: json, default: "{}", help: "GET 與 HEAD 不送內容" }
+
+  - section: 工具
+  - opcode: url_encode
+    type: reporter
+    returns: string
+    text: "把 %(text) 編成網址片段"
+    args:
+      text: { type: string, default: "你好 世界" }

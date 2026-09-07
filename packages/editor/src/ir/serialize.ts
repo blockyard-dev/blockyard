@@ -45,6 +45,7 @@ import type {
   StackInput,
   TemplateInput,
 } from '../types/project';
+import { t } from '../i18n';
 
 type BlockState = Blockly.serialization.blocks.State;
 type IRInput = LiteralInput | TemplateInput | BlockInput | StackInput;
@@ -180,7 +181,7 @@ export function serializeBlock(block: Blockly.Block, ctx: ConversionContext): Sc
     addNextBlocks: true,
     doFullSerialization: true,
   });
-  if (!state?.id) throw new Error(`積木（type=${block.type}）存不出來`);
+  if (!state?.id) throw new Error(t('error.irSerializeFailed', { type: block.type }));
 
   const blocks: Record<string, IRBlock> = {};
   flattenBlock(state, null, blocks, ctx, block.workspace);
@@ -261,7 +262,7 @@ function flattenBlock(
   workspace: Blockly.Workspace,
 ): void {
   const id = state.id;
-  if (!id) throw new Error(`Blockly 積木（type=${state.type}）缺少 id`);
+  if (!id) throw new Error(t('error.irMissingId', { type: state.type ?? 'unknown' }));
 
   // 函式的三種積木把 id 嵌在 Blockly 的 type 字串裡（`procedures.ts`），IR 的
   // opcode 則是不帶 id 的那一個——反查表就是這三行。

@@ -94,14 +94,12 @@ palette:
 
   # ---- 比較（§4.4.1）。eq / neq 不做型別轉換；大小比較先照 `mode` 統一型別。----
   #
-  # `op` 與 `mode` 是下拉而不是新積木（D24、D27）：`=` 與 `≈` 問的是同一個問題，
-  # 差別只在「要不要先把兩邊整理成同一種東西」。做成兩顆積木的話，工具箱裡會有
-  # 四顆長得幾乎一樣的比較積木，而使用者要先看懂四個符號才選得下去。
+  # `=` 與 `≈` 是兩顆獨立積木；`≠` 與 `≉` 仍共用下拉。大小比較的 `mode`
+  # 也維持下拉（D27）。
   #
-  # 欄位值是 `exact` / `approx`、`number` / `text` 而不是符號本身：符號會隨介面
-  # 語言變（§16 Q5 的 i18n 要換的正是 label），opcode 與欄位值不會（§13.1）。
-  # 這兩格都是**選填**的（省略即 `exact` 與 `number`）。那不是舊專案的相容層——
-  # 現在一份既有專案都沒有——而是 D5：IR 要手寫得出來、AI 生成得出來。
+  # `neq.op` 與大小比較的 `mode` 使用 `exact` / `approx`、`number` / `text`，而不是
+  # 符號本身：符號會隨介面語言變（§16 Q5），opcode 與欄位值不會（§13.1）。
+  # 這兩格都是選填的（省略即 `exact` 與 `number`），讓 IR 可手寫、AI 可生成（D5）。
   #
   # 大小比較的兩個孔**維持 `type: string`**（D27）：那句話說的是「這個孔用文字框
   # 編輯」，不是「這裡只能是字串」（§16 Q16）。它換到的是 `${金額} > 100` 一路
@@ -110,16 +108,16 @@ palette:
   - section: true
   - opcode: eq
     type: boolean
-    text: "%(a) %(op) %(b)"
+    text: "%(a) = %(b)"
     args:
       a: { type: string, default: "" }
-      op:
-        type: dropdown
-        field: true
-        default: exact
-        options:
-          - { value: exact, label: "=" }
-          - { value: approx, label: "≈" }
+      b: { type: string, default: "" }
+
+  - opcode: approx
+    type: boolean
+    text: "%(a) ≈ %(b)"
+    args:
+      a: { type: string, default: "" }
       b: { type: string, default: "" }
 
   - opcode: neq

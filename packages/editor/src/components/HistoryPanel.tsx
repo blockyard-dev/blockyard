@@ -27,6 +27,8 @@ import {
   type StoredEvent,
 } from '../api/runs';
 import { focusableIn, modalKeyAction, nextFocusIndex } from './modalKeys';
+import { date, number, t } from '../i18n';
+import { translatedErrorParts, type ApiErrorDetail } from '../api/client';
 
 /** 一次抓幾筆執行。200 是後端每個專案的保留上限（§6.3），所以這是「全部」。 */
 const RUN_LIMIT = 200;
@@ -34,15 +36,15 @@ const RUN_LIMIT = 200;
 /** 一次抓幾筆事件。夠一次執行的骨架加上幾百行 log。 */
 const EVENT_PAGE = 500;
 
-const STATUS_TEXT: Record<string, string> = {
-  running: '執行中',
-  ok: '完成',
-  error: '出錯',
-  cancelled: '已停止',
+const statusText = (status: string): string => ({
+  running: t('history.status.running'),
+  ok: t('history.status.ok'),
+  error: t('history.status.error'),
+  cancelled: t('history.status.cancelled'),
   // §6.3：後端被砍掉時還在跑的那些。**不是 `cancelled`**——那是有人做過的
   // 決定，這個是沒有人知道它跑到哪裡。
-  interrupted: '中斷',
-};
+  interrupted: t('history.status.interrupted'),
+}[status] ?? status);
 
 export function HistoryPanel({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -94,26 +96,26 @@ export function HistoryPanel({ projectId, onClose }: { projectId: string; onClos
         className="modal"
         role="dialog"
         aria-modal="true"
-        aria-label="執行紀錄"
+        aria-label={t('history.title')}
         ref={dialogRef}
         onKeyDown={onKeyDown}
       >
         <header className="modal-head">
           <h2>
             <History size={16} strokeWidth={2.5} />
-            {selected ? `執行紀錄 · ${selected.runId}` : '執行紀錄'}
+            {selected ? t('history.detailTitle', { id: selected.runId }) : t('history.title')}
           </h2>
           {!selected && (
             <button
               type="button"
               className="button"
               onClick={() => void load()}
-              aria-label="重新整理"
+              aria-label={t('common.refresh')}
             >
-              <RotateCw size={13} strokeWidth={2.5} /> 重新整理
+              <RotateCw size={13} strokeWidth={2.5} /> {t('common.refresh')}
             </button>
           )}
-          <button type="button" className="modal-close" onClick={onClose} aria-label="關閉">
+          <button type="button" className="modal-close" onClick={onClose} aria-label={t('common.close')}>
             <X size={16} />
           </button>
         </header>
@@ -127,12 +129,12 @@ export function HistoryPanel({ projectId, onClose }: { projectId: string; onClos
         {selected ? (
           <RunDetail run={selected} onBack={() => setSelected(null)} />
         ) : runs === null ? (
-          <p className="modal-hint">讀取中⋯</p>
+          <p className="modal-hint">{t('common.loading')}</p>
         ) : runs.length === 0 ? (
           <p className="modal-hint">
             {error
-              ? '讀不到執行紀錄。'
-              : '這個專案還沒有跑過。按「執行」，或讓它的事件積木被觸發一次。'}
+              ? t('history.loadFailed')
+              : t('history.empty')}
           </p>
         ) : (
           <ul className="history-list">
@@ -145,8 +147,8 @@ export function HistoryPanel({ projectId, onClose }: { projectId: string; onClos
                   <span
                     className={`history-status history-status-${run.status}`}
                     role="img"
-                    aria-label={STATUS_TEXT[run.status] ?? run.status}
-                    title={STATUS_TEXT[run.status] ?? run.status}
+                    aria-label={statusText(run.status)}
+                    title={statusText(run.status)}
                   />
                   <span className="history-main">
                     <span className="history-trigger">{triggerLabel(run)}</span>
@@ -157,8 +159,8 @@ export function HistoryPanel({ projectId, onClose }: { projectId: string; onClos
                   </span>
                   {run.logsTruncated && (
                     // §6.3：丟掉可以，靜靜地丟掉不行。
-                    <span className="history-truncated" title="log 超過上限，最舊的被丟掉了">
-                      log 不完整
+                    <span className="history-truncated" title={t('history.logsTruncated')}>
+                      {t('history.logsIncomplete')}
                     </span>
                   )}
                 </button>
@@ -202,7 +204,7 @@ function RunDetail({ run, onBack }: { run: RunSummary; onBack: () => void }) {
     <>
       <div className="history-detail-head">
         <button type="button" className="button" onClick={onBack}>
-          ← 回清單
+          {t('history.back')}
         </button>
         <span className="history-time">
           {triggerLabel(run)} · {formatTime(run.startedAt)}
@@ -216,9 +218,9 @@ function RunDetail({ run, onBack }: { run: RunSummary; onBack: () => void }) {
       )}
 
       {events === null ? (
-        <p className="modal-hint">讀取中⋯</p>
+        <p className="modal-hint">{t('common.loading')}</p>
       ) : events.length === 0 ? (
-        <p className="modal-hint">{error ? '讀不到這次的事件。' : '這次執行沒有輸出。'}</p>
+        <p className="modal-hint">{error ? t('history.eventsFailed') : t('history.noOutput')}</p>
       ) : (
         <ol className="history-events">
           {events.map((e) => (
@@ -233,14 +235,11 @@ function RunDetail({ run, onBack }: { run: RunSummary; onBack: () => void }) {
           className="button history-more"
           onClick={() => void loadFrom(more)}
         >
-          載入更多
+          {t('history.more')}
         </button>
       )}
 
-      <p className="modal-hint">
-        歷史只留骨架、輸出與錯誤（§6.3）。逐顆積木的進出是除錯用的即時訊號，
-        <strong>不落地</strong>——那要在執行時看右側面板。
-      </p>
+      <p className="modal-hint">{t('history.retentionNote')}</p>
     </>
   );
 }
@@ -250,18 +249,18 @@ function EventRow({ event }: { event: StoredEvent }) {
     const level = String(event.level ?? 'info');
     return (
       <li className={`history-event history-log-${level}`}>
-        <span className="history-event-op">輸出</span>
+        <span className="history-event-op">{t('common.output')}</span>
         <span className="history-event-body">{String(event.text ?? '')}</span>
       </li>
     );
   }
   if (event.op === 'block.error') {
-    const err = (event.error ?? {}) as { message?: string; hint?: string };
+    const err = translatedErrorParts((event.error ?? {}) as ApiErrorDetail);
     return (
       <li className="history-event history-event-error">
-        <span className="history-event-op">錯誤</span>
+        <span className="history-event-op">{t('common.error')}</span>
         <span className="history-event-body">
-          {err.message ?? '（沒有訊息）'}
+          {err.message}
           {err.hint && <span className="history-event-hint">{err.hint}</span>}
         </span>
       </li>
@@ -273,7 +272,7 @@ function EventRow({ event }: { event: StoredEvent }) {
     <li className="history-event history-event-frame">
       <span className="history-event-op">{event.op}</span>
       {typeof event.status === 'string' && (
-        <span className="history-event-body">{STATUS_TEXT[event.status] ?? event.status}</span>
+        <span className="history-event-body">{statusText(event.status)}</span>
       )}
     </li>
   );
@@ -281,21 +280,25 @@ function EventRow({ event }: { event: StoredEvent }) {
 
 /** 綠旗是 `event.when_flag_clicked`、點一下就跑是 `manual`，其餘是 hat 的 opcode。 */
 function triggerLabel(run: RunSummary): string {
-  if (run.trigger === 'manual') return run.blockId ? '點了一顆積木' : '手動';
-  if (run.trigger === 'event.when_flag_clicked') return '執行';
-  if (run.trigger === 'event.when_cron') return '排程';
+  if (run.trigger === 'manual') return run.blockId ? t('history.trigger.block') : t('history.trigger.manual');
+  if (run.trigger === 'event.when_flag_clicked') return t('history.trigger.run');
+  if (run.trigger === 'event.when_cron') return t('history.trigger.schedule');
   if (run.trigger === 'event.when_webhook') return 'Webhook';
   return run.trigger;
 }
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? iso : date(d, { dateStyle: 'short', timeStyle: 'medium' });
 }
 
 function duration(run: RunSummary): string {
   if (!run.endedAt) return '';
   const ms = new Date(run.endedAt).getTime() - new Date(run.startedAt).getTime();
   if (!Number.isFinite(ms) || ms < 0) return '';
-  return ms < 1000 ? `${ms} 毫秒` : `${(ms / 1000).toFixed(1)} 秒`;
+  return ms < 1000
+    ? t('history.milliseconds', { value: number(ms) })
+    : t('history.seconds', {
+        value: number(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+      });
 }

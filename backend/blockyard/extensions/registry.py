@@ -12,8 +12,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from blockyard.errors import ExtensionError
 from blockyard.extensions.host import (
@@ -53,6 +54,8 @@ class ExtensionRegistry:
     # ---- 載入 ----
 
     async def load(self, ext_id: str) -> None:
+        if not self.sources[ext_id].has_python:
+            return
         await self.host.load(ext_id)
         self._loaded.add(ext_id)
 

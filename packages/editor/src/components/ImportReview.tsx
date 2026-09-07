@@ -1,35 +1,15 @@
-/**
- * 安裝前的審閱畫面（§12.1、P3 第 2 步）。
- *
- * §12.1 的第一列寫的是「安裝前完整顯示原始碼，**不可略過**」，而這一頁就是那
- * 句話。它的形狀由那句話決定：
- *
- * **原始碼不是一個要點開的區塊，它是這一頁的主體。** 摺疊起來、給一顆「檢視
- * 程式碼」的按鈕也說得通，而那正是「可略過」——一個沒有人按的按鈕與沒有那份
- * 程式碼是一樣的。所以右邊那一整欄從一開始就是 `main.py`，而左邊是檔案清單。
- *
- * **安裝那顆按鈕在最上面，不在原始碼捲完之後。** 相反的做法（要捲到底才按得到）
- * 是一種假的儀式：它換來的不是「使用者讀完了」，是「使用者學會了怎麼快速捲到
- * 底」，而且它讓一個已經看過這個包三次的人每次都要再捲一遍。
- *
- * **摘要在按鈕旁邊，程式碼在下面。** 使用者讀得懂的是「這個包會連上網路、會多
- * 出 3 顆積木」，讀不懂的是 200 行 Python——所以宣告那幾列排在前面，而靜態掃描
- * （`codescan.py`）的作用是把那 200 行裡值得看的幾行**指出來**，不是替他讀。
- *
- * 這一頁是**擴充功能面板的另一個狀態**，不是另一條路：按下取消回到那一頁，而
- * 搜尋框裡的字還在——使用者看完一個包之後的下一個動作多半是「那我裝別的」。
- */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, FileCode, Loader2, ShieldCheck } from 'lucide-react';
-import type { ImportReview as Review } from '../api/client';
+/** 安裝摘要：来源、功能、依賴，以及更新對畫布的影響。 */
+import { useEffect, useMemo, useRef } from 'react';
+import { AlertTriangle, ArrowLeft, Loader2, RotateCw } from 'lucide-react';
+import type { ExtensionDiff, ImportReview as Review } from '../api/client';
+import type { UpdateVerdict } from './importRules';
 import {
-  formatSize,
-  looseFindings,
-  mismatchedFindings,
-  permissionRows,
+  changeWords,
   summarize,
+  updateVerdict,
 } from './importRules';
 import { focusableIn, modalKeyAction, nextFocusIndex } from './modalKeys';
+import { number, t } from '../i18n';
 
 export interface ImportReviewProps {
   review: Review;
@@ -37,34 +17,67 @@ export interface ImportReviewProps {
   busy: boolean;
   /** 安裝失敗那一句。 */
   error: string | null;
+  /** 「這幾種積木，畫布上各有幾顆」（§4 的差集要它，`App` 才數得出來）。 */
+  countOpcodes(opcodes: string[]): Record<string, number>;
+  /** 「滑到那幾顆去」。被擋下來的更新要一樣可解（§4）。 */
+  onGlideTo(opcode: string): void;
   onInstall(): void;
   onCancel(): void;
+  /**
+   * 「第 2 個，共 3 個」——**一份專案帶了好幾個包**的時候（
+   * `docs/project-storage-design.md` §7）。一個包一頁的規則沒有變，多的只是
+   * 一句「還有幾個」：少了它，使用者不知道自己按下「下一個」之後會走到哪裡。
+   */
+  progress?: { at: number; total: number } | null;
+  /** 安裝那顆按鈕上的字。多包那條路上它是「安裝這個，下一個」。 */
+  installLabel?: string;
+  /** 多包安裝時，安裝其餘插件。 */
+  onSkipRest?: (() => void) | null;
+  skipLabel?: string;
 }
 
-export function ImportReviewScreen({ review, busy, error, onInstall, onCancel }: ImportReviewProps) {
-  const [openFile, setOpenFile] = useState(() => review.sources[0]?.path ?? '');
+export function ImportReviewScreen({
+  review,
+  busy,
+  error,
+  countOpcodes,
+  onGlideTo,
+  onInstall,
+  onCancel,
+  progress = null,
+  installLabel,
+  onSkipRest = null,
+  skipLabel,
+}: ImportReviewProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const installRef = useRef<HTMLButtonElement>(null);
-  const codeRef = useRef<HTMLPreElement>(null);
 
-  const rows = useMemo(() => permissionRows(review), [review]);
-  const mismatched = useMemo(() => mismatchedFindings(review), [review]);
-  const loose = useMemo(() => looseFindings(review), [review]);
-  const shown = review.sources.find((s) => s.path === openFile) ?? review.sources[0];
-
+  /**
+   * 差集 ∩ 畫布（§4 那張表的兩半合起來）。
+   *
+   * `gone` 裡**畫布上真的有的**那幾顆是擋的理由——跟「還有 3 顆在用，不准刪」
+   * 是同一句話。沒人用到的照樣列出來，但那只是「只說一聲」那一列。
+   */
+  const update = review.installed?.diff ?? null;
+  const usage = useMemo(
+    () =>
+      update
+        ? countOpcodes([
+            ...update.gone.map((g) => g.opcode),
+            ...update.changed.map((c) => c.opcode),
+          ])
+        : {},
+    // `countOpcodes` 是 `App` 每次 render 都新做的一個 closure，放進相依會讓
+    // 這裡每次都重算一次工作區——而畫布在這一頁底下，這段時間它不會變。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [update],
+  );
+  const verdict = update ? updateVerdict(update, usage) : null;
   // 開場焦點落在「安裝」——**但不是因為那是建議的動作**：它是這一頁唯一一顆
   // 會改變這台機器的按鈕，而鍵盤使用者要知道自己的 Enter 現在指著什麼。
   useEffect(() => {
     installRef.current?.focus();
   }, []);
-  // 換一個檔案時程式碼要從頭看起。少了這行，點開 `manifest.yaml` 會停在上一個
-  // 檔案捲到的那一行，而那是一個看起來像「這個檔案就這麼長」的畫面。
-  //
-  // `scrollTop = 0` 而不是 `scrollTo(0, 0)`：後者在 jsdom 裡不存在，而那讓這個
-  // 元件連「掛得起來嗎」都測不了。兩者在瀏覽器裡對一個不橫向捲的區塊是同一件事。
-  useEffect(() => {
-    if (codeRef.current) codeRef.current.scrollTop = 0;
-  }, [openFile]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     const action = modalKeyAction({
@@ -92,27 +105,29 @@ export function ImportReviewScreen({ review, busy, error, onInstall, onCancel }:
       className="import-review"
       role="dialog"
       aria-modal="true"
-      aria-label={`安裝 ${review.name}`}
+      aria-label={t('import.installAria', { name: review.name })}
       ref={dialogRef}
       onKeyDown={onKeyDown}
     >
       <header className="import-head">
         <button type="button" className="gallery-back" onClick={onCancel} disabled={busy}>
-          <ArrowLeft size={20} strokeWidth={2.5} /> 取消
+          <ArrowLeft size={20} strokeWidth={2.5} /> {t('import.cancel')}
         </button>
         <div className="import-title">
           <h2>
             {review.name} <span className="import-version">v{review.version}</span>
           </h2>
           <p>
+            {progress ? t('import.progress', { at: number(progress.at), total: number(progress.total) }) : ''}
             {review.id}
-            {review.author ? ` · ${review.author}` : ''} · 會多出 {summarize(review)}
+            {review.author ? ` · ${review.author}` : ''} · {t('import.adds', { summary: summarize(review) })}
           </p>
         </div>
-        {review.installed ? (
-          // §16 Q24 還沒答。**在這裡就說**，而不是等他讀完再拒絕。
+        {verdict && verdict.blocking.length > 0 ? (
+          // **擋**：新版少了畫布上正在用的積木。跟「還有 3 顆在用，不准刪」是
+          // 同一句話——而它一樣可解，下面那一段列得出是哪幾顆、滑得過去。
           <span className="import-blocked">
-            已經裝過 v{review.installed.version}——更新／替換還沒接上
+            {t('import.updateBlocked')}
           </span>
         ) : (
           <button
@@ -123,7 +138,13 @@ export function ImportReviewScreen({ review, busy, error, onInstall, onCancel }:
             disabled={busy}
           >
             {busy ? <Loader2 size={14} strokeWidth={2.5} className="import-spin" /> : null}
-            {busy ? '安裝中…' : '安裝'}
+            {busy
+              ? review.installed
+                ? t('import.updating')
+                : t('import.installing')
+              : review.installed
+                ? t('import.updateTo', { version: review.version })
+                : (installLabel ?? t('import.install'))}
           </button>
         )}
       </header>
@@ -132,73 +153,32 @@ export function ImportReviewScreen({ review, busy, error, onInstall, onCancel }:
       {busy && review.requirements.length > 0 && (
         // 有 `requirements` 的包要建一支 venv 並下載依賴，那可能是幾十秒。一個
         // 沒有說話的轉圈與當掉在畫面上長得一模一樣（第 17 條）。
-        <p className="import-note">正在幫它準備一個獨立的 Python 環境，第一次會久一點…</p>
+        <p className="import-note">{t('import.preparing')}</p>
       )}
 
       <div className="import-body">
         <section className="import-summary">
           {review.description && <p className="import-desc">{review.description}</p>}
 
-          <h3>
-            <ShieldCheck size={14} strokeWidth={2.5} /> 這個包會做什麼
-          </h3>
-          {rows.length === 0 ? (
-            <p className="import-none">沒有宣告任何權限，程式碼裡也沒有掃到對應的呼叫。</p>
-          ) : (
-            <ul className="import-perms">
-              {rows.map((row) => (
-                <li key={row.permission} className={row.declared ? '' : 'is-mismatch'}>
-                  <span className="import-perm-label">{row.label}</span>
-                  <span className="import-perm-note">
-                    {row.declared
-                      ? row.seen > 0
-                        ? `宣告了，程式碼裡看到 ${row.seen} 處`
-                        : '宣告了'
-                      : `沒有宣告，但程式碼裡看到 ${row.seen} 處`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {mismatched.length > 0 && (
-            <p className="import-warn">
-              <AlertTriangle size={14} strokeWidth={2.5} />
-              有 {mismatched.length} 個地方在做沒有宣告過的事。最無害的解釋是作者忘了寫宣告——
-              但那份宣告是你唯一拿到的摘要，所以值得看一眼下面那幾行。
-            </p>
+          {update && verdict && (
+            <UpdateDiff
+              diff={update}
+              usage={usage}
+              verdict={verdict}
+              from={review.installed?.version ?? ''}
+              onGlideTo={onGlideTo}
+            />
           )}
 
-          {loose.length > 0 && (
-            <>
-              <h3>另外值得看一眼的</h3>
-              <ul className="import-findings">
-                {loose.map((f, i) => (
-                  <li key={`${f.path}:${f.line}:${i}`}>
-                    <button type="button" onClick={() => setOpenFile(f.path)}>
-                      {f.path}:{f.line}
-                    </button>
-                    <span>{f.message}</span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {mismatched.length > 0 && (
-            <ul className="import-findings">
-              {mismatched.map((f, i) => (
-                <li key={`${f.path}:${f.line}:${i}`} className="is-mismatch">
-                  <button type="button" onClick={() => setOpenFile(f.path)}>
-                    {f.path}:{f.line}
-                  </button>
-                  <span>{f.message}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <h3>{t('import.source')}</h3>
+          <p>{review.origin.label}</p>
+          {review.origin.url && <p>{review.origin.url}</p>}
+          {review.origin.commit && <p><code>{review.origin.commit}</code></p>}
+          {review.editor && <p>{t('import.editorPlugin')}</p>}
 
           {review.requirements.length > 0 && (
             <>
-              <h3>會裝進一支獨立環境的套件</h3>
+              <h3>{t('import.requirements')}</h3>
               <ul className="import-list">
                 {review.requirements.map((r) => (
                   <li key={r}>
@@ -211,12 +191,12 @@ export function ImportReviewScreen({ review, busy, error, onInstall, onCancel }:
 
           {review.config.length > 0 && (
             <>
-              <h3>裝好之後要填的</h3>
+              <h3>{t('import.config')}</h3>
               <ul className="import-list">
                 {review.config.map((c) => (
                   <li key={c.key}>
                     {c.label ?? c.key}
-                    {c.type === 'secret' ? '（金鑰，存進系統鑰匙圈）' : ''}
+                    {c.type === 'secret' ? t('import.secretConfig') : ''}
                   </li>
                 ))}
               </ul>
@@ -226,7 +206,7 @@ export function ImportReviewScreen({ review, busy, error, onInstall, onCancel }:
           {review.urls.length > 0 && (
             <>
               {/* 工具箱上那顆按鈕按下去瀏覽器會開它，而那一刻沒有人會再問一次。 */}
-              <h3>工具箱上的按鈕會開的網址</h3>
+              <h3>{t('import.urls')}</h3>
               <ul className="import-list">
                 {review.urls.map((u) => (
                   <li key={u}>
@@ -239,7 +219,7 @@ export function ImportReviewScreen({ review, busy, error, onInstall, onCancel }:
 
           {review.blocks.length > 0 && (
             <>
-              <h3>會多出這幾顆積木</h3>
+              <h3>{t('import.blocks')}</h3>
               <ul className="import-list">
                 {review.blocks.map((b) => (
                   <li key={b.opcode}>{b.text}</li>
@@ -249,39 +229,109 @@ export function ImportReviewScreen({ review, busy, error, onInstall, onCancel }:
           )}
         </section>
 
-        <section className="import-code">
-          <div className="import-files">
-            {review.files.map((f) => {
-              const readable = review.sources.some((s) => s.path === f.path);
-              return (
-                <button
-                  key={f.path}
-                  type="button"
-                  className={`import-file${f.path === shown?.path ? ' is-on' : ''}`}
-                  onClick={() => readable && setOpenFile(f.path)}
-                  // 攤不開的（圖片、字型）仍然要列出來——「這個 zip 裡到底有什麼」
-                  // 是這一頁要回答的第一個問題。但點它沒有意義。
-                  disabled={!readable}
-                  title={readable ? f.path : `${f.path}（不是文字檔）`}
-                >
-                  <FileCode size={13} strokeWidth={2.5} />
-                  <span className="import-file-name">{f.path}</span>
-                  <span className="import-file-size">{formatSize(f.size)}</span>
-                </button>
-              );
-            })}
-            {review.omitted.length > 0 && (
-              <p className="import-omitted">
-                另外 {review.omitted.length} 個文字檔沒有攤開（太大或讀不成文字）。
-              </p>
-            )}
-          </div>
-          <pre className="import-source" ref={codeRef} tabIndex={0} aria-label="原始碼">
-            <code>{shown?.text ?? ''}</code>
-            {shown?.truncated && <div className="import-truncated">（這個檔案太長，只顯示前面一段）</div>}
-          </pre>
-        </section>
       </div>
+
+      {onSkipRest && (
+        // 頁面底部，所以他至少捲過了這一個包的摘要（見 `onSkipRest` 那段）。
+        <footer className="import-foot">
+          <button type="button" className="button" onClick={onSkipRest} disabled={busy}>
+            {skipLabel ?? t('import.skipRest')}
+          </button>
+        </footer>
+      )}
     </div>
+  );
+}
+
+/**
+ * 「跟你手上那一版比起來，這一版差在哪」（§4）。
+ *
+ * 三段，照嚴重度由上而下，而**分段的規則不是「變動的種類」是「誰會受影響」**：
+ * 同樣是「少了一顆積木」，畫布上有的那幾顆會擋住更新，沒人用到的只是一行字。
+ * 這也是為什麼這個元件同時吃 `diff`（後端算的）與 `usage`（`App` 數的）——
+ * §4 那張表的兩欄各在一邊。
+ */
+function UpdateDiff({
+  diff,
+  usage,
+  verdict,
+  from,
+  onGlideTo,
+}: {
+  diff: ExtensionDiff;
+  usage: Record<string, number>;
+  verdict: UpdateVerdict;
+  from: string;
+  onGlideTo(opcode: string): void;
+}) {
+  const { blocking, warning, quietGone, nothingDeclared } = verdict;
+
+  return (
+    <>
+      <h3>
+        <RotateCw size={14} strokeWidth={2.5} /> {t('import.updateHeading', { from, to: diff.version.to })}
+      </h3>
+
+      {nothingDeclared && (
+        // 兩份一模一樣的宣告。**這仍然是一次真的更新**（程式碼可能全改了，而
+        // manifest 看不出來——§8：分不出來的就不假裝分得出來），所以不說「沒有
+        // 變化」，只說宣告沒變。
+        <p className="import-none">{t('import.sameDeclarations')}</p>
+      )}
+
+      {blocking.length > 0 && (
+        <div className="import-diff is-blocking">
+          <h4>
+            <AlertTriangle size={13} strokeWidth={2.5} /> {t('import.missingUsed')}
+          </h4>
+          <ul>
+            {blocking.map((g) => (
+              <li key={g.opcode}>
+                <button type="button" onClick={() => onGlideTo(g.opcode)}>
+                  {g.text}
+                </button>
+                {t('import.canvasUsage', { count: number(usage[g.opcode] ?? 0) })}
+                {g.why === 'shape' ? t('import.shapeChanged') : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {warning.length > 0 && (
+        <div className="import-diff is-warning">
+          <h4>
+            <AlertTriangle size={13} strokeWidth={2.5} /> {t('import.usedChanged')}
+          </h4>
+          <ul>
+            {warning.map((c) => (
+              <li key={c.opcode}>
+                <button type="button" onClick={() => onGlideTo(c.opcode)}>
+                  {c.text}
+                </button>
+                {t('import.usedChange', { count: number(usage[c.opcode] ?? 0), changes: changeWords(c) })}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(quietGone.length > 0 ||
+        diff.added.length > 0 ||
+        diff.requirementsChanged) && (
+        <div className="import-diff">
+          <h4>{t('import.otherChanges')}</h4>
+          <ul>
+            {diff.requirementsChanged && <li>{t('import.requirementsChanged')}</li>}
+            {quietGone.map((g) => (
+              <li key={g.opcode}>{t('import.removedUnused', { text: g.text })}</li>
+            ))}
+            {diff.added.map((b) => (
+              <li key={b.opcode}>{t('import.addedBlock', { text: b.text })}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }

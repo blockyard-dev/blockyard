@@ -22,6 +22,7 @@ export type PaletteEntry = Palette[number];
 import { FIELD_TEXT_TYPE, type FieldTextOptions } from './fields/FieldText';
 import { FIELD_DYNAMIC_DROPDOWN_TYPE } from './fields/FieldDynamicDropdown';
 import { registerRepeatExtension } from './repeat';
+import { t } from '../i18n';
 
 /** Blockly 的積木型別名稱 = IR 的 opcode，一字不差。 */
 export type BlockType = string;
@@ -277,8 +278,8 @@ export function defineShadowBlocks(): void {
           type: 'field_dropdown',
           name: SHADOW_FIELD,
           options: [
-            ['真', BOOLEAN_TRUE],
-            ['假', BOOLEAN_FALSE],
+            [t('json.true'), BOOLEAN_TRUE],
+            [t('json.false'), BOOLEAN_FALSE],
           ],
         },
       ],
@@ -290,7 +291,7 @@ export function defineShadowBlocks(): void {
       // 走右鍵——這也是為什麼那個選單不能只掛在 `FieldText` 上。
       type: SHADOW_NULL,
       message0: '%1',
-      args0: [{ type: 'field_label', text: '空值' }],
+      args0: [{ type: 'field_label', text: t('json.null') }],
       output: null,
       colour: SHADOW_COLOUR,
     },
@@ -468,7 +469,7 @@ function buildMessage(
     if (!arg) {
       // manifest 參照了不存在的參數。後端的 §8.1 一致性測試守的是參數名對不
       // 上，這裡守的是 `text` 對不上——原樣印出來比默默吞掉好查。
-      console.warn(`[blockyard] ${blockType} 的 text 參照了未宣告的參數 ${name}`);
+      console.warn(`[blockyard] ${t('error.manifestUndeclaredParam', { type: blockType })}: ${name}`);
       return whole;
     }
     consumed.add(name);
@@ -672,7 +673,7 @@ function shadowFor(
             : {}),
           // 值還空著時顯示的字。從 `label` 導出而不是讓積木包自己寫一句：
           // 會忘記的包就是大多數，而忘記的代價是畫布上一格看不見的東西。
-          placeholder: arg.label ? `選擇${arg.label}` : '選擇…',
+          placeholder: arg.label ? t('blockly.selectLabel', { label: arg.label }) : t('blockly.select'),
         },
       ],
       output: null,
@@ -742,7 +743,7 @@ function isDefaultTextOptions(options: FieldTextOptions): boolean {
 function tooltipOf(manifest: Manifest, spec: BlockSpec): string {
   const opcode = `${manifest.id}.${spec.opcode}`;
   const parts = [opcode];
-  if (spec.returns) parts.push(`回傳 ${spec.returns}`);
-  if (spec.deprecated) parts.push('已淘汰');
+  if (spec.returns) parts.push(t('blockly.returnType', { type: spec.returns }));
+  if (spec.deprecated) parts.push(t('blockly.deprecated'));
   return parts.join(' · ');
 }

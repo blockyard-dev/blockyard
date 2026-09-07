@@ -18,12 +18,11 @@ palette:
   - opcode: get
     type: reporter
     returns: any
-    # key 不存在是錯誤（§4.3）——除非接了預設值孔
-    text: "%(object) 的 %(key)（沒有就用 %(default)）"
+    # key 不存在時回傳空白字串，讓 API 回應中的可選欄位可直接顯示。
+    text: "%(object) 的 %(key)"
     args:
       object: { type: object }
       key: { type: string, default: "name" }
-      default: { type: string, default: null }
 
   - opcode: set
     type: command

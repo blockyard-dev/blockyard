@@ -1,0 +1,39 @@
+name: Operators
+description: Arithmetic, comparison, logic, text, and regular expressions
+blocks:
+  expr: {text: "calculate %(expr)"}
+  add: {text: "%(a) + %(b)"}
+  subtract: {text: "%(a) − %(b)"}
+  multiply: {text: "%(a) × %(b)"}
+  divide: {text: "%(a) ÷ %(b)"}
+  mod: {text: "remainder of %(a) divided by %(b)"}
+  round: {text: "round %(value)"}
+  math_op:
+    text: "%(op) %(value)"
+    args: {op: {options: {abs: Absolute value, floor: Floor, ceiling: Ceiling, sqrt: Square root, sin: sin, cos: cos, tan: tan, ln: ln, log: log, e^: e^, 10^: 10^}}}
+  eq: {text: "%(a) = %(b)"}
+  approx: {text: "%(a) ≈ %(b)"}
+  neq: {text: "%(a) %(op) %(b)", args: {op: {options: {exact: ≠, approx: ≉}}}}
+  lt: {text: "%(a) %(mode) %(b)", args: {mode: {options: {number: <, text: "< (lexicographic)"}}}}
+  gt: {text: "%(a) %(mode) %(b)", args: {mode: {options: {number: '>', text: "> (lexicographic)"}}}}
+  lte: {text: "%(a) %(mode) %(b)", args: {mode: {options: {number: ≤, text: "≤ (lexicographic)"}}}}
+  gte: {text: "%(a) %(mode) %(b)", args: {mode: {options: {number: ≥, text: "≥ (lexicographic)"}}}}
+  'true': {text: "true"}
+  'false': {text: "false"}
+  and: {text: "%(a) and %(b)"}
+  or: {text: "%(a) or %(b)"}
+  not: {text: "not %(value)"}
+  join: {text: "join %(a) and %(b)"}
+  join_list: {text: "join %(list) with %(separator)"}
+  letter_of: {text: "letter %(index) of %(text)"}
+  length: {text: "length of %(text)"}
+  contains: {text: "%(a) contains %(b)"}
+  substring: {text: "letters %(start) through %(end) of %(text)"}
+  replace: {text: "replace %(find) in %(text) with %(replace)"}
+  split: {text: "split %(text) by %(separator)"}
+  trim: {text: "trim %(text)"}
+  case: {text: "convert %(text) to %(case)", args: {case: {options: {upper: Uppercase, lower: Lowercase}}}}
+  regex_match: {text: "%(text) matches pattern %(pattern)"}
+  regex_extract: {text: "extract pattern %(pattern) from %(text)"}
+  regex_replace: {text: "replace pattern %(pattern) in %(text) with %(replace)"}
+  random: {text: "random number from %(from) to %(to)"}

@@ -21,7 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blockyard.errors import ExtensionError
-from blockyard.extensions.manifest import BUILTIN_NAMESPACES, BlockSpec, Manifest, load_manifest
+from blockyard.extensions.manifest import BUILTIN_NAMESPACES, BlockSpec, Manifest, load_locale_files, load_manifest
 
 BUILTINS_DIR = Path(__file__).parent / "builtins"
 
@@ -39,6 +39,7 @@ _BY_TYPE: dict[str, frozenset[str]] = {
 }
 
 _cache: dict[str, Manifest] | None = None
+_locale_cache: dict[str, dict[str, dict]] | None = None
 
 
 def shapes_of(block_type: str, *, also_command: bool = False) -> frozenset[str]:
@@ -68,9 +69,20 @@ def manifests() -> dict[str, Manifest]:
 
 def reload() -> dict[str, Manifest]:
     """丟掉快取重讀。給測試與（P2 的）熱重載用。"""
-    global _cache
+    global _cache, _locale_cache
     _cache = None
+    _locale_cache = None
     return manifests()
+
+
+def locales() -> dict[str, dict[str, dict]]:
+    global _locale_cache
+    if _locale_cache is None:
+        _locale_cache = {
+            ext_id: load_locale_files(BUILTINS_DIR / "locales", mf)
+            for ext_id, mf in manifests().items()
+        }
+    return _locale_cache
 
 
 def block(opcode: str) -> BlockSpec | None:
@@ -143,6 +155,7 @@ __all__ = [
     "expression_fields",
     "is_terminal",
     "manifests",
+    "locales",
     "opcodes",
     "reload",
     "shapes",

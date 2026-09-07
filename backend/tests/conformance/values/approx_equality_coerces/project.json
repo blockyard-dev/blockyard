@@ -40,7 +40,7 @@
       "ui": null
     },
     "blk_3": {
-      "opcode": "operator.eq",
+      "opcode": "operator.approx",
       "parent": "blk_2",
       "next": null,
       "inputs": {
@@ -53,9 +53,7 @@
           "value": 5
         }
       },
-      "fields": {
-        "op": "approx"
-      },
+      "fields": {},
       "mutation": null,
       "ui": null
     },
@@ -74,7 +72,7 @@
       "ui": null
     },
     "blk_5": {
-      "opcode": "operator.eq",
+      "opcode": "operator.approx",
       "parent": "blk_4",
       "next": null,
       "inputs": {
@@ -87,9 +85,7 @@
           "value": "abc "
         }
       },
-      "fields": {
-        "op": "approx"
-      },
+      "fields": {},
       "mutation": null,
       "ui": null
     },
@@ -108,7 +104,7 @@
       "ui": null
     },
     "blk_7": {
-      "opcode": "operator.eq",
+      "opcode": "operator.approx",
       "parent": "blk_6",
       "next": null,
       "inputs": {
@@ -121,9 +117,7 @@
           "value": "TRUE"
         }
       },
-      "fields": {
-        "op": "approx"
-      },
+      "fields": {},
       "mutation": null,
       "ui": null
     },
@@ -142,7 +136,7 @@
       "ui": null
     },
     "blk_9": {
-      "opcode": "operator.eq",
+      "opcode": "operator.approx",
       "parent": "blk_8",
       "next": null,
       "inputs": {
@@ -155,9 +149,7 @@
           "value": 1
         }
       },
-      "fields": {
-        "op": "approx"
-      },
+      "fields": {},
       "mutation": null,
       "ui": null
     },
@@ -176,7 +168,7 @@
       "ui": null
     },
     "blk_11": {
-      "opcode": "operator.eq",
+      "opcode": "operator.approx",
       "parent": "blk_10",
       "next": null,
       "inputs": {
@@ -189,9 +181,7 @@
           "value": 0.3
         }
       },
-      "fields": {
-        "op": "approx"
-      },
+      "fields": {},
       "mutation": null,
       "ui": null
     },
@@ -228,7 +218,7 @@
       "ui": null
     },
     "blk_14": {
-      "opcode": "operator.eq",
+      "opcode": "operator.approx",
       "parent": "blk_13",
       "next": null,
       "inputs": {
@@ -241,9 +231,7 @@
           "value": 5
         }
       },
-      "fields": {
-        "op": "approx"
-      },
+      "fields": {},
       "mutation": null,
       "ui": null
     }

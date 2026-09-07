@@ -1,0 +1,12 @@
+name: HTTP
+description: Send HTTP requests and read responses as objects
+blocks:
+  get: {text: "GET %(url)"}
+  post: {text: "POST %(url) body %(body)"}
+  request:
+    text: "%(method) %(url) headers %(headers) body %(body)"
+    args:
+      body: {help: GET and HEAD do not send a body}
+  url_encode: {text: "encode %(text) as a URL component"}
+buttons:
+  status_codes: {label: HTTP methods and status codes}

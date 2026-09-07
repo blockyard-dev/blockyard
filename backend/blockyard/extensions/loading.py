@@ -12,8 +12,9 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from blockyard.errors import ExtensionError
 from blockyard.extensions.manifest import ExtensionSource, Manifest
@@ -149,22 +150,9 @@ def trigger_error_text(opcode: str, pack_name: str, exc: BaseException) -> str:
     return f"{pack_name} 的監聽因為一個未預期的錯誤停了：{type(exc).__name__}: {exc}"
 
 
-def check_net_permission(manifest: Manifest) -> None:
-    """`ctx.http` 的權限檢查（§7.4、§12.1）。
-
-    **權限在這裡才真的守得住**：`permissions: [net]` 在安裝畫面上是一句話，
-    而一句沒有人檢查的宣告，使用者讀了也不能信。沒宣告就拿不到 client——
-    訊息指名是包的宣告漏了，不是使用者的流程錯了。兩個 host 共用同一段，
-    不是各自重寫（子 process 那一側也要擋，見 `subprocess_worker.py`）。
-    """
-    if "net" not in manifest.permissions:
-        raise ExtensionError(f'積木包「{manifest.name}」沒有宣告 net 權限，不能使用 ctx.http')
-
-
 __all__ = [
     "Exports",
     "check_coverage",
-    "check_net_permission",
     "collect_exports",
     "import_extension_module",
     "unimport_extension_module",

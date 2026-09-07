@@ -39,6 +39,7 @@
 import * as Blockly from 'blockly/core';
 import type { Block as IRBlock, BlockyardProjectIR as ProjectIR } from '../types/project';
 import type { ConversionContext } from '../ir/context';
+import { t } from '../i18n';
 
 /** 佔位符把原始 `mutation` 藏在這個 key 底下（`extraState`）。 */
 export const PLACEHOLDER_MUTATION = 'blockyardUnknownMutation';
@@ -193,7 +194,7 @@ function define(opcode: string, usage: Usage): void {
   Blockly.Blocks[opcode] = {
     init(this: Blockly.Block) {
       this.setColour(PLACEHOLDER_COLOUR);
-      this.setTooltip(`這個 runtime 不認得「${opcode}」。積木與它的內容都保留著。`);
+      this.setTooltip(t('blockly.unknownTooltip', { opcode }));
 
       // **不自己畫驚嘆號**：`setWarningText` 已經在積木左上角放了一個，而且那個
       // 點得下去、說得出原因。兩個並排（`⚠ ⚠ ghost.send`）只是看起來壞掉。
@@ -239,10 +240,6 @@ function define(opcode: string, usage: Usage): void {
 export function markPlaceholders(workspace: Blockly.Workspace): void {
   for (const block of workspace.getAllBlocks(false)) {
     if (!isPlaceholderType(block.type)) continue;
-    block.setWarningText(
-      `這個 runtime 不認得積木「${block.type}」。它與裡面的東西都保留著，` +
-        '存檔不會弄丟；裝上對應的積木包之後就會變回原本的樣子。',
-      PLACEHOLDER_WARNING,
-    );
+    block.setWarningText(t('blockly.unknownWarning', { opcode: block.type }), PLACEHOLDER_WARNING);
   }
 }

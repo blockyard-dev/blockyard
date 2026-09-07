@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type * as Blockly from 'blockly/core';
 import { FLYOUT_DEFAULT_WIDTH, FLYOUT_MIN_WIDTH, setFlyoutWidth } from '../blockly/theme';
 import { readPref, writePref } from '../prefs';
+import { t } from '../i18n';
 
 /** 偏好的 key（§16 Q15 未定案；出入口只有 `prefs.ts` 那兩個函式）。 */
 const PREF_KEY = 'flyoutWidth';
@@ -106,8 +107,8 @@ export function FlyoutResizer({ workspace }: { workspace: Blockly.WorkspaceSvg |
       style={{ left: toolboxWidth + width }}
       role="separator"
       aria-orientation="vertical"
-      aria-label="調整積木面板寬度"
-      title="拖曳調整寬度；拉到底收起面板"
+      aria-label={t('flyout.resize')}
+      title={t('flyout.resizeHelp')}
       onPointerDown={(event) => {
         // pointer capture：拖出把手之外（甚至拖到畫布上）也還收得到 move。
         event.currentTarget.setPointerCapture(event.pointerId);

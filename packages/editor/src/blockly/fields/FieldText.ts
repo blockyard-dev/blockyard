@@ -49,6 +49,7 @@ import {
   type RunKind,
 } from '../../ir/highlight';
 import { openAutocomplete, type AutocompleteHandle } from './Autocomplete';
+import { t } from '../../i18n';
 
 /** Blockly JSON 裡的欄位型別名稱（`{"type": "field_blockyard_text"}`）。 */
 export const FIELD_TEXT_TYPE = 'field_blockyard_text';
@@ -146,14 +147,13 @@ const PILL_GROW = 4;
  * 單行欄位的外框**至少**這麼寬（以高為單位）。
  *
  * 膠囊的圓角是 `rx = 高 / 2`，而 SVG 會把 `rx` 夾到**寬的一半**——寬度小於高度
- * 時，那顆膠囊就變成一個直立的橢圓。實測回饋說的「扁掉、看起來像
- * `border-radius: 50%`」就是這個：`設定 [d] 為` 的名字只有一個字，寬度撐不到
- * 高度。給一個下限，短名字也會是一顆躺著的膠囊。
+ * 時，那顆膠囊就變成一個直立的橢圓。給一個小幅度的下限，讓短名字仍是
+ * 橫向膠囊，但不要比旁邊的空白字面值膠囊寬一大截。
  *
  * 只套在**有外框**的欄位上。字面值影子沒有外框（見 `initView`），它的形狀由
  * 積木本身畫，寬度得跟數字影子一致——那正是上一步剛對齊好的東西。
  */
-const MIN_PILL_ASPECT = 1.6;
+const MIN_PILL_ASPECT = 1.2;
 
 /** autocomplete 最多列幾個。再多就不是「提示」而是「另一份清單」。 */
 const MAX_COMPLETIONS = 8;
@@ -506,7 +506,10 @@ export class FieldText extends FieldMultilineInput {
         : constants.FIELD_BORDER_RECT_RADIUS;
       this.borderRect_.setAttribute('rx', String(radius));
       this.borderRect_.setAttribute('ry', String(radius));
-      this.borderRect_.setAttribute('class', this.borderClass());
+      // 錯誤由字下紅線／紅字與積木的 warning icon 表示。外框不再
+      // 重複畫一圈紅線；特別是空的變數名沒有可畫底線的字，先前就只有
+      // 一圈看起來像焦點狀態的多餘紅框。
+      this.borderRect_.setAttribute('class', 'blocklyFieldRect');
     }
 
     // --- 第二趟：定位、補底圖 ---
@@ -615,10 +618,6 @@ export class FieldText extends FieldMultilineInput {
     if (kind === 'error') parts.push('blockyard-bad');
     if (this.mode === 'expression') parts.push('blockyard-mono');
     return parts.join(' ');
-  }
-
-  private borderClass(): string {
-    return this.analysis.error ? 'blocklyFieldRect blockyard-field-bad' : 'blocklyFieldRect';
   }
 
   /**
@@ -1085,7 +1084,7 @@ export function registerFieldContextMenu(): void {
       // 名字（§4.2），列不出「不要」。看得到但點不動，比整條消失誠實。
       return field.isDeclaredMultiline() ? 'disabled' : 'enabled';
     },
-    displayText: () => (clickedField?.getForcedMultiline() ? '取消多行輸入' : '多行輸入'),
+    displayText: () => (clickedField?.getForcedMultiline() ? t('blockly.cancelMultiline') : t('blockly.multiline')),
     callback: () => {
       const field = clickedField;
       if (!field) return;
@@ -1103,13 +1102,13 @@ export function registerFieldContextMenu(): void {
       if (!field?.hasReferences()) return 'hidden';
       return String(field.getValue() ?? '') === '' ? 'disabled' : 'enabled';
     },
-    displayText: () => `重新命名「${String(clickedField?.getValue() ?? '')}」的所有引用`,
+    displayText: () => t('blockly.renameReferences', { name: String(clickedField?.getValue() ?? '') }),
     callback: (scope) => {
       const field = clickedField;
       const workspace = scope.block?.workspace;
       if (!field || !workspace) return;
       const from = String(field.getValue() ?? '');
-      Blockly.dialog.prompt('新的變數名稱', from, (answer) => {
+      Blockly.dialog.prompt(t('blockly.newVariableName'), from, (answer) => {
         if (answer === null) return;
         const to = validateName(answer);
         if (to === '' || to === from) return;

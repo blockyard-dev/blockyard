@@ -13,6 +13,8 @@
 from __future__ import annotations
 
 import json
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -20,14 +22,14 @@ import yaml
 from fastapi.testclient import TestClient
 
 from blockyard.api.app import create_app
-from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.extensions import BUNDLED_ROOT
 
 CORPUS = Path(__file__).parents[1] / "conformance"
 
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
-    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=BUNDLED_ROOT)
     return TestClient(app)
 
 
@@ -113,8 +115,82 @@ def test_put_creates_then_updates(client: TestClient) -> None:
     assert [p["id"] for p in client.get("/api/projects").json()] == ["p1"]
 
 
+def test_saved_preview_appears_in_project_list_and_can_be_read(client: TestClient) -> None:
+    client.put("/api/projects/p1", json={"meta": {"name": "預覽"}})
+    image = b"RIFF\x00\x00\x00\x00WEBPfake"
+    saved = client.put(
+        "/api/projects/p1/preview", content=image, headers={"Content-Type": "image/webp"}
+    )
+    assert saved.status_code == 204
+
+    summary = client.get("/api/projects").json()[0]
+    assert summary["preview"].startswith("/api/projects/p1/preview?")
+    preview = client.get(summary["preview"])
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/webp"
+    assert preview.content == image
+    # 圖是衍生資料，GET 專案仍只回原本 PUT 的 JSON。
+    assert "preview" not in client.get("/api/projects/p1").json()
+
+
+def test_preview_rejects_wrong_type_and_missing_project(client: TestClient) -> None:
+    client.put("/api/projects/p1", json={})
+    assert client.put("/api/projects/p1/preview", content=b"png").status_code == 415
+    assert (
+        client.put(
+            "/api/projects/missing/preview",
+            content=b"webp",
+            headers={"Content-Type": "image/webp"},
+        ).status_code
+        == 404
+    )
+
+
 def test_missing_project_is_404(client: TestClient) -> None:
     assert client.get("/api/projects/nope").status_code == 404
+
+
+def test_copy_keeps_the_canvas_and_takes_a_new_id(client: TestClient) -> None:
+    """複製一份：積木一模一樣，但 id 是新的，而 `meta.id` 跟著換。"""
+    data = {
+        "formatVersion": 1,
+        "meta": {"id": "p1", "name": "我的流程"},
+        "scripts": [{"id": "s1", "top": "hat"}],
+        "blocks": {"hat": {"opcode": "event.when_flag_clicked"}},
+    }
+    client.put("/api/projects/p1", json=data)
+    image = b"RIFF\x00\x00\x00\x00WEBPfake"
+    client.put("/api/projects/p1/preview", content=image, headers={"Content-Type": "image/webp"})
+
+    r = client.post("/api/projects/p1/copy")
+    assert r.status_code == 201, r.text
+    copy_id = r.json()["id"]
+    assert copy_id != "p1"
+    assert r.json()["name"] == "我的流程 的副本"
+
+    copied = client.get(f"/api/projects/{copy_id}").json()
+    assert copied["blocks"] == data["blocks"]
+    assert copied["scripts"] == data["scripts"]
+    # `meta.id` 沒換的話，副本第一次存檔就是 422。
+    assert copied["meta"]["id"] == copy_id
+    assert copied["meta"]["name"] == "我的流程 的副本"
+    # 卡片上那張圖也跟著，否則列表上兩張同一份東西的卡長得不一樣。
+    assert client.get(f"/api/projects/{copy_id}/preview").content == image
+    # 原本那一份一個字都沒動。
+    assert client.get("/api/projects/p1").json() == data
+
+
+def test_copying_twice_gives_names_that_can_be_told_apart(client: TestClient) -> None:
+    client.put("/api/projects/p1", json={"meta": {"name": "流程"}})
+    first = client.post("/api/projects/p1/copy").json()["name"]
+    second = client.post("/api/projects/p1/copy").json()["name"]
+    assert first == "流程 的副本"
+    assert second == "流程 的副本 2"
+    assert len(client.get("/api/projects").json()) == 3
+
+
+def test_copying_a_missing_project_is_404(client: TestClient) -> None:
+    assert client.post("/api/projects/nope/copy").status_code == 404
 
 
 # --------------------------------------------------------------------------
@@ -348,7 +424,9 @@ def test_content_type_只認白名單(client: TestClient) -> None:
     r = client.get("/api/extensions/demo/asset/main.py")
 
     assert r.status_code == 404
-    assert "不能載" in r.json()["detail"]
+    assert "不能載" in r.json()["detail"]["message"]
+    assert r.json()["detail"]["code"] == "http.not_found"
+    assert r.json()["detail"]["params"] == {}
 
 
 def test_跳不出積木包的資料夾(client: TestClient) -> None:
@@ -366,7 +444,7 @@ def test_沒宣告面板的包沒有這條路(client: TestClient) -> None:
     r = client.get("/api/extensions/http/asset/main.py")
 
     assert r.status_code == 404
-    assert "沒有面板" in r.json()["detail"]
+    assert "沒有前端入口" in r.json()["detail"]["message"]
 
 
 # --------------------------------------------------------------------------
@@ -418,7 +496,7 @@ def test_沒宣告封面就是_404(client: TestClient) -> None:
     r = client.get("/api/extensions/沒這個包/cover")
 
     assert r.status_code == 404
-    assert "沒有封面" in r.json()["detail"]
+    assert "沒有封面" in r.json()["detail"]["message"]
 
 
 def test_封面宣告出現在_api_extensions_上(client: TestClient) -> None:
@@ -428,6 +506,20 @@ def test_封面宣告出現在_api_extensions_上(client: TestClient) -> None:
     assert demo["cover"] == "preview.png"
 
 
+def test_積木包可匯出成能重新安裝的_zip(client: TestClient) -> None:
+    r = client.get("/api/extensions/demo/export")
+
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+    assert "demo-0.1.0.zip" in r.headers["content-disposition"]
+    with zipfile.ZipFile(BytesIO(r.content)) as zf:
+        names = set(zf.namelist())
+        assert {"manifest.yaml", "main.py", "preview.png"} <= names
+        assert ".blockyard-source.json" not in names
+        assert ".DS_Store" not in names
+        assert not any(".venv/" in name or "__pycache__/" in name for name in names)
+
+
 def test_面板宣告出現在_api_extensions_上(client: TestClient) -> None:
     """前端要靠它決定分頁列上有哪幾格——分頁是**宣告**出來的，不是資料生出來的。"""
     demo = next(g for g in client.get("/api/extensions").json() if g["id"] == "demo")
@@ -435,40 +527,11 @@ def test_面板宣告出現在_api_extensions_上(client: TestClient) -> None:
     assert demo["panels"] == [{"id": "demo", "name": "示範面板", "entry": "ui/index.html"}]
 
 
-def test_csp_用編輯器報上來的_origin(client: TestClient) -> None:
-    """後端算不出瀏覽器用的是哪個 origin：dev 下瀏覽器載的是 5173（Vite 代理），
-    後端看到的是被代理之後的自己。用錯的話症狀是**整格面板一片空白**。"""
-    r = client.get(
-        "/api/extensions/demo/asset/ui/index.html", params={"embed": "http://localhost:5173"}
-    )
-
-    csp = r.headers["content-security-policy"]
-    assert "default-src http://localhost:5173" in csp
-    # `'self'` 在 opaque origin 下匹配不到自己的 panel.js。
-    assert "'self'" not in csp
-    # 面板連不出去：要打網路是 Python 那側的事，受 `permissions: [net]` 管。
-    assert "connect-src 'none'" in csp
-
-
-def test_csp_沒有_frame_ancestors(client: TestClient) -> None:
-    """它擋的是「別的頁面嵌這格面板」，而後端只綁 127.0.0.1（§12.1）。留著它
-    換來的是「值只要有一點不對，面板就整格不見」——第一次踩到的訊息是
-    「localhost 拒絕連線」，而那看起來完全不像 CSP。"""
-    csp = client.get("/api/extensions/demo/asset/ui/index.html").headers["content-security-policy"]
-
-    assert "frame-ancestors" not in csp
-
-
-def test_embed_是_header_注入的入口_要驗(client: TestClient) -> None:
-    """這個值原樣進到一個 response header，而 CSP 是用分號分段的。認不得就退回
-    後端自己的 origin，不是原樣放行。"""
-    csp = client.get(
-        "/api/extensions/demo/asset/ui/index.html",
-        params={"embed": "http://x; connect-src *"},
-    ).headers["content-security-policy"]
-
-    assert "connect-src 'none'" in csp
-    assert "connect-src *" not in csp
+def test_trusted_panels_can_load_external_resources(client: TestClient) -> None:
+    response = client.get("/api/extensions/demo/asset/ui/index.html")
+    assert response.status_code == 200
+    assert "content-security-policy" not in response.headers
+    assert response.headers["x-content-type-options"] == "nosniff"
 
 
 def test_子資源不帶_csp(client: TestClient) -> None:

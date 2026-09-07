@@ -13,6 +13,7 @@
      這兩個色，剩下的階層交給字重與留白——顏色在按鈕上只回答一件事：「這顆是
      主要的嗎」。 */
   --ink: #000;
+  --surface: #fff;
   --surface-alt: #f1f1f1;
   font-family: system-ui, -apple-system, 'Noto Sans TC', sans-serif;
   color: var(--fg);
@@ -47,7 +48,17 @@ body,
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   font-weight: 600;
+}
+
+.brand-icon {
+  display: block;
+  width: 1.8rem;
+  height: 1rem;
+  object-fit: contain;
 }
 
 .summary {
@@ -96,6 +107,146 @@ body,
 
 .notice p {
   margin: 0.5rem 0 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Public documentation
+ * ------------------------------------------------------------------ */
+
+.docs-shell {
+  min-height: 100%;
+  background: #fff;
+  color: #171717;
+}
+
+.docs-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  height: 3.5rem;
+  padding: 0 2rem;
+  border-bottom: 1px solid var(--line);
+  background: rgb(255 255 255 / 92%);
+  backdrop-filter: blur(12px);
+  color: var(--muted);
+}
+
+.docs-brand {
+  color: var(--fg);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.docs-layout {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 48rem);
+  gap: 4rem;
+  justify-content: center;
+  padding: 3rem 2rem 6rem;
+}
+
+.docs-sidebar {
+  align-self: start;
+  position: sticky;
+  top: 6.5rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.docs-sidebar p {
+  margin: 0 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.docs-sidebar a {
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.4rem;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.docs-sidebar a[aria-current='page'] {
+  background: var(--surface-alt);
+  font-weight: 600;
+}
+
+.docs-content {
+  min-width: 0;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.docs-content h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+.docs-content h2 {
+  margin: 3rem 0 0.8rem;
+  padding-top: 0.5rem;
+  font-size: 1.4rem;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.docs-content p,
+.docs-content ol,
+.docs-content ul {
+  margin: 0.8rem 0;
+}
+
+.docs-content li + li {
+  margin-top: 0.35rem;
+}
+
+.docs-content a {
+  color: #4052b5;
+  text-underline-offset: 0.16em;
+}
+
+.docs-content code {
+  padding: 0.12rem 0.35rem;
+  border-radius: 0.3rem;
+  background: var(--surface-alt);
+  font-size: 0.9em;
+}
+
+.docs-content blockquote {
+  margin: 1.5rem 0;
+  padding: 0.85rem 1rem;
+  border-left: 3px solid #f0a43c;
+  background: #fff8eb;
+}
+
+.docs-content blockquote p {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .docs-header {
+    padding: 0 1.25rem;
+  }
+
+  .docs-layout {
+    display: block;
+    padding: 2rem 1.25rem 4rem;
+  }
+
+  .docs-sidebar {
+    position: static;
+    margin-bottom: 2.5rem;
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -153,15 +304,60 @@ body,
   opacity: 0.5;
 }
 
-/* 只有圖示的那幾顆（監聽／執行紀錄／金鑰）。左右 padding 要跟上下配成方的，
-   不然一個 15px 的 icon 塞在 0.9rem 的左右留白裡會看起來像一顆被壓扁的按鈕。 */
+/* 右上角的純圖示入口（監聽／執行紀錄／金鑰）是圓角方形，不是工具列其他按鈕的
+   膠囊。平常維持透明，只有游標停上去才用淡灰底標示可點；正在監聽的耳朵例外，
+   仍用實底表示它在背景持續運作。 */
 .button-icon {
-  position: relative; /* 耳朵右上角那顆星的定位基準 */
+  position: relative;
+  /* 耳朵右上角那顆星的定位基準 */
   padding: 0.3rem;
   width: 1.9rem;
   height: 1.9rem;
+  border-radius: 0.55rem;
+  background: transparent;
   justify-content: center;
   gap: 0;
+}
+
+.button-icon:not(.button-listening):hover:not(:disabled) {
+  background: var(--surface-alt);
+}
+
+.settings-menu {
+  position: fixed;
+  left: auto;
+  width: 13rem;
+  z-index: 190;
+}
+
+.language-modal {
+  width: min(26rem, calc(100vw - 3rem));
+}
+
+.language-options {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.language-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 3.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.language-option:hover,
+.language-option:focus-visible {
+  background: var(--surface-alt);
 }
 
 /* 「存檔」與「已存檔」是同一顆，所以它得有固定寬度——同「執行／停止」的理由，
@@ -362,6 +558,71 @@ body,
   pointer-events: none;
   z-index: 20;
 }
+
+/* 合法 JSON 出現在 list/object/json 孔時，提示浮在整顆積木上方。它是工作區的
+   HTML overlay，不是積木上的 field，所以不會撐寬積木，也不會被存進專案。 */
+.json-parse-prompt-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 21;
+}
+
+.json-parse-prompt {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: bottom center;
+}
+
+.json-parse-prompt button {
+  position: absolute;
+  left: 0;
+  bottom: 0.5rem;
+  transform: translateX(-50%);
+  border: 1px solid #171717;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  background: #171717;
+  color: #fff;
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 18%));
+  animation: json-parse-prompt-in 160ms ease-out;
+}
+
+.json-parse-prompt button:hover {
+  background: #333;
+}
+
+.json-parse-prompt button::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 0.3rem solid transparent;
+  border-top-color: #171717;
+}
+
+/* 提示在積木上方，所以正的 Y 是「先靠近積木」，回到 0 的過程看起來就是往上
+   滑到定位。距離與 reporter 的 bubble-say 相同，不讓使用者等動畫跑完才讀得到。 */
+@keyframes json-parse-prompt-in {
+  from {
+    transform: translateX(-50%) translateY(0.35rem);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
 
 /* 氣泡分三層，每一層只做一件事：`.bubble` 定位、`.bubble-box` 是看得見的那
    個形（含尖角與滑出來的動畫）、`.bubble-content` 負責捲。
@@ -564,6 +825,14 @@ body,
   .blockyard-run-hot,
   .bubble-box {
     animation: none;
+  }
+
+  .ext-card-cover {
+    transition: none;
+  }
+
+  .ext-card:hover .ext-card-cover {
+    transform: none;
   }
 }
 
@@ -1046,15 +1315,14 @@ body,
   letter-spacing: -0.01em;
 }
 
-/* 標頭。三欄：返回、置中的標題、右邊的匯入。標題用 `grid` 置中而不是靠兩側
-   等寬的留白——左右兩顆按鈕的寬度不一樣（而且「從電腦(.zip)」的字數會變），
-   flex 的置中會跟著它們一起飄。
+/* 標頭：左邊返回、中間標題、右邊匯入。用 flex 讓右側按鈕依內容自然排開，
+   不把它們硬塞進 grid 欄位。
 
    底下那條分隔線與整條紅色標頭一起拿掉了：這一頁的段落界線由「白 → 淺灰」
    那次換底色去畫（卡片那一段是灰的），線與色帶都只是同一件事再說一次。 */
 .gallery-head {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  position: relative;
+  display: flex;
   align-items: center;
   gap: 1rem;
   padding: 1.5rem 2rem 1.25rem;
@@ -1063,6 +1331,9 @@ body,
 /* 標題：500 而不是 700。大小負責喊，字重不用跟著喊——一個 700 的標題會立刻
    讀成「預設樣式」。字距收 -0.02em，行高壓到 1.1，這樣它才站得住。 */
 .gallery-head h2 {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   margin: 0;
   font-size: 1.375rem;
   font-weight: 500;
@@ -1070,6 +1341,16 @@ body,
   line-height: 1.1;
   text-align: center;
   white-space: nowrap;
+}
+
+/* 小螢幕先讓元素照 flex 順序排，避免置中的標題與右側按鈕互相壓住。 */
+@media (max-width: 44rem) {
+  .gallery-head h2 {
+    position: static;
+    flex: 1;
+    min-width: 0;
+    transform: none;
+  }
 }
 
 /* 這一頁的按鈕只有兩階，而且都是全膠囊（999px）：主要＝黑底白字，次要＝
@@ -1081,7 +1362,7 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  justify-self: start;
+  flex: none;
   font: inherit;
   font-size: 0.875rem;
   font-weight: 500;
@@ -1103,12 +1384,14 @@ body,
 .gallery-import {
   justify-self: end;
   padding: 0.55rem 1.2rem;
-  border: none;
+  /* 平常先留同寬透明框，hover 換成黑框時不會把整列推動。 */
+  border: 1px solid transparent;
   border-radius: 999px;
   background: var(--ink);
   color: var(--surface);
   font-size: 0.8125rem;
   font-weight: 500;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
 /* 搜尋與膠囊那一列。原本膠囊左邊那條豎線拿掉了——兩者做的事不一樣（打字 vs
@@ -1250,6 +1533,7 @@ body,
   background-image: repeating-radial-gradient(circle at 50% 50%,
       rgb(0 0 0 / 3%) 0 1.25rem,
       rgb(0 0 0 / 0%) 1.25rem 2.5rem);
+  overflow: hidden;
 }
 
 /* manifest 宣告的封面。滿版蓋掉底下那格字，`object-fit: cover` 而不是 contain：
@@ -1262,6 +1546,18 @@ body,
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 180ms ease;
+}
+
+/* 只動實際的 preview 圖；沒有宣告封面的卡片仍維持原本的靜態底圖。 */
+.ext-card:hover .ext-card-cover {
+  transform: scale(1.035);
+}
+
+/* 耳朵是卡片的兄弟按鈕；游標從卡片移到它上面時，仍算在同一張卡上，所以封面
+   不應先縮回原尺寸再放大一次。 */
+.project-card-item:hover .ext-card-cover {
+  transform: scale(1.035);
 }
 
 .ext-card-initial {
@@ -1309,6 +1605,18 @@ body,
   font-size: 0.875rem;
   color: var(--ink-soft);
   line-height: 1.6;
+  letter-spacing: -0.01em;
+}
+
+/* 「這個資料夾是誰搬進來的」（§2 的收據）。
+
+   **比說明文字再降一階**，而且刻意不上色：它不是這個包在講的話，是我們對這台
+   機器上這個資料夾的紀錄。使用者只有在想「這東西哪來的、能不能拔掉」的時候才
+   會讀它，其餘時間它該安靜地待在那裡。 */
+.ext-card-source {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  line-height: 1.5;
   letter-spacing: -0.01em;
 }
 
@@ -1423,9 +1731,21 @@ body,
   stroke-width: 1.5;
 }
 
-.blockyard-field-bad {
-  stroke: #d43b3b;
-  stroke-width: 1.5;
+/* Blockly 原本的 warning icon 是 17×17 的三角驚嘆號。保留同一個 icon group
+   當點擊區（所以警告氣泡與鍵盤操作都不變），只把裡面的 SVG 畫成紅點。 */
+.blocklyWarningIcon>path {
+  display: none;
+}
+
+.blocklyWarningIcon>rect.blocklyIconSymbol {
+  x: 0;
+  y: 0;
+  width: 8px;
+  height: 8px;
+  rx: 4px;
+  ry: 4px;
+  fill: #ff0000;
+  stroke: none;
 }
 
 /* 運算式欄位用等寬字：`(${a} + 1) * 2` 的括號要對得起來。 */
@@ -2080,43 +2400,29 @@ body,
   font-weight: 500;
 }
 
-/* ------------------------------------------------------------------ *
- * 鍵盤導覽的焦點框（Blockly 13 內建，沒有 inject 選項可以關掉）。
- *
- * 按下方向鍵之後 Blockly 會在 `.injectionDiv` 掛上
- * `.blocklyKeyboardNavigation`，然後同時畫兩層框：藍色那層說「你人在哪一
- * 區」（工具箱／flyout／畫布三選一），黃色那層說「游標停在哪一個節點」。
- *
- * **拿掉的是「哪一區」那層。** 它是一圈 3px 實線，貼著工具箱、flyout、整張
- * 畫布的邊界畫滿——在一個滿版版面的編輯器上，那條線畫出來就是整個畫面被框
- * 住，而它要講的事（焦點在哪一區）節點那圈黃色已經講完了。順帶拿掉「整張
- * 畫布本身就是那個節點」的黃框（點一下空白處再按方向鍵就會出現），理由同一
- * 個：它畫的也是貼著邊界的巨大矩形。
- *
- * **積木、欄位、分類上那圈黃色留著。** 它是唯一說得出「現在按 Enter 會作用
- * 在哪一顆積木上」的東西，而且它只有一顆積木那麼大。
- *
- * 兩條都要 `!important`：Blockly 的 CSS 是 `inject()` 時才塞進 `<head>` 的，
- * 比這份打包好的樣式表晚，同權重會贏（同分類欄那一段的理由）。**這裡依賴
- * Blockly 的內部變數名與 class 名，換大版本時要複驗**——名字改掉的症狀是
- * 藍框回來，不是壞掉。
- * ------------------------------------------------------------------ */
-
-/* 藍框的三處（工具箱與 flyout 的 outline、畫布的 focus ring）全部只由這個
-   變數上色，所以蓋變數比逐條追那三組選擇器耐得住改版。節點色是另一個變數
-   （`--blockly-active-node-color`），不動。 */
+/* Blockly 的區域藍框與節點黃框統一隱藏；分類仍以原本的灰底顯示選取。
+   Blockly 在 inject 時才插入 CSS，因此變數需要 !important。 */
 .injectionDiv {
   --blockly-active-tree-color: transparent !important;
+  --blockly-active-node-color: transparent !important;
 }
 
-/* 「整張畫布就是那個節點」的黃框。這條得單獨寫：它上的是節點色。 */
+/* 滑鼠點擊也可能觸發瀏覽器原生焦點框，不只 Blockly 的鍵盤導覽樣式。 */
+.injectionDiv .blocklyToolbox:focus,
+.injectionDiv .blocklyToolboxCategoryContainer:focus,
+.injectionDiv .blocklyToolboxCategory:focus,
+.injectionDiv .blocklyFlyout:focus {
+  outline: none !important;
+}
+
 .injectionDiv .blocklyWorkspaceSelectionRing {
   stroke: none !important;
 }
 
 /* ------------------------------------------------------------------ *
- * 一句話的提示，蓋在畫布上方中央。點一下或六秒後消失——它說的是「這件事
- * 沒做成，原因是⋯」，不是一個要使用者回答的問題，所以不做成 modal。
+ * 一句話的提示，蓋在上方中央（`components/Toast.tsx`）。點一下或六秒後消失
+ * ——它說的是「這件事做完了」或「這件事沒做成，原因是⋯」，不是一個要使用者
+ * 回答的問題，所以不做成 modal。
  * ------------------------------------------------------------------ */
 
 .toast {
@@ -2136,6 +2442,17 @@ body,
   border-radius: 0.5rem;
   box-shadow: 0 4px 16px rgb(0 0 0 / 14%);
   cursor: pointer;
+}
+
+/* 主選單那一頁的同一條，**釘在視窗底部中央**。
+
+   `fixed` 是因為那一頁自己會捲（`.gallery` 是 `overflow: auto`），`absolute`
+   會跟著卡片捲出畫面。落在底部是因為那一頁上方中央是標題「專案」——判準與畫布
+   那一條相同：別蓋住它正在講的那個東西。 */
+.toast.is-page {
+  position: fixed;
+  top: auto;
+  bottom: 1.25rem;
 }
 
 /* 執行紀錄裡錯誤那一列附帶的補救按鈕（`BlockError.action`）。跟在訊息後面而
@@ -2402,7 +2719,7 @@ body,
  * 的長度由「裝了幾個包」決定，不是由執行時畫了幾張圖決定——早期版本讓標題當
  * 身分，而標題可以插值，一個迴圈就能生出無限多格。
  *
- * 而**編輯器不畫面板的內容**：它只給那個包一格 sandbox 的 iframe。所以這一段
+ * 而**編輯器不畫面板的內容**：它只給那個包一格 受信任的 iframe。所以這一段
  * 沒有任何圖表、表格、數值卡的樣式——那些住在包自己的 `ui/` 裡。
  * ------------------------------------------------------------------ */
 
@@ -2541,7 +2858,7 @@ body,
   display: flex;
 }
 
-.panel-window > * {
+.panel-window>* {
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -2709,12 +3026,10 @@ body,
   animation: import-spin 0.9s linear infinite;
 }
 
-/* 兩欄：左邊是讀得懂的（宣告與掃描），右邊是那份程式碼。**右邊比較寬**——
-   §12.1 那句話的主詞是原始碼，而一個被擠成 20 個字寬的程式碼欄等於沒有給。 */
 .import-body {
   flex: 1;
-  display: grid;
-  grid-template-columns: minmax(18rem, 22rem) 1fr;
+  display: block;
+  overflow: auto;
   min-height: 0;
   border-top: 1px solid var(--hairline);
 }
@@ -2747,54 +3062,12 @@ body,
   margin-top: 0;
 }
 
-.import-perms,
-.import-list,
-.import-findings {
+.import-list {
   margin: 0;
   padding: 0;
   list-style: none;
   font-size: 0.8125rem;
   line-height: 1.6;
-}
-
-.import-perms li {
-  display: flex;
-  flex-direction: column;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.import-perm-label {
-  font-weight: 500;
-}
-
-.import-perm-note {
-  color: var(--ink-soft);
-  font-size: 0.75rem;
-}
-
-/* 沒宣告卻掃到的那一列。整套配色裡最重的一級就是「轉黑加粗」，而這一頁刻意
-   沒有紅色——一個紅色的警告會讓每一個正常的包看起來都像出事了，而這條規則
-   的誤報率本來就不低（`codescan.py` 的第二點）。 */
-.import-perms li.is-mismatch .import-perm-note,
-.import-findings li.is-mismatch span {
-  color: var(--ink);
-  font-weight: 500;
-}
-
-.import-warn {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.4rem;
-  margin: 0.75rem 0 0;
-  font-size: 0.75rem;
-  line-height: 1.6;
-  color: var(--ink);
-}
-
-.import-warn svg {
-  flex: none;
-  margin-top: 0.15rem;
 }
 
 .import-list li {
@@ -2808,156 +3081,647 @@ body,
   word-break: break-all;
 }
 
-/* 掃描命中的那幾行。檔名是一顆按鈕——點它就把右邊那一欄換到那個檔案，這是
-   「指出來」與「替他讀」之間唯一的差別。 */
-.import-findings li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.4rem;
-  padding: 0.35rem 0;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.import-findings button {
-  font: inherit;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
-  padding: 0.1rem 0.4rem;
-  border: 1px solid var(--hairline);
-  border-radius: 5px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  cursor: pointer;
-}
-
-.import-findings button:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-}
-
-.import-findings span {
-  color: var(--ink-soft);
-  font-size: 0.75rem;
-}
-
 .import-none {
   margin: 0;
   font-size: 0.8125rem;
   color: var(--ink-soft);
 }
 
-/* 右邊那一欄：檔案清單在上、程式碼在下。清單橫排而不是側欄——一個積木包多半
-   只有三五個檔案，而一條垂直側欄會把已經很窄的程式碼再切一刀。 */
-.import-code {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
+/* ------------------------------------------------------------------ *
+ * 解除安裝那一格（extension-design.md §5）
+ *
+ * **它不是一句「你確定嗎」，是把收據攤出來。** 所以版面是一份 `<dl>`（三個
+ * 事實），不是一段警語——警語會被跳過，三個數字不會。
+ * ------------------------------------------------------------------ */
+
+/* 危險那一階：只有這一個動作會從磁碟上搬走東西，而它在整個編輯器裡只出現在
+   兩個地方（這一格與選單上那一條）。不做成色底按鈕——那會讓它在視覺上比
+   「取消」更像預設動作，而它不是。 */
+.ext-menu-item.is-danger {
+  color: var(--danger, #c62828);
 }
 
-.import-files {
+.uninstall {
+  width: min(26rem, calc(100vw - 3rem));
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 22%);
+}
+
+.uninstall h2 {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid var(--hairline);
-  max-height: 8rem;
-  overflow: auto;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+  font-size: 1rem;
 }
 
-.import-file {
+.uninstall-facts {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.uninstall-facts>div {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.uninstall-facts dt {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.uninstall-facts dd {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.uninstall-id {
+  color: var(--ink-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+
+.uninstall-note {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.5rem;
+  background: var(--surface-alt);
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.uninstall-note code {
+  font-size: 0.7rem;
+}
+
+.uninstall-error {
+  margin: 0 0 1rem;
+  color: var(--danger, #c62828);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.uninstall-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* 語言切換的存檔提示只有一句短訊息；沿用共用頁尾的內距會讓兩顆按鈕比視窗
+   內容多縮一層。拿掉那層後，按鈕回到這張小對話框的右下角。 */
+.language-save-actions {
+  padding: 1rem 0 0;
+}
+
+.uninstall-actions .button.is-danger {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.7rem;
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font: inherit;
+  gap: 0.4rem;
+  border-color: var(--danger, #c62828);
+  color: var(--danger, #c62828);
+}
+
+/* ------------------------------------------------------------------ *
+ * 更新那一段差集（extension-design.md §4）
+ *
+ * 三列，照 §4 那張表的嚴重度由上而下：**擋**、警告後放行、只說一聲。顏色只
+ * 用在前兩列——第三列（多三顆積木）是好消息，畫成黃色只會讓真正該看的那兩列
+ * 少一分注意力。
+ * ------------------------------------------------------------------ */
+
+.import-diff {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.5rem;
+  background: var(--surface-alt);
+}
+
+.import-diff h4 {
+  margin: 0 0 0.4rem;
   font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.import-diff ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+.import-diff.is-blocking {
+  background: color-mix(in srgb, var(--danger, #c62828) 8%, transparent);
+}
+
+.import-diff.is-blocking h4 {
+  color: var(--danger, #c62828);
+}
+
+.import-diff.is-warning h4 {
+  color: var(--warn, #b26a00);
+}
+
+/* 「滑到那幾顆去」——被擋下來時要一樣可解（§4）。 */
+.import-diff button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
   cursor: pointer;
 }
 
-.import-file:hover:not(:disabled) {
+/* GitHub 匯入對話框。網址輸入獨立成 modal，避免在目錄頁展開一整列而推動卡片。 */
+.gallery-github-modal {
+  width: min(32rem, calc(100vw - 3rem));
+}
+
+.gallery-github {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.gallery-github label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.gallery-github input {
+  min-width: 0;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.gallery-github p {
+  margin: 0.25rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.gallery-github .gallery-github-error {
+  color: #b42318;
+}
+
+/* 一句話、兩顆按鈕（`ConfirmDialog`）。版面借「解除安裝」那一格（`.uninstall`），
+   因為它們在畫面上是同一種東西：一個要使用者按下去的小對話框。 */
+.confirm-body {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+}
+
+.confirm-body p {
+  margin: 0 0 0.5rem;
+}
+
+.confirm-body p:last-child {
+  margin-bottom: 0;
+}
+
+.confirm-body code {
+  font-size: 0.75rem;
+}
+
+/* ------------------------------------------------------------------
+ * 專案（`docs/project-storage-design.md`）
+ *
+ * 面板本身一行 CSS 都沒有新的：它用的是擴充功能面板那一套（`.gallery*`、
+ * `.ext-card*`），因為它們是同一種東西——一頁「這台機器上有什麼」的目錄。
+ * 下面這幾段只補三個地方：工具列上那顆切換器、標頭右邊變成兩顆按鈕、以及
+ * 匯出／匯入那兩個面板自己的內容。
+ * ------------------------------------------------------------------ */
+
+/* 工具列最左邊那顆：**回到主選單**，而按鈕上寫的是現在這一份的名字。
+
+   一顆按鈕同時說兩件事：我在哪一份裡（名字）、上面還有一層（箭頭）。次要那一階
+   （淺灰底）——主要那一階（黑底）在這條工具列上是留給「執行」的。名字可能很長，
+   所以給一個上限並裁掉：一個 40 字的專案名不該把存檔按鈕推出畫面。 */
+.project-switch {
+  max-width: 14rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex: none;
+}
+
+/* 標頭右邊那兩顆（匯入、新專案）。 */
+.gallery-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
+  margin-left: auto;
+}
+
+.gallery-head-actions .gallery-import {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.gallery-head-actions .gallery-import:hover:not(:disabled) {
   border-color: var(--ink);
+  background: transparent;
   color: var(--ink);
 }
 
-.import-file.is-on {
-  background: var(--ink);
+/* 匯入是次要那一階：這一頁的主要動作是「新專案」——它是使用者九成的時候按的
+   那一顆，而匯入一年可能按不到一次。 */
+.gallery-import.is-secondary {
+  background: var(--surface-alt);
+  color: var(--ink);
+}
+
+.gallery-import.is-secondary:hover:not(:disabled) {
+  background: #e6e6e6;
+}
+
+/* 主選單左上角那一格：這個工具的名字。**這一頁沒有返回**（它是家）。 */
+.gallery-brand {
+  flex: none;
+  font-size: 1rem;
+  color: var(--muted);
+}
+
+/* **只剩一句話用它：被踢回來時的「找不到專案 X」。** 做完的事（改完名、複製完、
+   刪完、匯出完）走的是 `.toast`——一句回執該自己走掉，而這一句不該：它是「你為
+   什麼會在這裡」，使用者可能還沒開始讀。所以它排在標頭底下、跟錯誤那一列同一個
+   位置，留在原地等人看完。 */
+.gallery-notice {
+  margin: 0;
+  padding: 0 2rem 1rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+/* 專案卡片是打開專案的按鈕，耳朵是另一顆按鈕；外層提供兩者共用的定位基準。 */
+.project-card-item {
+  position: relative;
+}
+
+/* 卡片右上角的監聽開關（§9.2 的 active）。
+
+   壓在預覽圖的右上角——位置照擴充功能那一頁的「已加入」勾
+   （`.ext-card-check`），因為兩頁是同一種目錄，而使用者不該為了同一個問題
+   （哪幾張是「開著」的）在兩頁學兩個位置。沒有沿用同一個 class 是因為它們說
+   的不是同一件事：一個是「裝了」，一個是「現在正在跑」。
+
+   關閉時是白底黑字，讓每張卡都有一個能開啟監聽的入口；開啟後換成黑底白字，
+   延續原本一眼能掃出哪些專案正在背景運作的層級。
+
+   **是一顆寫著字的膠囊，不是一個純圖示的圓。** 工具列上那顆耳朵認得出來，靠
+   的是那一列只有六個入口、而且旁邊就是那頂帽子；這裡它孤零零壓在一張使用者
+   自己的截圖上，沒有任何東西替它翻譯。
+
+   浮起來的那層陰影不是裝飾：這一頁的卡片刻意沒有陰影（分開它們的是髮絲邊與
+   留白），而這顆是唯一一個**疊在別的東西上面**的元素——沒有陰影的話，它在一張
+   深色截圖上會讀成那張圖自己的一部分。 */
+.project-card-live {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.5rem;
+  /* 預留透明邊框，hover 變黑框時尺寸不會跳；靜止時不留灰邊。 */
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 90%);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 28%);
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.project-card-live.is-on {
   border-color: var(--ink);
+  background: var(--ink);
   color: var(--surface);
 }
 
-/* 攤不開的（圖片、字型）。仍然列出來——「這個 zip 裡到底有什麼」是這一頁要
-   回答的第一個問題——但點它沒有意義，所以它按不下去。 */
-.import-file:disabled {
-  cursor: default;
-  color: var(--ink-faint);
-  opacity: 0.65;
+.project-card-live:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: #e6e6e6;
+  color: var(--ink);
 }
 
-.import-file-name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+/* 與「新專案」一樣：實底的主要動作在 hover 時退成白底黑框。 */
+.project-card-live.is-on:hover:not(:disabled) {
+  background: transparent;
 }
 
-.import-file-size {
-  color: var(--ink-faint);
-  font-size: 0.6875rem;
-}
-
-.import-file.is-on .import-file-size {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.import-omitted {
-  width: 100%;
-  margin: 0.25rem 0 0;
-  font-size: 0.6875rem;
-  color: var(--ink-faint);
-}
-
-/* 程式碼本身。**橫向自己捲**（`overflow: auto` + 不折行）：折行的程式碼讀起來
-   像另一份程式碼，而一個裝了 200 行 Python 的欄位本來就該可以往右看。 */
-.import-source {
-  flex: 1;
-  margin: 0;
-  padding: 1.25rem 1.5rem 3rem;
-  overflow: auto;
-  background: var(--surface);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.75rem;
-  line-height: 1.7;
-  tab-size: 4;
-  white-space: pre;
-}
-
-.import-source:focus-visible {
+.project-card-live:focus-visible {
   outline: 2px solid var(--ink);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 
-.import-truncated {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--hairline);
-  color: var(--ink-faint);
-  font-family: system-ui, sans-serif;
+.project-card-live:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+/* 一格名字。對話框自己沒有內距（`.modal`），所以這一段要自己給。 */
+.project-name-modal {
+  width: min(44rem, calc(100vw - 2rem));
+}
+
+.project-name-modal .modal-head {
+  padding: 1rem 1.5rem;
+}
+
+.project-name-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.25rem 1.5rem 0.4rem;
+  font-size: 0.8125rem;
+}
+
+.project-name-body label {
+  color: var(--muted);
+}
+
+.project-name-body .keys-input {
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.project-name-body .keys-input:focus {
+  outline: none;
+  border-color: var(--ink);
+}
+
+.project-name-modal .modal-foot {
+  padding: 1rem 1.5rem 1.25rem;
+}
+
+.project-name-modal .modal-hint {
+  padding-right: 1.5rem;
+  padding-left: 1.5rem;
+}
+
+.project-name-error {
+  color: #b42318;
+}
+
+/* 匯出面板（§5 那張草圖）。三段，由上而下：存到哪、要不要帶金鑰、會帶走什麼。 */
+.export-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.9rem 1rem 0.2rem;
+  font-size: 0.8125rem;
+}
+
+.export-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.export-label {
+  color: var(--muted);
+  flex: none;
+}
+
+/* 路徑那一格是**唯讀的回執**，不是輸入框（§9）——所以它長得像一段被引用的
+   文字，不像一格可以打字的東西。太長就從中間裁，尾巴（檔名）比開頭重要。 */
+.export-path {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.35rem;
+  background: var(--surface-alt);
+  color: var(--fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  direction: rtl;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.export-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+}
+
+/* 那個勾選框旁邊的清單：**這次會走出去哪幾把**。縮排是刻意的——它屬於上面
+   那一句話，不是另一段。 */
+.export-secrets {
+  margin: 0;
+  padding: 0 0 0 1.6rem;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
   font-size: 0.75rem;
 }
 
-/* 窄畫面：兩欄疊成一欄。摘要在上、程式碼在下——讀得懂的先給。 */
-@media (max-width: 60rem) {
-  .import-body {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    overflow: auto;
-  }
+.export-secrets li {
+  display: flex;
+  gap: 0.6rem;
+  color: var(--muted);
+}
 
-  .import-summary {
-    overflow: visible;
-  }
+.export-secrets code {
+  color: var(--fg);
+}
+
+.export-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+/* 勾了才出現的那一句。它是那個勾選框的代價，所以要在按下去之前說——紅字，
+   因為這一頁只有這一件事會讓一個檔案變危險。 */
+.export-warn {
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.35rem;
+  background: #fef3f2;
+  color: #b42318;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+/* 匯入那一頁的清單（會發生什麼事）。它用 `.gallery` 的外框，所以這裡只管內容。 */
+.import-plan {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 0 2rem 2rem;
+  max-width: 46rem;
+}
+
+.import-plan h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.import-plan-note {
+  margin: 0;
+  color: var(--ink-soft, var(--muted));
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.import-plan-list {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+}
+
+.import-plan-list code {
+  color: var(--ink-faint, var(--muted));
+  font-size: 0.75rem;
+}
+
+/* 多包安裝摘要底部的「安裝其餘插件」（§7）。
+
+   在頁面最底下而不是標頭，是因為一顆放在最上面的略過鍵會變成預設路徑，而審閱
+   畫面就真的成了儀式。放在這裡，使用者至少捲過了這一個包的摘要。
+
+   次要那一階、靠右：它不是這一頁的建議動作，主要動作在標頭上那顆「安裝」。 */
+.import-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  border-top: 1px solid var(--hairline);
+  background: var(--surface);
+  flex: none;
+}
+
+/* 金鑰面板最上面那一句：**這幾把是誰的**（§16 Q23）。
+
+   在標題底下、清單上面——它是讀那份清單之前要先知道的事，而不是一則附註。 */
+.keys-scope {
+  padding: 0.6rem 1rem 0;
+}
+
+/* Trusted editor extensions: host-owned slots, plugin-owned content. */
+.plugin-actions {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+/* 沒有插件入口時不留下空 flex item；否則 topbar 會在「執行紀錄」和「金鑰」
+   之間各算一次 gap，看起來像多出一段空白。 */
+.plugin-actions:empty {
+  display: none;
+}
+
+.plugin-menu {
+  position: relative;
+}
+
+.plugin-menu summary {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plugin-menu>div {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 80;
+  display: grid;
+  gap: .4rem;
+  padding: .7rem;
+  min-width: 12rem;
+  background: white;
+  border: 1px solid #d8d8df;
+  border-radius: .5rem;
+}
+
+.plugin-panels {
+  position: absolute;
+  z-index: 12;
+  right: 1rem;
+  top: 1rem;
+  width: min(360px, 85vw);
+  max-height: 60%;
+  overflow: auto;
+  background: white;
+  border: 1px solid #d8d8df;
+  border-radius: .7rem;
+  box-shadow: 0 5px 20px #0002;
+}
+
+.plugin-panels nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+  padding: .5rem;
+  border-bottom: 1px solid #e4e4ea;
+}
+
+.plugin-panel-content {
+  padding: .8rem;
+  min-height: 8rem;
+}
+
+.plugin-manager {
+  padding: .7rem 1.5rem;
+}
+
+.plugin-manager>div {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: .4rem 0;
+}
+
+.plugin-manager [role="alert"] {
+  color: #a32828;
+}
+
+.plugin-reload {
+  padding: .6rem 1rem;
+  background: #fff1ca;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.import-body .import-summary {
+  overflow: visible;
+  max-width: 58rem;
+  margin: auto;
+  width: 100%;
 }

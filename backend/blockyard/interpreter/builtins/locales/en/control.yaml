@@ -1,0 +1,20 @@
+name: Control
+description: Conditions, loops, waiting, and error handling
+blocks:
+  if: {text: "if %(condition) then"}
+  if_else: {text: "if %(condition) then … else", repeatLabel: "else if %(condition) then"}
+  repeat: {text: "repeat %(times) times"}
+  repeat_until: {text: "repeat until %(condition)"}
+  forever: {text: "forever"}
+  count_to: {text: "count %(name) from %(start) to %(end)", args: {name: {label: Counter variable}}}
+  for_each: {text: "for each %(name) in %(list)", args: {name: {label: Item variable}}}
+  wait: {text: "wait %(seconds) seconds"}
+  wait_until: {text: "wait until %(condition)"}
+  stop:
+    text: "stop %(scope)"
+    args:
+      scope:
+        options: {this_script: This script, all: All}
+  throw: {text: "throw error %(message)"}
+  retry: {text: "try up to %(times) times, waiting %(seconds) seconds"}
+  try_catch: {text: "try … on error store it in %(error_name)", args: {error_name: {label: Error variable}}}

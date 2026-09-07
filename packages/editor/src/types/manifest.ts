@@ -10,9 +10,11 @@ export type Name = string;
 export type Version = string;
 export type Author = string | null;
 export type Description = string | null;
+export type Defaultlocale = string;
 export type Color = string | null;
 export type Cover = string | null;
-export type Permissions = ('net' | 'fs.read' | 'fs.write' | 'subprocess' | 'env')[];
+export type Entry = string;
+export type Apiversion = number;
 export type Requirements = string[];
 export type Key = string;
 export type Type = 'string' | 'number' | 'boolean' | 'secret';
@@ -23,7 +25,7 @@ export type Envvar = string | null;
 export type Config = ConfigSpec[];
 export type Id1 = string;
 export type Name1 = string;
-export type Entry = string;
+export type Entry1 = string;
 export type Panels = PanelSpec[];
 export type Opcode = string;
 export type Type1 = 'command' | 'reporter' | 'boolean' | 'hat';
@@ -79,6 +81,7 @@ export type Action = 'open_url' | 'open_config' | 'call' | 'create_procedure';
 export type Url = string | null;
 export type Handler = string | null;
 export type Section = string | boolean;
+export type Id2 = string | null;
 export type Palette = (BlockSpec | ButtonSpec | SectionSpec)[];
 export type Builtin = boolean;
 
@@ -92,14 +95,22 @@ export interface BlockyardExtensionManifest {
   version: Version;
   author?: Author;
   description?: Description;
+  defaultLocale?: Defaultlocale;
   color?: Color;
   cover?: Cover;
-  permissions?: Permissions;
+  editor?: EditorSpec | null;
   requirements?: Requirements;
   config?: Config;
   panels?: Panels;
   palette?: Palette;
   builtin?: Builtin;
+}
+/**
+ * 受信任的主頁 ES module；API 版本由前端 runtime 檢查。
+ */
+export interface EditorSpec {
+  entry: Entry;
+  apiVersion: Apiversion;
 }
 /**
  * 使用者要填的設定。`secret` 型別存進金鑰庫（§12.1）。
@@ -124,7 +135,7 @@ export interface ConfigSpec {
  * 它同時是「面板屬於積木包、不屬於專案」這句話的落點：`project.json` 一個字
  * 都不記面板，它只記 `extensions`（§13.3，而且是算出來的）。
  *
- * `entry` 是**必填**：編輯器不畫面板的內容，它只給這格一個 `sandbox` 的
+ * `entry` 是**必填**：編輯器不畫面板的內容，它只給這格一個受信任的
  * iframe。早期版本讓「不寫 entry」退回一組內建 widget（折線／表格／數值卡），
  * 而那條路的代價是**每加一種圖表就要改編輯器一次**——一個想畫 three.js 的包
  * 永遠等不到那一天。現在編輯器不知道什麼是折線圖，那是包的 `ui/` 的事。
@@ -132,7 +143,7 @@ export interface ConfigSpec {
 export interface PanelSpec {
   id: Id1;
   name: Name1;
-  entry: Entry;
+  entry: Entry1;
 }
 /**
  * 一顆積木的宣告。`opcode` 是**不帶命名空間**的短名。
@@ -263,6 +274,7 @@ export interface ButtonSpec {
  */
 export interface SectionSpec {
   section: Section;
+  id?: Id2;
 }
 
 /** 這份檔案的入口型別。schema 的 `title` 決定了上面那個名字。 */

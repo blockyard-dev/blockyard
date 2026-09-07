@@ -7,10 +7,7 @@
    一個會回來的 await。
 2. **連線池共用。** 一個包一個 client 等於一個包一組連線池；`http` 與 `openai`
    打同一個網域時沒有理由開兩份。
-3. **它是權限的落點。** `permissions: [net]` 在 §12.1 是講給使用者看的一句話，
-   而這裡是它第一個真的守得住的地方（見 `loading.py::check_net_permission`，
-   `InProcessHost`／subprocess worker 都呼叫它）——沒宣告 `net` 的包拿不到
-   client。守不住的宣告不如不宣告。
+3. **生命週期共用。** Host 卸載時關閉 client，插件不需要權限宣告。
 
 **重試只重試「連不上」**（`AsyncHTTPTransport(retries=)` 的語意就是連線建立階段）。
 收到回應之後的重試一律不做：`POST` 不是冪等的，而「幫你重送一次訂單」是這一層

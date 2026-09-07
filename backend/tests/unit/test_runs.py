@@ -24,7 +24,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blockyard.api.app import create_app
-from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.extensions import BUNDLED_ROOT
 from blockyard.runs.broker import HOT_THRESHOLD, ProjectHub, RunBroker, collapse
 
 # --------------------------------------------------------------------------
@@ -99,7 +99,7 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
 
     進 `with` 也順便跑到 lifespan，也就是關機時 `RunManager.shutdown()` 那條路。
     """
-    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=BUNDLED_ROOT)
     with TestClient(app) as client:
         yield client
 
@@ -537,6 +537,11 @@ def test_unknown_run_id_closes_the_socket(client: TestClient) -> None:
         with client.websocket_connect("/ws/run/r_nope") as ws:
             ws.receive_json()
     assert excinfo.value.code == WS_RUN_NOT_FOUND
+    assert json.loads(excinfo.value.reason) == {
+        "code": "run.not_found",
+        "params": {"runId": "r_nope"},
+        "message": "找不到執行 r_nope",
+    }
 
 
 def test_late_subscriber_still_sees_a_finished_run(client: TestClient) -> None:

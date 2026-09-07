@@ -3,6 +3,11 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchDropdownOptions } from './dropdownCache';
+import { currentProjectId } from '../../project/current';
+
+/** 每一條下拉請求都說得出自己是替哪個專案問的（§16 Q23，見 `dropdownCache.ts`）。 */
+const url = (extId: string, source: string) =>
+  `/api/extensions/${extId}/dropdown/${source}?project=${currentProjectId()}`;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -19,7 +24,7 @@ describe('fetchDropdownOptions', () => {
   it('打對的端點，把 {label,value} 轉成 [label, value] 元組', async () => {
     const fn = stubFetch([{ label: 'GET', value: 'GET' }]);
     const options = await fetchDropdownOptions('http', 'cache-a');
-    expect(fn).toHaveBeenCalledWith('/api/extensions/http/dropdown/cache-a', { method: 'POST' });
+    expect(fn).toHaveBeenCalledWith(url('http', 'cache-a'), { method: 'POST' });
     expect(options).toEqual([['GET', 'GET']]);
   });
 
@@ -58,13 +63,13 @@ describe('fetchDropdownOptions', () => {
   it('沒有 args 就不帶 body', async () => {
     const fn = stubFetch([{ label: 'GET', value: 'GET' }]);
     await fetchDropdownOptions('http', 'cache-g', { args: {} });
-    expect(fn).toHaveBeenCalledWith('/api/extensions/http/dropdown/cache-g', { method: 'POST' });
+    expect(fn).toHaveBeenCalledWith(url('http', 'cache-g'), { method: 'POST' });
   });
 
   it('有 args 就送進 body', async () => {
     const fn = stubFetch([{ label: '#一般', value: '10' }]);
     await fetchDropdownOptions('discord', 'cache-h', { args: { server: '1' } });
-    expect(fn).toHaveBeenCalledWith('/api/extensions/discord/dropdown/cache-h', {
+    expect(fn).toHaveBeenCalledWith(url('discord', 'cache-h'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ args: { server: '1' } }),

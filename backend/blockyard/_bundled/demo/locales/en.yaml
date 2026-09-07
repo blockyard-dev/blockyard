@@ -1,0 +1,20 @@
+name: Demo
+description: Test extension for validating the Host boundary without external services
+blocks:
+  echo: {text: "echo %(text)"}
+  announce: {text: "announce %(text)"}
+  wrap: {text: "wrap %(body) as an object"}
+  add: {text: "%(a) plus %(b)"}
+  is_even: {text: "%(n) is even"}
+  color_of: {text: "color of fruit %(fruit)"}
+  broken_returns: {text: "declare object but return text (intentional)"}
+  count_items: {text: "number of items in %(items)"}
+  not_transportable: {text: "return a value that cannot cross the process boundary (intentional)"}
+  blow_up: {text: "intentionally raise a Python exception"}
+  say_to_panel: {text: "say %(text) to the demo panel"}
+  say_to_panel_undeclared: {text: "send to a nonexistent panel (intentional)"}
+  on_tick: {text: "on every tick"}
+config:
+  greeting: {label: Greeting prefix}
+panels:
+  demo: {name: Demo panel}

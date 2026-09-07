@@ -87,6 +87,7 @@ async def _change(t: Thread, b: Block) -> None:
     if not t.scope.has(name):
         raise UndefinedVariableError(
             f'未知變數 "{name}"，「改變」不能用在還沒建立的變數上',
+            params={"name": name},
             hint=suggest_name(name, t.scope.known_names()) or "請先用「設定」建立它",
         )
     delta = await t.number(b, "value", default=0)
@@ -125,6 +126,7 @@ def _get_list(t: Thread, b: Block) -> list:
     if not t.scope.has(name):
         raise UndefinedVariableError(
             f'未知變數 "{name}"',
+            params={"name": name},
             hint=suggest_name(name, t.scope.known_names()) or "請先用「設定」建立它",
         )
     v = t.scope.get(name)

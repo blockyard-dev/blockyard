@@ -18,6 +18,15 @@ from blockyard.extensions import secret_store
 
 SECRET_VALUE = "sk-imported-value"  # pragma: allowlist secret
 
+#: 金鑰屬於一個專案（§16 Q23），所以每一條路都要說出是哪一個。
+PROJECT = "prj_test"
+#: keyring 裡那一行的擁有者。測試直接寫進去時要跟端點看的是同一格。
+VAULT = secret_store.owner_of(PROJECT, "vault")
+
+
+def url(path: str = "") -> str:
+    return f"/api/keys{path}?project={PROJECT}"
+
 
 def _write_vault_extension(root: Path) -> None:
     pkg = root / "vault"
@@ -50,7 +59,7 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
 
 
 def test_list_keys_reports_configured_state_without_leaking_the_value(client: TestClient) -> None:
-    res = client.get("/api/keys")
+    res = client.get(url())
     assert res.status_code == 200
     entries = res.json()
     (vault_entry,) = [e for e in entries if e["extId"] == "vault"]
@@ -64,8 +73,8 @@ def test_list_keys_reports_configured_state_without_leaking_the_value(client: Te
         "suffix": None,
     }
 
-    secret_store.set("vault", "api_key", SECRET_VALUE)
-    res = client.get("/api/keys")
+    secret_store.set(VAULT, "api_key", SECRET_VALUE)
+    res = client.get(url())
     (vault_entry,) = [e for e in res.json() if e["extId"] == "vault"]
     assert vault_entry["configured"] is True
     # 末四碼是刻意的例外，讓使用者分得出裝著的是哪一把；完整明文仍然不回來。
@@ -82,7 +91,7 @@ def test_import_env_writes_matched_lines_and_lists_unmatched_names_only(client: 
             "SOME_OTHER_KEY=whatever-nobody-declared",
         ]
     )
-    res = client.post("/api/keys/import-env", json={"text": env_text})
+    res = client.post(url("/import-env"), json={"text": env_text})
     assert res.status_code == 200, res.text
     body = res.json()
 
@@ -91,32 +100,32 @@ def test_import_env_writes_matched_lines_and_lists_unmatched_names_only(client: 
     assert SECRET_VALUE not in res.text
     assert "whatever-nobody-declared" not in res.text
 
-    assert secret_store.get("vault", "api_key") == SECRET_VALUE
+    assert secret_store.get(VAULT, "api_key") == SECRET_VALUE
 
-    listed = client.get("/api/keys").json()
+    listed = client.get(url()).json()
     (vault_entry,) = [e for e in listed if e["extId"] == "vault"]
     assert vault_entry["configured"] is True
 
 
 def test_import_env_does_not_write_when_nothing_matches(client: TestClient) -> None:
-    res = client.post("/api/keys/import-env", json={"text": "RANDOM=1\n"})
+    res = client.post(url("/import-env"), json={"text": "RANDOM=1\n"})
     assert res.status_code == 200
     body = res.json()
     assert body["written"] == []
     assert body["unmatched"] == ["RANDOM"]
-    assert secret_store.get("vault", "api_key") is None
+    assert secret_store.get(VAULT, "api_key") is None
 
 
 def test_短的金鑰整個不給末四碼(client: TestClient) -> None:
     # 末四碼對一把 6 個字元的密鑰來說不是遮蔽，是洩漏。
-    secret_store.set("vault", "api_key", "abc123")
-    (entry,) = [e for e in client.get("/api/keys").json() if e["extId"] == "vault"]
+    secret_store.set(VAULT, "api_key", "abc123")
+    (entry,) = [e for e in client.get(url()).json() if e["extId"] == "vault"]
     assert entry["configured"] is True
     assert entry["suffix"] is None
 
 
 def test_put_寫得進去而且回的是狀態不是值(client: TestClient) -> None:
-    res = client.put("/api/keys/vault/api_key", json={"value": SECRET_VALUE})
+    res = client.put(url("/vault/api_key"), json={"value": SECRET_VALUE})
     assert res.status_code == 200, res.text
     assert res.json() == {
         "extId": "vault",
@@ -125,64 +134,94 @@ def test_put_寫得進去而且回的是狀態不是值(client: TestClient) -> N
         "suffix": SECRET_VALUE[-4:],
     }
     assert SECRET_VALUE not in res.text
-    assert secret_store.get("vault", "api_key") == SECRET_VALUE
+    assert secret_store.get(VAULT, "api_key") == SECRET_VALUE
 
 
 def test_put_直接覆寫既有的那一把(client: TestClient) -> None:
     # 「換一把」跟「第一次填」在使用者眼裡是同一個動作。
-    client.put("/api/keys/vault/api_key", json={"value": "sk-old-value-aaaa"})
-    client.put("/api/keys/vault/api_key", json={"value": "sk-new-value-bbbb"})
-    assert secret_store.get("vault", "api_key") == "sk-new-value-bbbb"
+    client.put(url("/vault/api_key"), json={"value": "sk-old-value-aaaa"})
+    client.put(url("/vault/api_key"), json={"value": "sk-new-value-bbbb"})
+    assert secret_store.get(VAULT, "api_key") == "sk-new-value-bbbb"
 
 
 def test_put_不收沒有被宣告過的金鑰(client: TestClient) -> None:
     # 沒有這道檢查，這個端點就是一個「從瀏覽器往 OS 鑰匙圈塞任意鍵值」的入口。
-    res = client.put("/api/keys/vault/not_declared", json={"value": "x" * 20})
+    res = client.put(url("/vault/not_declared"), json={"value": "x" * 20})
     assert res.status_code == 404
-    res = client.put("/api/keys/no_such_pack/api_key", json={"value": "x" * 20})
+    res = client.put(url("/no_such_pack/api_key"), json={"value": "x" * 20})
     assert res.status_code == 404
 
 
 def test_put_不收空值(client: TestClient) -> None:
-    assert client.put("/api/keys/vault/api_key", json={"value": "   "}).status_code == 400
-    assert secret_store.get("vault", "api_key") is None
+    assert client.put(url("/vault/api_key"), json={"value": "   "}).status_code == 400
+    assert secret_store.get(VAULT, "api_key") is None
 
 
 def test_delete_拿得掉而且連按兩下不會噴錯(client: TestClient) -> None:
-    secret_store.set("vault", "api_key", SECRET_VALUE)
+    secret_store.set(VAULT, "api_key", SECRET_VALUE)
 
-    res = client.delete("/api/keys/vault/api_key")
+    res = client.delete(url("/vault/api_key"))
     assert res.status_code == 200, res.text
     assert res.json()["removed"] is True
-    assert secret_store.get("vault", "api_key") is None
+    assert secret_store.get(VAULT, "api_key") is None
 
     # 端點描述的是「結束狀態」：本來就沒有也是 200。
-    again = client.delete("/api/keys/vault/api_key")
+    again = client.delete(url("/vault/api_key"))
     assert again.status_code == 200
     assert again.json()["removed"] is False
 
 
 def test_delete_一樣要對得上宣告(client: TestClient) -> None:
-    assert client.delete("/api/keys/vault/not_declared").status_code == 404
+    assert client.delete(url("/vault/not_declared")).status_code == 404
 
 
 def test_reveal_是唯一一個給得出完整明文的地方(client: TestClient) -> None:
-    secret_store.set("vault", "api_key", SECRET_VALUE)
+    secret_store.set(VAULT, "api_key", SECRET_VALUE)
 
-    res = client.get("/api/keys/vault/api_key/reveal")
+    res = client.get(url("/vault/api_key/reveal"))
     assert res.status_code == 200, res.text
     assert res.json() == {"value": SECRET_VALUE}
     # 這一份不該留在任何一層快取裡。
     assert res.headers["cache-control"] == "no-store"
 
     # 而列表那條路仍然只給末四碼——明文沒有因為開了 /reveal 就滲進去。
-    assert SECRET_VALUE not in client.get("/api/keys").text
+    assert SECRET_VALUE not in client.get(url()).text
 
 
 def test_reveal_沒設定的那一把是_404(client: TestClient) -> None:
-    assert client.get("/api/keys/vault/api_key/reveal").status_code == 404
+    assert client.get(url("/vault/api_key/reveal")).status_code == 404
 
 
 def test_reveal_一樣要對得上宣告(client: TestClient) -> None:
-    assert client.get("/api/keys/vault/not_declared/reveal").status_code == 404
-    assert client.get("/api/keys/no_such_pack/api_key/reveal").status_code == 404
+    assert client.get(url("/vault/not_declared/reveal")).status_code == 404
+    assert client.get(url("/no_such_pack/api_key/reveal")).status_code == 404
+
+
+def test_keys_without_a_project_is_a_readable_400(client: TestClient) -> None:
+    """**沒帶 `?project=` 就 400**，不是「就用預設那個專案」。
+
+    後者會寫進一個使用者沒有打開的專案，而那是一句沒有人看得懂的「我明明填過
+    了」——這台機器上的金鑰面板正是那句話最容易發生的地方（`api/keys.py`）。
+    """
+    assert client.get("/api/keys").status_code == 400
+    assert client.put("/api/keys/vault/api_key", json={"value": "x" * 20}).status_code == 400
+
+
+def test_two_projects_do_not_share_a_key(client: TestClient) -> None:
+    """兩個專案各接一個 Discord bot，後填的**不會**蓋掉先填的（§16 Q23）。
+
+    這是「每個專案都隔離」在測試裡的樣子，而它同時說出了代價：換一個專案就是
+    從頭填一次。
+    """
+    client.put("/api/keys/vault/api_key?project=prj_a", json={"value": "sk-aaaa-1111"})
+    client.put("/api/keys/vault/api_key?project=prj_b", json={"value": "sk-bbbb-2222"})
+
+    a = client.get("/api/keys/vault/api_key/reveal?project=prj_a").json()["value"]
+    b = client.get("/api/keys/vault/api_key/reveal?project=prj_b").json()["value"]
+    assert (a, b) == ("sk-aaaa-1111", "sk-bbbb-2222")
+
+    # 而第三個專案一把都沒有——它不是「繼承」，是空的。
+    (entry,) = [
+        e for e in client.get("/api/keys?project=prj_c").json() if e["extId"] == "vault"
+    ]
+    assert entry["configured"] is False

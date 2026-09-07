@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 
 from blockyard.errors import BlockyardError, ValidationError
-from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT, open_registry
+from blockyard.extensions import BUNDLED_ROOT, open_registry
 from blockyard.interpreter import builtins as _builtins  # noqa: F401  匯入即註冊
 from blockyard.interpreter.declarations import expression_fields
 from blockyard.interpreter.engine import Interpreter
@@ -94,7 +94,7 @@ async def run_case(case: Case) -> Result:
         if isinstance(e, dict) and "id" in e
     ]
     registry = (
-        await open_registry(DEFAULT_EXTENSIONS_ROOT, sink=sink, only=declared)
+        await open_registry(BUNDLED_ROOT, sink=sink, only=declared)
         if declared
         else None
     )

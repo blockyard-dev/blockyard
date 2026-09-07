@@ -1,86 +1,18 @@
-/**
- * 審閱畫面的規則那一半（§12.1）。純函式，所以它測得到。
- *
- * 這裡真正在做的一件事是**把兩份話併成一張表**：manifest 的 `permissions`
- * （作者宣告的）與靜態掃描看到的（程式碼真的做的）。分成兩區畫的話，使用者
- * 要自己在兩份清單之間對照才看得出「宣告說不上網、程式碼裡有 httpx」——而那
- * 正是 §12.1 表格裡「與宣告不符時警告」唯一想讓他看見的事。
- */
-import type { ImportFinding, ImportReview } from '../api/client';
-
-/**
- * 權限的中文說法。**認不得的字串原樣顯示**——後端加一個新權限時，這一頁會畫出
- * 一列 `usb`，而那比一列空白誠實得多（同一條線：D21 之後前端不認識任何一個
- * 積木包的 id）。
- */
-const LABELS: Record<string, string> = {
-  net: '連上網路',
-  'fs.read': '讀這台機器上的檔案',
-  'fs.write': '寫或刪這台機器上的檔案',
-  subprocess: '執行別的程式',
-  env: '讀環境變數',
-};
-
-export function permissionLabel(permission: string): string {
-  return LABELS[permission] ?? permission;
-}
-
-export interface PermissionRow {
-  permission: string;
-  label: string;
-  /** manifest 宣告了這一項。 */
-  declared: boolean;
-  /** 靜態掃描在程式碼裡看到幾行。**0 不代表沒有**（掃描一定漏報）。 */
-  seen: number;
-}
-
-/**
- * 一項權限一列，**沒宣告卻掃到的排最前面**。
- *
- * 排序不是美觀問題：這一頁上唯一需要使用者停下來想一秒的就是那幾列，而它們
- * 混在一份按字母排的清單裡就等於不存在。
- */
-export function permissionRows(review: ImportReview): PermissionRow[] {
-  const declared = new Set(review.permissions);
-  const seen = new Map<string, number>();
-  for (const f of review.findings) {
-    if (f.permission) seen.set(f.permission, (seen.get(f.permission) ?? 0) + 1);
-  }
-  const rows = [...new Set([...declared, ...seen.keys()])].map((permission) => ({
-    permission,
-    label: permissionLabel(permission),
-    declared: declared.has(permission),
-    seen: seen.get(permission) ?? 0,
-  }));
-  rows.sort((a, b) => {
-    const mismatch = Number(a.declared) - Number(b.declared);
-    return mismatch !== 0 ? mismatch : a.permission.localeCompare(b.permission);
-  });
-  return rows;
-}
-
-/**
- * 不對應任何一項權限的那幾條（`eval`、`pickle`、語法錯誤）。
- *
- * 它們永遠只是「說一聲」：沒有一種宣告能讓 `eval` 變成相符，所以把它們放進上面
- * 那張表只會多出一列永遠標著紅字、而使用者做不了任何事的東西。
- */
-export function looseFindings(review: ImportReview): ImportFinding[] {
-  return review.findings.filter((f) => f.permission === null);
-}
-
-/** 掃到、但 manifest 沒宣告的那幾條。審閱畫面上那一句警告數的就是它。 */
-export function mismatchedFindings(review: ImportReview): ImportFinding[] {
-  return review.findings.filter((f) => f.permission !== null && !f.declared);
-}
+/** 安裝摘要與更新對畫布的影響。 */
+import type { ExtensionDiff, ImportReview } from '../api/client';
+import { list, number, t } from '../i18n';
 
 /** `1234` → `1.2 KB`。檔案清單上那一欄。 */
 export function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${number(bytes)} B`;
   const kb = bytes / 1024;
-  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  if (kb < 1024) return `${number(kb, kb < 10
+    ? { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+    : { maximumFractionDigits: 0 })} KB`;
   const mb = kb / 1024;
-  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+  return `${number(mb, mb < 10
+    ? { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+    : { maximumFractionDigits: 0 })} MB`;
 }
 
 /**
@@ -90,8 +22,78 @@ export function formatSize(bytes: number): string {
  * 對「多了 3 個相依套件」無話可說，而那份清單本來就攤在下面。
  */
 export function summarize(review: ImportReview): string {
-  const parts: string[] = [`${review.blocks.length} 顆積木`];
-  if (review.panels.length > 0) parts.push(`${review.panels.length} 格面板`);
-  if (review.config.length > 0) parts.push(`${review.config.length} 項設定`);
-  return parts.join('、');
+  const parts: string[] = [t('import.summaryBlocks', { count: number(review.blocks.length) })];
+  if (review.editor) parts.push(t('import.summaryEditor'));
+  if (review.panels.length > 0) parts.push(t('import.summaryPanels', { count: number(review.panels.length) }));
+  if (review.config.length > 0) parts.push(t('import.summaryConfig', { count: number(review.config.length) }));
+  return list(parts);
+}
+
+/**
+ * 一段差集 ＋ 畫布上的用量 → **§4 那張表的三列**。
+ *
+ * | 差集 | 怎麼辦 |
+ * |---|---|
+ * | 少了一顆積木，**而畫布上有** | 擋 |
+ * | 參數變了，**而畫布上有** | 警告後放行 |
+ * | 沒人用到的變動 | 只說一聲 |
+ *
+ * **分列的依據是「誰會受影響」，不是「變動的種類」。** 同樣是「少了一顆積木」，
+ * 畫布上有的那幾顆會擋住更新，沒人用到的只是一行字——所以這個函式一定要同時
+ * 吃兩邊：`diff` 是後端算的（兩份 manifest 的差），`usage` 是 `App` 數的（那份
+ * 工作區還沒存檔，後端手上那一份可能是十分鐘前的）。
+ */
+export interface UpdateVerdict {
+  /** 擋：這一版少了畫布上正在用的積木。 */
+  blocking: ExtensionDiff['gone'];
+  /** 警告後放行：畫布上正在用的積木變了（多半是多出空孔，§16 Q21）。 */
+  warning: ExtensionDiff['changed'];
+  /** 只說一聲：少了、但沒人用到的那幾顆。 */
+  quietGone: ExtensionDiff['gone'];
+  /** 宣告完全沒變。**這仍然是一次真的更新**——程式碼可能全改了，而 manifest
+   * 看不出來（§8：分不出來的就不假裝分得出來）。 */
+  nothingDeclared: boolean;
+}
+
+export function updateVerdict(
+  diff: ExtensionDiff,
+  usage: Record<string, number>,
+): UpdateVerdict {
+  const used = (opcode: string) => (usage[opcode] ?? 0) > 0;
+  return {
+    blocking: diff.gone.filter((g) => used(g.opcode)),
+    warning: diff.changed.filter((c) => used(c.opcode)),
+    quietGone: diff.gone.filter((g) => !used(g.opcode)),
+    nothingDeclared:
+      diff.gone.length === 0 &&
+      diff.changed.length === 0 &&
+      diff.added.length === 0 &&
+      !diff.requirementsChanged,
+  };
+}
+
+/**
+ * 一顆積木這一版變了什麼，寫成一句話。
+ *
+ * **必填與選填分開講**：多一格必填的參數會讓那幾顆積木多出填不了東西的空孔，
+ * 而那份專案從此存不起來（§16 Q21、後端的 `normalize_args`）。多一格選填的
+ * 只是多一個孔。兩者都要說，但它們不是同一件事。
+ */
+export function changeWords(change: ExtensionDiff['changed'][number]): string {
+  const parts: string[] = [];
+  const required = change.argsAdded.filter((a) => a.required).map((a) => a.name);
+  const optional = change.argsAdded.filter((a) => !a.required).map((a) => a.name);
+  if (required.length > 0) parts.push(t('import.changeRequired', { names: list(required) }));
+  if (optional.length > 0) parts.push(t('import.changeOptional', { names: list(optional) }));
+  if (change.argsRemoved.length > 0) {
+    parts.push(t('import.changeRemoved', { names: list(change.argsRemoved) }));
+  }
+  if (change.argsRetyped.length > 0) {
+    parts.push(list(change.argsRetyped.map((a) => t('import.changeRetyped', a))));
+  }
+  if (change.nowDeprecated) parts.push(t('import.changeDeprecated'));
+  // 只有字變了才單獨說它：上面那幾句已經隱含「這顆積木不一樣了」，而多一句
+  // 「積木上的字換了」只是把最不重要的變動排在最後面重複一次。
+  if (parts.length === 0 && change.textChanged) parts.push(t('import.changeText'));
+  return list(parts);
 }

@@ -1,20 +1,37 @@
 /**
- * 一個積木包的右鍵選單（D31）。
+ * 一個積木包的右鍵選單（D31、`docs/extension-design.md` §5）。
  *
  * **兩個地方叫得起它**：工具箱分類欄上那顆色圓點（主要入口——那是使用者每天
  * 看得到這個包的地方，也是 Scratch 的心智模型裡「這個分類」的所在），以及擴充
  * 功能面板上那張卡。兩邊同一份選單、同一組條目，因為它們指的是同一個東西。
  *
- * 條目就是一個包在「加進來之後」的兩種命運：**刪掉**與**換一版**。第二個現在
- * 是暗的（P3 第 2 步），但它站在這裡有意義——它讓「更新一個積木包」在畫面上
- * 有位置，而不是一個只存在於文件裡的計畫（§16 Q24）。
+ * **四個條目，而其中兩個都曾經叫「刪除」。** §1 的三層帳說「這個包在不在」
+ * 其實是三個問題，而這份選單是它在畫面上的樣子：
+ *
+ * | 選單上的字 | 動的是 | 問不問 | 誰看得到 |
+ * |---|---|---|---|
+ * | 從工具箱移除 | 瀏覽器裡那份名單 | 不問 | 每一個包 |
+ * | 更新／替換⋯ | 磁碟 | 審閱畫面 | 每一個包 |
+ * | 匯出 ZIP | 下載一份安裝包 | 不問 | 每一個包 |
+ * | 解除安裝⋯ | 磁碟 | 要（把收據攤出來） | **只有有收據的** |
+ *
+ * 用字要說出動的是哪一層。「刪除這個擴充功能」聽起來像最後一條，做的卻是第
+ * 一條——而那個歧義正是 §0 那個洞的成因：使用者按下他以為的「解除安裝」，
+ * 得到的是「收起來」，於是他去開檔案總管。
+ *
+ * **沒有收據的包看不到「解除安裝⋯」**（`canUninstall`）：那個資料夾是使用者
+ * 自己放的，很可能就是他正在編輯的東西。畫面上說「你自己放進資料夾的」、
+ * 選單卻給得出解除安裝，是最糟的那一種不一致。
  *
  * 不用 Blockly 的 `ContextMenu`：那一套是給積木與畫布用的（它的座標、生命週期
  * 都綁著工作區），而這裡兩個入口有一個是純 HTML 的面板。
  */
 import { useEffect, useState } from 'react';
-import { RotateCw, Trash2 } from 'lucide-react';
+import { Download, EyeOff, RotateCw, Trash2 } from 'lucide-react';
 import type { ToolboxGroup } from '../blockly/toolbox';
+import type { ExtensionReceipt } from '../api/client';
+import { canUninstall } from './extensionsSource';
+import { t } from '../i18n';
 
 export interface ExtensionMenuTarget {
   group: ToolboxGroup;
@@ -63,15 +80,25 @@ export function useExtensionMenu() {
 export function ExtensionMenu({
   target,
   installed,
-  onDelete,
+  receipt,
+  onRemove,
+  onUpdate,
+  onExport,
+  onUninstall,
 }: {
   target: ExtensionMenuTarget;
-  /** 這個包現在在工具箱上。不在的話「刪除」沒有意義（面板上那張卡才會遇到）。 */
+  /** 這個包現在在工具箱上。不在的話「移除」沒有意義（面板上那張卡才會遇到）。 */
   installed: boolean;
-  onDelete(group: ToolboxGroup): void;
+  /** 這個資料夾是誰搬進來的。`undefined` = 沒有收據 = 我們不碰它。 */
+  receipt: ExtensionReceipt | undefined;
+  onRemove(group: ToolboxGroup): void;
+  onUpdate(group: ToolboxGroup): void;
+  onExport(group: ToolboxGroup): void;
+  onUninstall(group: ToolboxGroup): void;
 }) {
-  const WIDTH = 240;
-  const HEIGHT = 96;
+  const removable = canUninstall(receipt);
+  const WIDTH = 260;
+  const HEIGHT = removable ? 160 : 128;
   // 夾在視窗內：在最後一排卡片、或分類欄最底下按右鍵時，選單本來會有一半長到
   // 畫面外面去。
   const left = Math.min(target.x, window.innerWidth - WIDTH - 8);
@@ -81,30 +108,51 @@ export function ExtensionMenu({
     <div
       className="ext-menu"
       role="menu"
-      aria-label={`${target.group.name} 的動作`}
+      aria-label={t('extensions.actions', { name: target.group.name })}
       style={{ left, top, width: WIDTH }}
       // 選單自己身上那一下不該關掉自己（window 的 `pointerdown` 會先收到）。
       onPointerDown={(e) => e.stopPropagation()}
     >
+      {/* **第一條不問「你確定嗎」**：它只把這一格從工具箱收起來，畫布上已經
+          有的積木照樣跑，下次打開這個專案還會自己回來。它弄不壞任何東西。 */}
       <button
         type="button"
         role="menuitem"
         className="ext-menu-item"
         disabled={!installed}
-        title={installed ? undefined : '這個擴充功能還沒加進來'}
-        onClick={() => onDelete(target.group)}
+        title={installed ? undefined : t('extensions.notAdded')}
+        onClick={() => onRemove(target.group)}
       >
-        <Trash2 size={14} strokeWidth={2.5} /> 刪除這個擴充功能
+        <EyeOff size={14} strokeWidth={2.5} /> {t('extensions.remove')}
       </button>
       <button
         type="button"
         role="menuitem"
         className="ext-menu-item"
-        disabled
-        title="還沒接上：要先有 .zip 匯入那條路，以及「新版少了一顆積木怎麼辦」的答案（§16 Q24、P3 第 2 步）"
+        onClick={() => onUpdate(target.group)}
       >
-        <RotateCw size={14} strokeWidth={2.5} /> 更新／替換這個擴充功能…
+        <RotateCw size={14} strokeWidth={2.5} /> {t('extensions.update')}
       </button>
+      <button
+        type="button"
+        role="menuitem"
+        className="ext-menu-item"
+        onClick={() => onExport(target.group)}
+      >
+        <Download size={14} strokeWidth={2.5} /> {t('extensions.exportZip')}
+      </button>
+      {/* **沒有收據就沒有這一條。** 不是畫成灰的——一條永遠按不動的條目是一個
+          需要解釋的東西，而這裡要說的話（「那是你自己放的」）卡片上已經寫了。 */}
+      {removable && (
+        <button
+          type="button"
+          role="menuitem"
+          className="ext-menu-item is-danger"
+          onClick={() => onUninstall(target.group)}
+        >
+          <Trash2 size={14} strokeWidth={2.5} /> {t('extensions.uninstall')}
+        </button>
+      )}
     </div>
   );
 }

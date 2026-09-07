@@ -26,6 +26,7 @@ import {
   type WebhookUrl,
 } from '../api/triggers';
 import { focusableIn, modalKeyAction, nextFocusIndex } from './modalKeys';
+import { t } from '../i18n';
 
 /** 幾秒後把「已複製」收回去。夠久到看得見，短到不會擋住下一次操作。 */
 const COPIED_MS = 1600;
@@ -84,7 +85,7 @@ export function WebhookPanel({
       await navigator.clipboard.writeText(absolute(hook.url));
       setCopied(hook.url);
     } catch {
-      setError('複製失敗——請手動選取網址');
+      setError(t('webhook.copyFailed'));
     }
   };
 
@@ -100,7 +101,7 @@ export function WebhookPanel({
       await navigator.clipboard.writeText(await revealWebhookSecret(projectId, hook.blockId));
       setCopied(hook.blockId);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '複製密鑰失敗');
+      setError(e instanceof Error ? e.message : t('webhook.copySecretFailed'));
     }
   };
 
@@ -110,15 +111,15 @@ export function WebhookPanel({
         className="modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Webhook 網址"
+        aria-label={t('webhook.title')}
         ref={dialogRef}
         onKeyDown={onKeyDown}
       >
         <header className="modal-head">
           <h2>
-            <Link2 size={16} strokeWidth={2.5} /> Webhook 網址
+            <Link2 size={16} strokeWidth={2.5} /> {t('webhook.title')}
           </h2>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="關閉">
+          <button type="button" className="modal-close" onClick={onClose} aria-label={t('common.close')}>
             <X size={16} />
           </button>
         </header>
@@ -153,18 +154,18 @@ export function WebhookPanel({
                     <button type="button" className="button" onClick={() => void copy(hook)}>
                       {copied === hook.url ? (
                         <>
-                          <Check size={13} strokeWidth={2.5} /> 已複製
+                          <Check size={13} strokeWidth={2.5} /> {t('webhook.copied')}
                         </>
                       ) : (
                         <>
-                          <Copy size={13} strokeWidth={2.5} /> 複製網址
+                          <Copy size={13} strokeWidth={2.5} /> {t('webhook.copyUrl')}
                         </>
                       )}
                     </button>
                     {hook.verify !== 'none' && (
                       <button type="button" className="button" onClick={() => setEditing(hook)}>
                         <KeyRound size={13} strokeWidth={2.5} />
-                        {hook.secretSet ? '更換密鑰' : '設定密鑰'}
+                        {hook.secretSet ? t('webhook.changeSecret') : t('webhook.setSecret')}
                       </button>
                     )}
                     {hook.verify !== 'none' && hook.secretSet && (
@@ -174,16 +175,16 @@ export function WebhookPanel({
                       <button
                         type="button"
                         className="button"
-                        title="複製密鑰到剪貼簿"
+                        title={t('webhook.copySecret')}
                         onClick={() => void copySecret(hook)}
                       >
                         {copied === hook.blockId ? (
                           <>
-                            <Check size={13} strokeWidth={2.5} /> 已複製
+                            <Check size={13} strokeWidth={2.5} /> {t('webhook.copied')}
                           </>
                         ) : (
                           <>
-                            <Copy size={13} strokeWidth={2.5} /> 密鑰
+                            <Copy size={13} strokeWidth={2.5} /> {t('webhook.secret')}
                           </>
                         )}
                       </button>
@@ -193,8 +194,7 @@ export function WebhookPanel({
               ))}
             </ul>
             <p className="modal-hint">
-              密鑰存在這台機器的鑰匙圈裡，<strong>不會跟著專案走</strong>
-              ——把專案分享出去，對方要自己設一次，否則那邊會一直退回 401。
+              {t('webhook.storageHint')}
             </p>
           </>
         )}
@@ -205,11 +205,11 @@ export function WebhookPanel({
 
 /** 這一顆現在收不收得到東西。**「宣告要驗但沒設密鑰」是全部擋掉，不是不驗。** */
 function HookVerify({ hook }: { hook: WebhookUrl }) {
-  if (hook.verify === 'none') return <span className="hook-tag">不驗簽章</span>;
-  if (hook.secretSet) return <span className="hook-tag hook-tag-ok">已設定簽章密鑰</span>;
+  if (hook.verify === 'none') return <span className="hook-tag">{t('webhook.noVerify')}</span>;
+  if (hook.secretSet) return <span className="hook-tag hook-tag-ok">{t('webhook.secretConfigured')}</span>;
   return (
     <span className="hook-tag hook-tag-warn">
-      <AlertTriangle size={12} /> 還沒設密鑰——現在每一則請求都會被擋下
+      <AlertTriangle size={12} /> {t('webhook.secretMissing')}
     </span>
   );
 }
@@ -266,7 +266,7 @@ function SecretForm({
     >
       <label>
         <span className="hook-secret-label">
-          <code>{hook.path}</code> 的簽章密鑰
+          {t('webhook.secretLabel', { path: hook.path })}
         </span>
         {/* 對面（GitHub 那類）產生簽章用的就是這一把。 */}
         <input
@@ -274,20 +274,20 @@ function SecretForm({
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="貼上對方設定頁那一把"
+          placeholder={t('webhook.secretPlaceholder')}
         />
       </label>
       <div className="hook-actions">
         <button type="submit" className="button button-primary" disabled={!value.trim() || busy}>
-          存起來
+          {t('webhook.save')}
         </button>
         {hook.secretSet && (
           <button type="button" className="button" onClick={() => void clear()} disabled={busy}>
-            <Trash2 size={13} strokeWidth={2.5} /> 拿掉
+            <Trash2 size={13} strokeWidth={2.5} /> {t('webhook.remove')}
           </button>
         )}
         <button type="button" className="button" onClick={onCancel} disabled={busy}>
-          取消
+          {t('common.cancel')}
         </button>
       </div>
     </form>

@@ -14,12 +14,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blockyard.api.app import create_app
-from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT, secret_store
+from blockyard.extensions import BUNDLED_ROOT, secret_store
 
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=BUNDLED_ROOT)
     with TestClient(app) as c:
         yield c
 
@@ -85,14 +85,15 @@ def labeled_client(tmp_path: Path) -> Iterator[TestClient]:
 
 
 def test_dropdown_source_sees_the_resolved_secret(labeled_client: TestClient) -> None:
-    secret_store.set("labeled", "token", "sk-dropdown-secret")
-    res = labeled_client.post("/api/extensions/labeled/dropdown/options")
+    # 金鑰屬於一個專案（§16 Q23），所以下拉也要說出自己是替哪個專案問的。
+    secret_store.set(secret_store.owner_of("prj_dd", "labeled"), "token", "sk-dropdown-secret")
+    res = labeled_client.post("/api/extensions/labeled/dropdown/options?project=prj_dd")
     assert res.status_code == 200, res.text
     assert res.json() == [{"label": "sk-dropdown-secret", "value": "x"}]
 
 
 def test_dropdown_source_without_the_secret_gets_the_fallback(labeled_client: TestClient) -> None:
-    res = labeled_client.post("/api/extensions/labeled/dropdown/options")
+    res = labeled_client.post("/api/extensions/labeled/dropdown/options?project=prj_dd")
     assert res.status_code == 200, res.text
     assert res.json() == [{"label": "（沒有金鑰）", "value": "x"}]
 

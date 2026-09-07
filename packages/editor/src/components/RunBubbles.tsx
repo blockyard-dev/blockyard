@@ -16,6 +16,8 @@ import type * as Blockly from 'blockly/core';
 import { blockRect, speaks } from '../run/decorate';
 import { useRunStore, type BlockState } from '../run/store';
 import { JsonTree } from './JsonTree';
+import { number, t } from '../i18n';
+import { translatedErrorParts } from '../api/client';
 
 /**
  * §8.3：氣泡 2 秒後淡出（最後 400ms 淡）。
@@ -143,20 +145,21 @@ export function RunBubbles({ workspace }: { workspace: Blockly.WorkspaceSvg | nu
 
 function BubbleBody({ state }: { state: BlockState }) {
   if (state.phase === 'error' && state.error) {
+    const error = translatedErrorParts(state.error);
     return (
       <>
-        <div className="bubble-error-message">{state.error.message}</div>
-        {state.error.hint && <div className="bubble-hint">{state.error.hint}</div>}
+        <div className="bubble-error-message">{error.message}</div>
+        {error.hint && <div className="bubble-hint">{error.hint}</div>}
       </>
     );
   }
   return (
     <>
       {state.phase === 'hot' && (
-        <div className="bubble-count">持續執行中 ×{state.count?.toLocaleString()}</div>
+        <div className="bubble-count">{t('run.hot', { count: number(state.count ?? 0) })}</div>
       )}
       {state.value !== undefined && <JsonTree value={state.value} />}
-      {state.truncated && <div className="bubble-hint">值太長，已截斷（§6.2）</div>}
+      {state.truncated && <div className="bubble-hint">{t('run.valueTruncated')}</div>}
     </>
   );
 }

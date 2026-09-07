@@ -8,6 +8,7 @@
  */
 import { Plus } from 'lucide-react';
 import { useExtensionsUi } from './extensionsStore';
+import { t } from '../i18n';
 
 export function ExtensionsEntry() {
   const openGallery = useExtensionsUi((s) => s.openGallery);
@@ -21,8 +22,8 @@ export function ExtensionsEntry() {
         type="button"
         className="ext-button"
         onClick={openGallery}
-        aria-label="擴充功能"
-        title="擴充功能"
+        aria-label={t('extensions.label')}
+        title={t('extensions.label')}
       >
         <span className="ext-button-icon">
           <Plus size={20} strokeWidth={2.5} />

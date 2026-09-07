@@ -25,6 +25,7 @@ import type { ArgSpec, BlockSpec, Manifest } from '../types/manifest';
 import type { Procedure, ProcParam, Returns } from '../types/project';
 import { buildBlock, type RegisteredBlock } from './define';
 import { callText, definitionText, displayName, paramsOf } from './signature';
+import { t } from '../i18n';
 
 const NAMESPACE = 'procedure';
 const PARAM_PREFIX = `${NAMESPACE}.param#`;
@@ -113,7 +114,7 @@ export function registerProcedures(procedures: Record<string, Procedure>): Regis
   // ——一份用了自訂函式的專案不該宣告自己需要一個叫「procedure」的積木包。
   const manifest: Manifest = {
     id: NAMESPACE,
-    name: '函式',
+    name: t('blockly.functionCategory'),
     version: '1.0.0',
     color: PROCEDURE_COLOUR,
     builtin: true,
@@ -194,7 +195,7 @@ function paramSpec(procId: string, param: ProcParam): BlockSpec {
     returns: 'any',
     // 空白的名字畫不出積木（`message0` 會是空字串）。對話框擋得住空名字，
     // 但手寫的 IR 擋不住。
-    text: param.name.trim() || '參數',
+    text: param.name.trim() || t('blockly.parameter'),
   };
 }
 

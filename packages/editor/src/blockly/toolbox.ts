@@ -1,3 +1,4 @@
+import type { Manifest } from '../types/manifest';
 /**
  * manifest → 工具箱分類（§8.1 第 3 步）。
  *
@@ -77,30 +78,20 @@ export function configTarget(group: ToolboxGroup): ConfigSpec | undefined {
   return group.secrets[0];
 }
 
-export function groupByManifest(blocks: RegisteredBlock[]): ToolboxGroup[] {
+export function groupByManifest(blocks: RegisteredBlock[], manifests: readonly Manifest[] = blocks.map((b) => b.manifest)): ToolboxGroup[] {
   const groups = new Map<string, ToolboxGroup>();
-  for (const block of blocks) {
-    const { manifest } = block;
-    let group = groups.get(manifest.id);
-    if (!group) {
-      group = {
-        id: manifest.id,
-        name: manifest.name,
-        colour: manifest.color ?? DEFAULT_COLOUR,
-        builtin: manifest.builtin === true,
-        panels: manifest.panels ?? [],
-        version: manifest.version,
-        description: manifest.description ?? null,
-        cover: manifest.cover ?? null,
-        blocks: [],
-        palette: manifest.palette ?? [],
-        buttons: (manifest.palette ?? []).filter(isButtonEntry),
-        secrets: (manifest.config ?? []).filter((c) => c.type === 'secret'),
-      };
-      groups.set(manifest.id, group);
-    }
-    group.blocks.push(block);
+  for (const manifest of manifests) {
+    if (groups.has(manifest.id)) continue;
+    groups.set(manifest.id, {
+      id: manifest.id, name: manifest.name, colour: manifest.color ?? DEFAULT_COLOUR,
+      builtin: manifest.builtin === true, panels: manifest.panels ?? [],
+      version: manifest.version, description: manifest.description ?? null,
+      cover: manifest.cover ?? null, blocks: [], palette: manifest.palette ?? [],
+      buttons: (manifest.palette ?? []).filter(isButtonEntry),
+      secrets: (manifest.config ?? []).filter((c) => c.type === 'secret'),
+    });
   }
+  for (const block of blocks) groups.get(block.manifest.id)?.blocks.push(block);
   return [...groups.values()];
 }
 
@@ -185,6 +176,7 @@ export function buildToolbox(
   return {
     kind: 'categoryToolbox',
     contents: groups
+      .filter((group) => group.palette.length > 0)
       .map((group) => ({
         kind: 'category',
         name: group.name,

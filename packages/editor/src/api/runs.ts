@@ -57,9 +57,12 @@ export type BlockErrorAction = {
 export interface BlockError {
   type: string;
   code: string;
+  params?: Record<string, unknown>;
   message: string;
   blockId?: string;
   hint?: string;
+  hintCode?: string;
+  hintParams?: Record<string, unknown>;
   action?: BlockErrorAction;
 }
 

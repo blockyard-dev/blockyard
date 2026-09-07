@@ -26,7 +26,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blockyard.api.app import create_app
-from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.extensions import BUNDLED_ROOT
 
 
 def tick_project(project_id: str = "p_tick") -> dict[str, Any]:
@@ -69,7 +69,7 @@ def flag_project(project_id: str = "p_flag") -> dict[str, Any]:
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    app = create_app(db_path=tmp_path / "blockyard.db", extensions_root=BUNDLED_ROOT)
     with TestClient(app) as client:
         yield client
 
@@ -243,7 +243,7 @@ def test_沒有_hat_的專案不開任何子行程(client: TestClient, monkeypat
 
 
 def app_for(tmp_path: Path) -> Any:
-    return create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    return create_app(db_path=tmp_path / "blockyard.db", extensions_root=BUNDLED_ROOT)
 
 
 def test_沒在跑的專案問得到答案而不是_404(client: TestClient) -> None:

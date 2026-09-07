@@ -18,7 +18,7 @@ import pytest
 
 from blockyard.errors import ExtensionError
 from blockyard.extensions import (
-    DEFAULT_EXTENSIONS_ROOT,
+    BUNDLED_ROOT,
     CallContexts,
     EventSinkChannel,
     SubprocessHost,
@@ -32,8 +32,8 @@ from blockyard.interpreter.events import EventSink
 def _make_host() -> tuple[SubprocessHost, CallContexts]:
     contexts = CallContexts()
     channel = EventSinkChannel(EventSink(), contexts)
-    sources = discover(DEFAULT_EXTENSIONS_ROOT)
-    host = SubprocessHost(sources, channel, contexts, extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    sources = discover(BUNDLED_ROOT)
+    host = SubprocessHost(sources, channel, contexts, extensions_root=BUNDLED_ROOT)
     return host, contexts
 
 

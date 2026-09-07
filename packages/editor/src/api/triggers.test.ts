@@ -11,7 +11,13 @@
  * 才守得住。
  */
 import { describe, expect, it } from 'vitest';
-import { NOT_LISTENING, listeningStateOf, type TriggerSummary } from './triggers';
+import {
+  NOT_LISTENING,
+  listeningHatsOf,
+  listeningStateOf,
+  type ListeningState,
+  type TriggerSummary,
+} from './triggers';
 
 function summary(over: Partial<TriggerSummary> = {}): TriggerSummary {
   return { projectId: 'p', active: true, hats: ['event.when_cron'], errors: [], ...over };
@@ -49,5 +55,35 @@ describe('監聽狀態（§9.2）', () => {
 
   it('NOT_LISTENING 是關著的樣子', () => {
     expect(NOT_LISTENING).toEqual({ on: false, hats: [], webhooks: [] });
+  });
+});
+
+describe('更新一個積木包要不要先暫停監聽', () => {
+  const on = (hats: string[]): ListeningState => ({ on: true, hats, webhooks: [] });
+
+  it('監聽的 hat 就是這個包的 → 要', () => {
+    expect(listeningHatsOf(on(['discord.message']), 'discord')).toEqual(['discord.message']);
+  });
+
+  it('監聽的是別的包 → 不要問', () => {
+    // 後端只為**提供 hat 的那幾個包**開子行程，而 hat 觸發起的 Run 走的是一個
+    // 全新的 registry。「聽著 Discord 時更新 http」對監聽那一側毫無影響。
+    expect(listeningHatsOf(on(['discord.message']), 'http')).toEqual([]);
+  });
+
+  it('沒在監聽 → 不要問', () => {
+    expect(listeningHatsOf({ on: false, hats: ['discord.message'], webhooks: [] }, 'discord'))
+      .toEqual([]);
+  });
+
+  it('內建的 hat 不算任何一個積木包的', () => {
+    // `event.*` 由直譯器直接執行，沒有子行程可以過期。
+    expect(listeningHatsOf(on(['event.cron', 'demo.tick']), 'event')).toEqual(['event.cron']);
+    expect(listeningHatsOf(on(['event.cron']), 'demo')).toEqual([]);
+  });
+
+  it('前綴像但不是同一個包的不算', () => {
+    // `http_extra.ping` 的命名空間是 `http_extra`，不是 `http`。
+    expect(listeningHatsOf(on(['http_extra.ping']), 'http')).toEqual([]);
   });
 });

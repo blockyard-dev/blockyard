@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Response, WebSocket
@@ -29,6 +30,22 @@ ws_router = APIRouter()
 # WebSocket 沒有 404；用 close code 表達。4000+ 是應用自訂區間。
 WS_RUN_NOT_FOUND = 4404
 WS_PROJECT_NOT_FOUND = 4405
+
+
+def _run_not_found(run_id: str) -> dict[str, Any]:
+    return {
+        "code": "run.not_found",
+        "params": {"runId": run_id},
+        "message": f"找不到執行 {run_id}",
+    }
+
+
+def _project_not_found(project_id: str) -> dict[str, Any]:
+    return {
+        "code": "project.not_found",
+        "params": {"projectId": project_id},
+        "message": f"找不到專案 {project_id}",
+    }
 
 
 class RunRequest(BaseModel):
@@ -63,7 +80,9 @@ async def start_run(request: Request, body: RunRequest = Body(...)) -> dict[str,
     except ProjectNotFound:
         raise HTTPException(
             status_code=404,
-            detail={"message": f"找不到專案 {body.projectId}", "hint": "先存檔再執行"},
+            detail={"code": "project.not_found", "params": {"projectId": body.projectId},
+                    "message": f"找不到專案 {body.projectId}",
+                    "hintCode": "project.save_before_run", "hintParams": {}, "hint": "先存檔再執行"},
         ) from None
     except ValidationError as e:
         # 存檔時驗過，但積木包可能在那之後被移掉或改壞。與 PUT 同一種 422。
@@ -87,7 +106,7 @@ async def list_runs(
 async def get_run(run_id: str, request: Request) -> dict[str, Any]:
     summary = _runs(request).summary(run_id)
     if summary is None:
-        raise HTTPException(status_code=404, detail={"message": f"找不到執行 {run_id}"})
+        raise HTTPException(status_code=404, detail=_run_not_found(run_id))
     return summary
 
 
@@ -108,7 +127,7 @@ async def get_run_events(
     """
     manager = _runs(request)
     if manager.summary(run_id) is None:
-        raise HTTPException(status_code=404, detail={"message": f"找不到執行 {run_id}"})
+        raise HTTPException(status_code=404, detail=_run_not_found(run_id))
     events = manager.events(run_id, after=after, limit=limit)
     return {
         "runId": run_id,
@@ -130,7 +149,7 @@ async def stop_run(run_id: str, request: Request, response: Response) -> dict[st
     manager = _runs(request)
     summary = manager.summary(run_id)
     if summary is None:
-        raise HTTPException(status_code=404, detail={"message": f"找不到執行 {run_id}"})
+        raise HTTPException(status_code=404, detail=_run_not_found(run_id))
     # 已經跑完的照樣回 202 而不是 4xx：使用者按下停止與 Run 自己結束是一場
     # 競賽，而「你按晚了」不是一個錯誤。`stop()` 對死掉的 Run 是 no-op。
     manager.stop(run_id)
@@ -143,7 +162,10 @@ async def run_events(websocket: WebSocket, run_id: str) -> None:
     manager = _runs(websocket)
     handle = manager.get(run_id)
     if handle is None:
-        await websocket.close(code=WS_RUN_NOT_FOUND, reason=f"找不到執行 {run_id}")
+        await websocket.close(
+            code=WS_RUN_NOT_FOUND,
+            reason=json.dumps(_run_not_found(run_id), ensure_ascii=False, separators=(",", ":")),
+        )
         return
 
     await websocket.accept()
@@ -190,7 +212,12 @@ async def project_events(websocket: WebSocket, project_id: str) -> None:
     """
     manager = _runs(websocket)
     if not manager.has_project(project_id):
-        await websocket.close(code=WS_PROJECT_NOT_FOUND, reason=f"找不到專案 {project_id}")
+        await websocket.close(
+            code=WS_PROJECT_NOT_FOUND,
+            reason=json.dumps(
+                _project_not_found(project_id), ensure_ascii=False, separators=(",", ":")
+            ),
+        )
         return
 
     await websocket.accept()

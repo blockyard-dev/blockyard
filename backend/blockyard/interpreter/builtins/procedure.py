@@ -89,6 +89,7 @@ async def _param(t: Thread, b: Block) -> Any:
         raise ParamOutOfScopeError(
             f"參數「{param.name}」只能放在定義它的函式裡",
             block_id=bid,
+            params={"name": param.name, "procedureId": pid},
             hint="這顆積木是從那個函式的定義積木上拖出來的，把它搬回函式體裡。",
         )
     return frame.params.get(param.name)

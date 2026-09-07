@@ -354,6 +354,7 @@ def object_get(obj: dict, key: str, *, block_id: str | None = None) -> Any:
         raise KeyMissingError(
             f'物件沒有 "{key}" 這個欄位',
             block_id=block_id,
+            params={"key": key},
             hint=_did_you_mean(key, list(obj.keys())),
         )
     return obj[key]

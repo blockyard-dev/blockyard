@@ -10,6 +10,7 @@
  * 生死無關（§9.2）。
  */
 import { toApiError } from './client';
+import { t } from '../i18n';
 
 export interface TriggerSummary {
   projectId: string;
@@ -68,12 +69,33 @@ export function listeningStateOf(summary: TriggerSummary): ListeningState {
     webhooks: summary.webhooks ?? [],
     // 空陣列代表**這份畫布上沒有 hat**，不是失敗；那句話要說出來，否則
     // 按下去什麼都沒發生會被當成壞掉。
-    message: summary.active && summary.hats.length === 0 ? '畫布上沒有事件積木' : undefined,
+    message: summary.active && summary.hats.length === 0 ? t('editor.noEventBlocks') : undefined,
   };
 }
 
 /** 沒在跑的樣子。三個呼叫端的 catch 分支共用。 */
 export const NOT_LISTENING: ListeningState = { on: false, hats: [], webhooks: [] };
+
+/**
+ * 正在監聽的那幾顆 hat 裡，**由這個積木包提供的**是哪些
+ * （`docs/extension-design.md` §4）。
+ *
+ * 更新一個積木包會換掉磁碟上的 `main.py`，但**正在監聽的那一組子行程早就把它
+ * import 進去了**（`runs/triggers.py`：那組東西重建的條件是「積木包的集合變
+ * 了」，而更新前後那個集合一樣）。所以更新前要先暫停監聽——但**只有在真的相關
+ * 的時候**。
+ *
+ * 判準是 hat，而且它是精準的：後端只為**提供 hat 的那幾個包**開子行程
+ * （`want_exts`），而 hat 一觸發起的 Run 走的是一個全新的 registry。所以
+ * 「監聽 `discord` 的訊息時更新 `http`」對監聽那一側毫無影響，不該問。
+ *
+ * 純函式，因為這是這條路上唯一的規則——其餘都是一個對話框與兩個 API 呼叫。
+ */
+export function listeningHatsOf(state: ListeningState, extId: string): string[] {
+  if (!state.on) return [];
+  // opcode 是 `<id>.<opcode>`，與後端 `opcode.split(".", 1)[0]` 同一條規則。
+  return state.hats.filter((opcode) => opcode.slice(0, opcode.indexOf('.')) === extId);
+}
 
 /** 標記 active 並接上。已經 active 就重新同步一次，不是 409。 */
 export async function activateProject(projectId: string): Promise<TriggerSummary> {
@@ -144,8 +166,14 @@ export async function clearWebhookSecret(projectId: string, blockId: string): Pr
   if (!res.ok) throw await toApiError(res, `DELETE webhook secret → ${res.status}`);
 }
 
-export async function listActiveProjects(): Promise<TriggerSummary[]> {
-  const res = await fetch('/api/triggers');
+/**
+ * 所有 active 專案。**主選單那一頁靠這條畫「哪幾份在聽」**。
+ *
+ * 一次問完，不是每張卡各問一次自己：那會讓一頁二十份專案打二十個請求，而它們
+ * 的答案本來就躺在同一張表裡（`storage/triggers.py`）。
+ */
+export async function listActiveProjects(signal?: AbortSignal): Promise<TriggerSummary[]> {
+  const res = await fetch('/api/triggers', { signal });
   if (!res.ok) throw await toApiError(res, `GET /api/triggers → ${res.status}`);
   return (await res.json()) as TriggerSummary[];
 }

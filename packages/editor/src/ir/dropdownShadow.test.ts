@@ -12,7 +12,7 @@
  * `readShadowValue` 認不出種類時會掉進文字分支，字串照樣寫出去。
  *
  * 所以下面的題目一律斷言**影子的 Blockly type**，不是它的值。讀的是
- * `extensions/http/manifest.yaml` 這份真的檔案（同 `roundtrip.test.ts` 的理由：
+ * `_bundled/http/manifest.yaml` 這份真的檔案（同 `roundtrip.test.ts` 的理由：
  * 複製出來的一份會在漂移的那天繼續綠著）。
  */
 import { readFileSync } from 'node:fs';
@@ -36,7 +36,7 @@ import type { BlockyardProjectIR as ProjectIR } from '../types/project';
 
 const HTTP_MANIFEST = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../extensions/http/manifest.yaml',
+  '../../../../backend/blockyard/_bundled/http/manifest.yaml',
 );
 
 /** 一顆 `http.request`，`method` 是使用者從下拉選好的 `POST`。 */

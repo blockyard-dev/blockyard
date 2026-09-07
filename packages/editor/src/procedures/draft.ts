@@ -19,6 +19,7 @@
 import type { ProcParam, Procedure, Returns } from '../types/project';
 import { validateName } from '../blockly/fields/FieldText';
 import { PLACEHOLDER, hasSignatureTemplate } from '../blockly/signature';
+import { t } from '../i18n';
 
 /** 參數的型別。只影響孔的形狀與靜態檢查的嚴格度，不影響執行（§8.5）。 */
 export type ParamType = 'any' | 'number' | 'string' | 'boolean' | 'list' | 'object';
@@ -42,7 +43,7 @@ export interface Draft {
 export function blankDraft(): Draft {
   return {
     segments: [
-      { kind: 'label', text: '積木名稱' },
+      { kind: 'label', text: t('procedure.defaultName') },
       { kind: 'param', id: 'a1', name: 'input', type: 'any' },
     ],
     returns: null,
@@ -145,7 +146,7 @@ function defaultParamName(used: number): string {
 }
 
 export function addLabel(draft: Draft): Draft {
-  return { ...draft, segments: [...draft.segments, { kind: 'label', text: '說明文字' }] };
+  return { ...draft, segments: [...draft.segments, { kind: 'label', text: t('procedure.defaultLabel') }] };
 }
 
 export function removeSegment(draft: Draft, index: number): Draft {
@@ -189,20 +190,20 @@ export function applyTexts(draft: Draft, texts: Record<number, string>): Draft {
 export function draftIssue(draft: Draft): string | null {
   const labels = draft.segments.filter((s) => s.kind === 'label');
   if (!labels.some((s) => s.text.trim() !== '')) {
-    return '積木要有名字：至少留一段說明文字';
+    return t('procedure.issue.name');
   }
   if (labels.some((s) => s.text.includes('%('))) {
     // `%(` 是佔位符的開頭（與 manifest 的 `text` 同一套語法），出現在標籤裡會
     // 讓存出去的簽章引用一個不存在的參數。單獨的 `%` 沒問題。
-    return '說明文字不能含有「%(」——那是參數的位置記號';
+    return t('procedure.issue.placeholder');
   }
 
   const params = draft.segments.filter(isParam);
   const names = new Set<string>();
   for (const param of params) {
     const name = param.name.trim();
-    if (name === '') return '每個輸入方塊都要有名字';
-    if (names.has(name)) return `參數名稱重複：${name}`;
+    if (name === '') return t('procedure.issue.paramName');
+    if (names.has(name)) return t('procedure.issue.duplicate', { name });
     names.add(name);
   }
   return null;

@@ -31,6 +31,32 @@ def test_put_is_an_upsert_and_keeps_created_at(tmp_path: Path) -> None:
     assert len(s.list()) == 1
 
 
+def test_preview_is_saved_separately_and_survives_project_updates(tmp_path: Path) -> None:
+    s = store(tmp_path)
+    s.put("p1", {"meta": {"name": "一"}}, now="2026-01-01T00:00:00Z")
+    assert s.set_preview("p1", b"RIFF fake webp") is True
+    assert s.get("p1").preview == b"RIFF fake webp"  # type: ignore[union-attr]
+    assert s.list()[0].summary()["preview"].startswith("/api/projects/p1/preview?")
+
+    s.put("p1", {"meta": {"name": "二"}}, now="2026-02-02T00:00:00Z")
+    assert s.get("p1").preview == b"RIFF fake webp"  # type: ignore[union-attr]
+    assert s.set_preview("missing", b"x") is False
+
+
+def test_existing_database_is_migrated_with_a_preview_column(tmp_path: Path) -> None:
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE projects (id TEXT, owner_id TEXT, name TEXT, data TEXT, "
+            "created_at TEXT, updated_at TEXT, PRIMARY KEY (owner_id, id))"
+        )
+    s = ProjectStore(path)
+    s.put("p1", {})
+    assert s.set_preview("p1", b"preview") is True
+
+
 def test_projects_are_scoped_by_owner(tmp_path: Path) -> None:
     """§16 Q1 的暫定結論：單機固定 `local`，但欄位從第一天就在。"""
     s = store(tmp_path)

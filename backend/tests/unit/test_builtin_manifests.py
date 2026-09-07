@@ -90,7 +90,8 @@ def test_builtin_manifests_declare_no_dependencies() -> None:
     """內建沒有 `main.py`，沒有東西可以裝、也沒有邊界可以守（§7.2）。"""
     for ns, mf in declarations.manifests().items():
         assert mf.builtin, ns
-        assert not mf.requirements and not mf.permissions, ns
+        assert not mf.requirements and not mf.editor, ns
+        assert "permissions" not in mf.model_dump(), ns
 
 
 # --------------------------------------------------------------------------

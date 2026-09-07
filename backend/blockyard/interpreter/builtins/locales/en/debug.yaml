@@ -1,0 +1,9 @@
+name: Debug
+description: Logs and value inspection
+blocks:
+  log:
+    text: "log %(text)"
+    args:
+      level:
+        options: {debug: Debug, info: Info, warn: Warning, error: Error}
+  inspect: {text: "inspect %(value)"}

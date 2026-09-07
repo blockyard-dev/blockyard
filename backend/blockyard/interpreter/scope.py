@@ -212,6 +212,7 @@ class Scope:
             raise RecursionLimitError(
                 f"函式呼叫層數超過上限 {MAX_FRAME_DEPTH}",
                 block_id=block_id,
+                params={"limit": MAX_FRAME_DEPTH},
                 hint="遞迴是不是沒有終止條件？",
             )
         f = Frame(proc_id, params, depth, self.thread.depth())
@@ -257,6 +258,7 @@ class Scope:
             return UndefinedVariableError(
                 f'未知變數 "{name}"',
                 block_id=block_id,
+                params={"name": name},
                 hint=suggest_name(name, self.known_names()),
             )
         if name in self.thread.hidden_names(floor=floor):
@@ -266,6 +268,7 @@ class Scope:
         return UndefinedVariableError(
             f"變數「{name}」只在{label}裡面有效",
             block_id=block_id,
+            params={"name": name, "scope": label},
             hint=hint,
         )
 

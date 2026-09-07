@@ -17,7 +17,6 @@ from blockyard.ir.values import (
     TYPE_LABELS_ZH,
     TYPE_OBJECT,
     TYPE_STRING,
-    object_get,
     to_string,
     type_of,
 )
@@ -38,12 +37,10 @@ async def _require_object(t: Thread, b: Block, name: str = "object") -> dict:
 
 @value("object.get")
 async def _get(t: Thread, b: Block) -> Any:
-    """key 不存在是錯誤（§4.3）——除非接了預設值孔。"""
+    """key 不存在時回傳空白字串。"""
     o = await _require_object(t, b)
     key = await t.string(b, "key")
-    if "default" in b.inputs:
-        return o.get(key, await t.value(b, "default"))
-    return object_get(o, key)
+    return o.get(key, "")
 
 
 @command("object.set")

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from blockyard.api.app import create_app
 from blockyard.errors import ValidationError
-from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.extensions import BUNDLED_ROOT
 from blockyard.webhook import WebhookSpec, parse
 
 
@@ -33,7 +33,7 @@ def hook_project(project_id: str = "p_hook", *, path: str = "github") -> dict[st
 
 
 def app_for(tmp_path: Path) -> Any:
-    return create_app(db_path=tmp_path / "blockyard.db", extensions_root=DEFAULT_EXTENSIONS_ROOT)
+    return create_app(db_path=tmp_path / "blockyard.db", extensions_root=BUNDLED_ROOT)
 
 
 @pytest.fixture

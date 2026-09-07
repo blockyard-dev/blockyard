@@ -14,7 +14,8 @@ Host 在邊界（§7.5）就是照這份宣告做正規化與驗證，所以這�
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Literal
 
@@ -54,11 +55,12 @@ ButtonAction = Literal[
 ]
 # 只有內建宣告得起的動作：它開的是編輯器自己的對話框，不屬於任何一個積木包。
 BUILTIN_ONLY_ACTIONS = frozenset({"create_procedure"})
-# `open_url` 只收這兩種 scheme。**`javascript:` 必須擋在宣告層**——前端拿到
-# 這個字串是要交給瀏覽器開的，一個包就能用它在編輯器裡執行任意程式碼，而那
-# 正是 D25 (c) 明文封死的東西。
+# `open_url` 收 http(s) 與站內 docs 路徑。**`javascript:` 必須擋在宣告層**——
+# 前端拿到這個字串是要交給瀏覽器開的，一個包就能用它在編輯器裡執行任意
+# 程式碼，而那正是 D25 (c) 明文封死的東西。站內只放 `/docs/`，不讓第三方包把
+# 任意編輯器路徑包裝成說明連結；`//evil.example` 也不在這個字首裡。
 URL_SCHEMES = ("https://", "http://")
-Permission = Literal["net", "fs.read", "fs.write", "subprocess", "env"]
+DOCS_PATH_PREFIX = "/docs/"
 Concurrency = Literal["drop", "queue", "restart", "parallel"]
 
 # 參數與 opcode 都走這個形狀：它同時要當 Python 識別字與 IR 的 key。
@@ -69,6 +71,8 @@ _PLACEHOLDER = PLACEHOLDER
 
 # §4.7：`string` 預設開插值、`code` 預設關（shell 指令裡的 `${HOME}` 不該被替換）
 _INTERPOLATE_BY_DEFAULT = {"string": True, "code": False}
+_LOCALE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
+log = logging.getLogger(__name__)
 
 
 class OptionSpec(Strict):
@@ -208,7 +212,11 @@ class ArgSpec(Strict):
             raise ValueError("depends 不能是空清單：不吃別格的下拉就不要宣告它")
         if self.type == "stack" and (self.field or self.has_default):
             raise ValueError("stack 參數是內部堆疊，不能是 field，也沒有預設值")
-        if self.type == "expression" and self.default is not None and not isinstance(self.default, str):
+        if (
+            self.type == "expression"
+            and self.default is not None
+            and not isinstance(self.default, str)
+        ):
             raise ValueError("expression 參數的 default 必須是運算式文字")
         if self.type not in ("string", "code") and (
             self.multiline or self.rows is not None or self.interpolate is not None
@@ -260,6 +268,20 @@ def _inside_pack(v: str, what: str) -> str:
     return v
 
 
+class EditorSpec(Strict):
+    """受信任的主頁 ES module；API 版本由前端 runtime 檢查。"""
+
+    entry: str
+    apiVersion: int = Field(ge=1)
+
+    @field_validator("entry")
+    @classmethod
+    def _entry_shape(cls, v: str) -> str:
+        if not v.endswith((".js", ".mjs")):
+            raise ValueError("editor.entry 只收 .js 或 .mjs")
+        return _inside_pack(v, "editor.entry")
+
+
 class PanelSpec(Strict):
     """積木包在編輯器裡的一格分頁（§8.3、§16 Q17 的 B 路線）。
 
@@ -272,7 +294,7 @@ class PanelSpec(Strict):
     它同時是「面板屬於積木包、不屬於專案」這句話的落點：`project.json` 一個字
     都不記面板，它只記 `extensions`（§13.3，而且是算出來的）。
 
-    `entry` 是**必填**：編輯器不畫面板的內容，它只給這格一個 `sandbox` 的
+    `entry` 是**必填**：編輯器不畫面板的內容，它只給這格一個受信任的
     iframe。早期版本讓「不寫 entry」退回一組內建 widget（折線／表格／數值卡），
     而那條路的代價是**每加一種圖表就要改編輯器一次**——一個想畫 three.js 的包
     永遠等不到那一天。現在編輯器不知道什麼是折線圖，那是包的 `ui/` 的事。
@@ -337,8 +359,10 @@ class ButtonSpec(Strict):
         if self.action == "open_url":
             if not self.url:
                 raise ValueError("open_url 按鈕必須宣告 url")
-            if not self.url.startswith(URL_SCHEMES):
-                raise ValueError(f"open_url 的 url 只能是 http(s)：{self.url}")
+            if not self.url.startswith((*URL_SCHEMES, DOCS_PATH_PREFIX)):
+                raise ValueError(
+                    f"open_url 的 url 只能是 http(s) 或站內 /docs/ 路徑：{self.url}"
+                )
         elif self.url:
             raise ValueError(f"只有 open_url 按鈕能宣告 url：{self.id}")
 
@@ -373,6 +397,14 @@ class SectionSpec(Strict):
     # 「沒寫 default」分得開的方式，§7.2），而一個有預設值的 `section: true` 會在
     # 那裡被整個丟掉——前端收到一個空條目，純斷開的分段就默默消失了。
     section: str | bool
+    id: str | None = None
+
+    @field_validator("id")
+    @classmethod
+    def _id_shape(cls, v: str | None) -> str | None:
+        if v is not None and not _IDENT.match(v):
+            raise ValueError(f"section id 必須是小寫識別字：{v}")
+        return v
 
     @model_validator(mode="after")
     def _check(self) -> SectionSpec:
@@ -745,7 +777,7 @@ class Manifest(Strict):
 
     差別只有 `builtin` 這個旗標，以及它帶出的幾條規則：內建可以佔用內建命名
     空間、可以宣告 `variable` / `stack` 參數與 `dynamic` 積木，但**不能**宣告
-    `requirements` / `permissions`——內建沒有 `main.py`，沒有東西可以裝、
+    `requirements` / `editor`——內建沒有 `main.py`，沒有東西可以裝、
     也沒有邊界可以守。
     """
 
@@ -755,6 +787,7 @@ class Manifest(Strict):
     version: str
     author: str | None = None
     description: str | None = None
+    defaultLocale: str = "zh-TW"
     color: str | None = None
     # 擴充功能面板那張卡上 16:9 的一格（§8.1、D31）。**選填**：沒宣告就畫名字的
     # 第一個字，那條路本來就在。
@@ -766,7 +799,15 @@ class Manifest(Strict):
     # 只有一格封面，沒有 icon 也沒有 screenshots：現在讀這個欄位的只有那張卡，
     # 而宣告出一個沒人讀的欄位，等於發給每個包作者一個要猜的空格。
     cover: str | None = None
-    permissions: list[Permission] = Field(default_factory=list)
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_legacy_permissions(cls, data: Any) -> Any:
+        # 舊包仍讀得進來；權限不再是宣告或授權模型的一部分。
+        if isinstance(data, dict) and "permissions" in data:
+            data = {k: v for k, v in data.items() if k != "permissions"}
+        return data
+
+    editor: EditorSpec | None = None
     requirements: list[str] = Field(default_factory=list)
     config: list[ConfigSpec] = Field(default_factory=list)
     # **一份清單，三種條目**（§7.2）：一顆積木、一顆按鈕（D25）、一個分段。
@@ -793,6 +834,13 @@ class Manifest(Strict):
     def _id_shape(cls, v: str) -> str:
         if not _IDENT.match(v):
             raise ValueError(f"積木包 id 必須是小寫識別字：{v}")
+        return v
+
+    @field_validator("defaultLocale")
+    @classmethod
+    def _locale_shape(cls, v: str) -> str:
+        if not _LOCALE.match(v):
+            raise ValueError(f"defaultLocale 不是合法的 locale：{v}")
         return v
 
     @field_validator("cover")
@@ -857,6 +905,14 @@ class Manifest(Strict):
                 raise ValueError(f"按鈕 id 重複：{b.id}")
             ids.add(b.id)
 
+        section_ids: set[str] = set()
+        for entry in self.palette:
+            if not isinstance(entry, SectionSpec) or entry.id is None:
+                continue
+            if entry.id in section_ids:
+                raise ValueError(f"section id 重複：{entry.id}")
+            section_ids.add(entry.id)
+
 
         keys: set[str] = set()
         for c in self.config:
@@ -909,8 +965,8 @@ class Manifest(Strict):
         if self.builtin:
             if self.id not in BUILTIN_NAMESPACES:
                 raise ValueError(f'"{self.id}" 不是內建命名空間（§4.4），不能標記 builtin')
-            if self.requirements or self.permissions:
-                raise ValueError("內建沒有 main.py，不能宣告 requirements / permissions")
+            if self.requirements or self.editor:
+                raise ValueError("內建沒有 main.py，不能宣告 requirements / editor")
             return
 
         if self.id in BUILTIN_NAMESPACES:
@@ -1006,6 +1062,12 @@ class ExtensionSource:
     id: str
     dir: Path
     manifest: Manifest
+    locales: dict[str, dict[str, Any]] = dataclass_field(default_factory=dict)
+    locale_warnings: tuple[str, ...] = ()
+
+    @property
+    def has_python(self) -> bool:
+        return self.entrypoint.is_file()
 
     @property
     def entrypoint(self) -> Path:
@@ -1059,9 +1121,135 @@ def read_pack(d: Path, *, expect_id: str | None = None) -> ExtensionSource:
         raise ExtensionError(f"{d / 'manifest.yaml'}：積木包不能標記 builtin")
     if expect_id is not None and mf.id != expect_id:
         raise ExtensionError(f"目錄名 {expect_id} 與 manifest 的 id「{mf.id}」不一致")
+    if mf.editor and not panel_asset(d, mf.editor.entry).is_file():
+        raise ExtensionError(f'積木包「{mf.id}」找不到 {mf.editor.entry}')
+    needs_python = bool(mf.blocks or mf.requirements or any(
+        b.action == "call" for b in mf.buttons
+    ))
+    if (needs_python or not (mf.editor or mf.panels)) and not (d / "main.py").is_file():
+        raise ExtensionError(f'積木包「{mf.id}」缺少 main.py')
     _check_panel_entries(mf, d)
     _check_cover(mf, d)
-    return ExtensionSource(id=mf.id, dir=d, manifest=mf)
+    locales, warnings = load_locales(d, mf)
+    return ExtensionSource(id=mf.id, dir=d, manifest=mf, locales=locales, locale_warnings=warnings)
+
+
+def load_locales(
+    pack_dir: Path, manifest: Manifest, *, strict: bool = False
+) -> tuple[dict[str, dict[str, Any]], tuple[str, ...]]:
+    """Load presentation-only locale overlays; one broken file never breaks the pack."""
+    root = pack_dir / "locales"
+    loaded: dict[str, dict[str, Any]] = {}
+    warnings: list[str] = []
+    if not root.is_dir():
+        return loaded, ()
+    for path in sorted(root.glob("*.yaml")):
+        try:
+            if not _LOCALE.match(path.stem):
+                raise ValueError(f"檔名不是合法的 locale：{path.stem}")
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("根節點必須是 mapping")
+            _validate_locale(data, manifest)
+            loaded[path.stem] = data
+        except (OSError, yaml.YAMLError, ValueError) as exc:
+            message = f"{path} 的翻譯有問題：{exc}"
+            if strict:
+                raise ExtensionError(message) from None
+            warnings.append(message)
+            log.warning(message)
+    return loaded, tuple(warnings)
+
+
+def load_locale_files(root: Path, manifest: Manifest, *, strict: bool = False) -> dict[str, dict[str, Any]]:
+    """Load ``<locale>/<manifest-id>.yaml`` overlays (used by built-in manifests)."""
+    loaded: dict[str, dict[str, Any]] = {}
+    if not root.is_dir():
+        return loaded
+    for locale_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+        path = locale_dir / f"{manifest.id}.yaml"
+        if not path.exists():
+            continue
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not _LOCALE.match(locale_dir.name) or not isinstance(data, dict):
+                raise ValueError("locale 檔名或根節點不合法")
+            _validate_locale(data, manifest)
+            loaded[locale_dir.name] = data
+        except (OSError, yaml.YAMLError, ValueError) as exc:
+            message = f"{path} 的翻譯有問題：{exc}"
+            if strict:
+                raise ExtensionError(message) from None
+            log.warning(message)
+    return loaded
+
+
+def _validate_locale(data: dict[str, Any], mf: Manifest) -> None:
+    allowed = {"name", "description", "blocks", "buttons", "sections", "config", "panels"}
+    _unknown(data, allowed, "locale")
+    _strings(data, {"name", "description"}, "locale")
+    blocks = {b.opcode: b for b in mf.blocks}
+    buttons = {b.id: b for b in mf.buttons}
+    sections = {e.id: e for e in mf.palette if isinstance(e, SectionSpec) and e.id}
+    configs = {c.key: c for c in mf.config}
+    panels = {p.id: p for p in mf.panels}
+    for group, known in (("buttons", buttons), ("sections", sections), ("config", configs), ("panels", panels)):
+        values = _mapping(data.get(group), group)
+        _unknown(values, set(known), group)
+        for key, value in values.items():
+            fields = {"label"} if group == "buttons" else {"title"} if group == "sections" else {"label", "help"} if group == "config" else {"name"}
+            item = _mapping(value, f"{group}.{key}")
+            _unknown(item, fields, f"{group}.{key}")
+            _strings(item, fields, f"{group}.{key}")
+    for opcode, raw in _mapping(data.get("blocks"), "blocks").items():
+        if opcode not in blocks:
+            raise ValueError(f"blocks 參照不存在的 opcode：{opcode}")
+        block = blocks[opcode]
+        item = _mapping(raw, f"blocks.{opcode}")
+        _unknown(item, {"text", "repeatLabel", "args"}, f"blocks.{opcode}")
+        _strings(item, {"text", "repeatLabel"}, f"blocks.{opcode}")
+        if "text" in item and set(_PLACEHOLDER.findall(item["text"])) != set(_PLACEHOLDER.findall(block.text)):
+            raise ValueError(f"blocks.{opcode}.text 的 placeholder 與原宣告不一致")
+        if "repeatLabel" in item:
+            if block.repeat is None:
+                raise ValueError(f"blocks.{opcode} 沒有 repeat")
+            if set(_PLACEHOLDER.findall(item["repeatLabel"])) != set(_PLACEHOLDER.findall(block.repeat.label)):
+                raise ValueError(f"blocks.{opcode}.repeatLabel 的 placeholder 與原宣告不一致")
+        args = {**block.args, **(block.repeat.args if block.repeat else {})}
+        for name, arg_raw in _mapping(item.get("args"), f"blocks.{opcode}.args").items():
+            if name not in args:
+                raise ValueError(f"blocks.{opcode}.args 參照不存在的參數：{name}")
+            arg_item = _mapping(arg_raw, f"blocks.{opcode}.args.{name}")
+            _unknown(arg_item, {"label", "help", "options"}, f"blocks.{opcode}.args.{name}")
+            _strings(arg_item, {"label", "help"}, f"blocks.{opcode}.args.{name}")
+            options = _mapping(arg_item.get("options"), f"blocks.{opcode}.args.{name}.options")
+            allowed_values = {o.value for o in (args[name].options or [])}
+            _unknown(options, allowed_values, f"blocks.{opcode}.args.{name}.options")
+            for value, label in options.items():
+                if isinstance(label, dict):
+                    _unknown(label, {"label"}, f"option {value}")
+                    label = label.get("label")
+                if not isinstance(label, str):
+                    raise ValueError(f"option {value} 的 label 必須是字串")
+
+
+def _mapping(value: Any, where: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or not all(isinstance(k, str) for k in value):
+        raise ValueError(f"{where} 必須是 mapping")
+    return value
+
+
+def _unknown(data: dict[str, Any], allowed: set[str], where: str) -> None:
+    if extra := set(data) - allowed:
+        raise ValueError(f"{where} 參照不存在的 id/key：{', '.join(sorted(extra))}")
+
+
+def _strings(data: dict[str, Any], fields: set[str], where: str) -> None:
+    for field in fields & set(data):
+        if not isinstance(data[field], str):
+            raise ValueError(f"{where}.{field} 必須是字串")
 
 
 def scan(root: Path) -> Discovery:
@@ -1121,6 +1309,17 @@ PACK_SKIP_DIRS = frozenset(
 )
 
 
+#: 收據的檔名（`extensions/receipt.py`、`docs/extension-design.md` §2）。
+#:
+#: **它不是包的內容**，所以名字定在這裡而不是那個模組：`pack_files()` 是
+#: 「屬於這個包的檔案」唯一的答案，而收據是**我們**寫的——包的作者沒有寫過它，
+#: 審閱畫面不該攤開它，digest 更不能把它算進去（那會是一條自己餵自己的迴圈）。
+#:
+#: 一個 `.zip` 裡如果帶了同名檔案，`install.py` 會在解壓那一步丟掉它：
+#: **一個包不能自己說自己從哪來。**
+RECEIPT_FILE = ".blockyard-source.json"
+
+
 def in_skipped_dir(rel: str) -> bool:
     """這條包內相對路徑（POSIX 形式）有沒有經過 `PACK_SKIP_DIRS` 的任何一層。"""
     return any(part in PACK_SKIP_DIRS for part in PurePosixPath(rel).parts[:-1])
@@ -1131,7 +1330,9 @@ def pack_files(pack_dir: Path) -> list[Path]:
     return sorted(
         p
         for p in pack_dir.rglob("*")
-        if p.is_file() and not in_skipped_dir(p.relative_to(pack_dir).as_posix())
+        if p.is_file()
+        and p.name != RECEIPT_FILE
+        and not in_skipped_dir(p.relative_to(pack_dir).as_posix())
     )
 
 
@@ -1202,15 +1403,17 @@ __all__ = [
     "Manifest",
     "OptionSpec",
     "PACK_SKIP_DIRS",
+    "RECEIPT_FILE",
     "PackProblem",
     "PanelSpec",
     "in_skipped_dir",
     "pack_files",
     "panel_asset",
-    "Permission",
     "YieldSpec",
     "discover",
     "load_manifest",
+    "load_locales",
+    "load_locale_files",
     "parse_manifest",
     "read_pack",
     "scan",

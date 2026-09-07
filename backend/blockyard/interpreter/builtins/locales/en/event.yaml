@@ -1,0 +1,17 @@
+name: Events
+description: Script entry points; every script must begin with an event block
+blocks:
+  when_flag_clicked: {text: "when ▶ clicked"}
+  when_cron:
+    text: "when time reaches %(cron) timezone %(timezone)"
+    args:
+      cron: {help: "Cron expression: minute hour day month weekday. For example, 0 9 * * * means 9 AM daily"}
+      timezone: {help: "IANA timezone name, such as Asia/Taipei"}
+  when_webhook:
+    text: "when webhook %(path) is received %(verify) %(signature_header)"
+    args:
+      path: {help: "Final URL segment, such as github. Copy the full URL from the block after enabling listening"}
+      verify:
+        label: Verify signature
+        options: {none: Do not verify, hmac_sha256: HMAC-SHA256, hmac_sha1: HMAC-SHA1}
+      signature_header: {label: Signature header, help: "GitHub uses X-Hub-Signature-256. Leave empty when verification is disabled"}

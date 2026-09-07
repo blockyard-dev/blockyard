@@ -22,12 +22,17 @@ from blockyard.interpreter import builtins as _builtins  # noqa: F401  匯入即
 from blockyard.interpreter.declarations import expression_fields
 from blockyard.interpreter.events import EventSink
 from blockyard.interpreter.registry import resolve_shape, resolve_spec, resolve_terminal
-from blockyard.ir.schema import LoadedProject, load
+from blockyard.ir.schema import LoadedProject, Meta, Project, load
 from blockyard.repeat import validate_blocks as validate_repeat_blocks
 from blockyard.webhook import validate_blocks as validate_webhook_blocks
 
 if TYPE_CHECKING:
     from blockyard.extensions.registry import ExtensionRegistry
+
+#: `meta.id` 沒寫的時候是誰。與 `ir/schema.py` 的預設同一個值——兩邊各寫一個字串
+#: 的話，一份沒有 meta 的 IR 會在驗證與執行時屬於兩個不同的專案，而那個差別只在
+#: 「金鑰讀不到」的時候才看得出來。
+DEFAULT_PROJECT_ID = Meta().id
 
 
 async def open_project(
@@ -54,9 +59,14 @@ async def open_project(
     if not isinstance(data, dict):
         raise ValidationError("專案必須是一個 JSON 物件")
 
-    declared = [
-        e["id"] for e in (data.get("extensions") or []) if isinstance(e, dict) and "id" in e
-    ]
+    # Parse before reading metadata/dependencies: plugin-provided malformed IR must be 422,
+    # not AttributeError/TypeError, and must not start workers before shape validation.
+    try:
+        parsed = Project.model_validate(data)
+    except PydanticError as e:
+        raise ValidationError(_first_error(e)) from None
+    declared = [extension.id for extension in parsed.extensions]
+    project_id = parsed.meta.id
 
     registry: ExtensionRegistry | None = None
     if declared:
@@ -64,7 +74,7 @@ async def open_project(
         # RPC 就帶著 config，太晚給就沒用（§12.1、D28）。
         sources = discover(extensions_root)
         declared_manifests = {k: sources[k].manifest for k in declared if k in sources}
-        config = secret_store.resolve_config(declared_manifests)
+        config = secret_store.resolve_config(declared_manifests, project_id=project_id)
         if sink is not None:
             # §12.2：這次 Run 用到的 secret 明文值進遮蔽名單，事件流從第一筆
             # 開始就擋得住——不能等 Run 跑到一半才補。

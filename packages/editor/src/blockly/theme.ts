@@ -13,6 +13,7 @@ import {
   type LabelFlyoutItem,
 } from '@blockly/continuous-toolbox';
 import { procIdFromType } from './procedures';
+import { wasRedefined } from './redefined';
 // 時間與曲線與畫布的「滑到那顆積木」共用一份（見 `motion.ts` 開頭）。
 import { SCROLL_MS, easeOut, prefersReducedMotion } from './motion';
 // 匯入即註冊「Alt 拖曳 = 複製」的那個 dragger（下面 `plugins.blockDragger` 指名它）。
@@ -188,14 +189,21 @@ type ScrollTargetSlot = { scrollTarget: number | undefined };
 class FixedScaleFlyout extends ContinuousFlyout {
   constructor(options: Blockly.Options) {
     super(options);
-    // **函式積木不回收。**
+    // **定義會變的積木不回收。**
     //
     // continuous-toolbox 的 flyout 會把上一批積木依 type 收起來重用
     // （`RecyclableBlockFlyoutInflater`），而那假設「同一個 type 永遠長同一個
-    // 樣子」。函式積木不是：改一次簽章就是同一組 type 換一份定義
-    // （`procedures.ts`），於是回收回來的那顆帶著舊的孔——工具箱裡的 `跳 ( ) 次`
-    // 在參數已經被刪掉之後還留著那個孔，而畫布上的那顆已經對了。
-    this.setBlockIsRecyclable((block) => procIdFromType(block.type) === null);
+    // 樣子」。兩種積木不是：
+    //
+    // * **函式積木**——改一次簽章就是同一組 type 換一份定義（`procedures.ts`），
+    //   於是回收回來的那顆帶著舊的孔：工具箱裡的 `跳 ( ) 次` 在參數已經被刪掉
+    //   之後還留著那個孔，而畫布上的那顆已經對了。
+    // * **更新過的積木包**（`redefined.ts`）——同一個形狀，只是它要等到
+    //   `extension-design.md` §4 那條路做完才可能發生。症狀一模一樣：更新完
+    //   工具箱裡那顆的字還是舊的，而它是**回收回來的那一顆**，不是沒重新註冊。
+    this.setBlockIsRecyclable(
+      (block) => procIdFromType(block.type) === null && !wasRedefined(block.type),
+    );
   }
 
   /** 使用者拉出來的寬度（px）。預設值見 `FLYOUT_DEFAULT_WIDTH`。 */
@@ -258,6 +266,12 @@ class FixedScaleFlyout extends ContinuousFlyout {
   override show(flyoutDef: Blockly.utils.toolbox.FlyoutDefinition | string): void {
     super.show(flyoutDef);
     this.stretchButtons();
+    // **捲到剛冒出來的那一格，只有這裡做得到。** 分類的捲動位置是
+    // `super.show()` 裡量出來的（`recordScrollPositions`），所以在
+    // `BlockyardToolbox.render()` 那一刻，新的那一格還沒有位置——那時候捲會
+    // 靜靜地什麼都不做（外掛只 `console.warn`）。
+    const toolbox = this.targetWorkspace.getToolbox();
+    if (toolbox instanceof BlockyardToolbox) toolbox.revealPending();
   }
 
   /**
@@ -442,6 +456,78 @@ class BlockyardToolbox extends ContinuousToolbox {
     }
     super.setSelectedItem(newItem);
   }
+
+  /**
+   * **重畫工具箱之後，選取要重新指到同名的那一格。**
+   *
+   * `render()` 是 `updateToolbox()` 底下真正動手的那一句：它把每一個分類
+   * `dispose()` 掉再全部重建，但**它不動「現在選著誰」**。於是每一次重畫
+   * ——多一個函式、設定好一把金鑰、上架一個積木包——留下來的都是一個指向
+   * 已經 dispose、DOM 也拆掉了的分類的參照。
+   *
+   * 不修的症狀分兩種，而它們看起來完全不像同一件事：
+   *
+   * * **重畫的原因跟選著的那一格無關**：那個幽靈非 null，所以
+   *   `ContinuousFlyout.show()` 那句「沒有選中的就依捲動位置選一格」不會醒來，
+   *   左邊那塊灰底就停在一個已經不存在的物件上。
+   * * **選著的那一格正好被拿掉了**（右鍵刪掉一個擴充功能）：同上，但這次連
+   *   名字都沒了，flyout 從此對不上任何一格——這是使用者看得到的那個「卡住」。
+   *
+   * 所以比對的是**名字**不是物件：物件在每一次 render 之後都必然是新的，拿
+   * 它去比會把每一次重畫都判成「那一格不見了」，於是打一個函式名字就被踢回
+   * 第一格。
+   *
+   * 名字還在就走 `selectCategoryByName()`——它**刻意不捲**（那是這個外掛給
+   * 「捲動時同步左邊選取」用的入口），因為重畫不是一次導覽，使用者的捲軸不該
+   * 因此跳走。名字不在了才是 §0 那一條：切回第一格，而這一次要連著捲過去，
+   * 不然灰底在第一格、內容還停在被刪掉的那一段。
+   *
+   * 排在這兩條**前面**的是第三條：**這次重畫多出了一格就去那一格**。它是唯一
+   * 一次「重畫確實是一次導覽」——使用者剛把一個積木包加進工具箱，而留在原地
+   * 等於那一下按鈕沒有畫面上的回應。判準是「多出來的分類」而不是「加了一個
+   * 積木包」，所以第一次建立函式（函式分類從沒有內容變成有）也走同一條，而
+   * 那也是對的：兩者都是「你剛剛讓一格東西出現」。
+   */
+  override render(toolboxDef: Blockly.utils.toolbox.ToolboxInfo): void {
+    const before = new Set(this.getToolboxItems().map((item) => item.getId()));
+    const selected = this.getSelectedItem()?.getName();
+    super.render(toolboxDef);
+
+    // **剛冒出來的那一格優先。** 加一個積木包進工具箱之後，使用者要看的就是
+    // 它——留在原地等於那一下按鈕沒有任何畫面上的回應。`before` 是空的時候
+    // 不算（那是 `init()` 的第一次 render，那時候每一格都是新的，flyout 也還
+    // 不存在）。真正的捲動要等 flyout 重新量完位置，見 `revealPending`。
+    const appeared = before.size
+      ? this.getToolboxItems().find((item) => item.isSelectable() && !before.has(item.getId()))
+      : undefined;
+    if (appeared instanceof Blockly.ToolboxCategory) {
+      this.pendingReveal = appeared.getName();
+      return;
+    }
+
+    if (selected === undefined) return;
+    if (this.getCategoryByName(selected)) {
+      this.selectCategoryByName(selected);
+      return;
+    }
+    const first = this.getToolboxItems().find((item) => item.isSelectable());
+    if (first) this.setSelectedItem(first);
+  }
+
+  /** `render()` 排隊、`FixedScaleFlyout.show()` 兌現：捲到剛冒出來的那一格。 */
+  private pendingReveal: string | null = null;
+
+  revealPending(): void {
+    const name = this.pendingReveal;
+    this.pendingReveal = null;
+    if (name === null) return;
+    const category = this.getCategoryByName(name);
+    // 排完隊到兌現之間又重畫了一次（那一格已經不在了）就算了——那一次重畫
+    // 自己會排它該排的東西。
+    if (!category) return;
+    this.selectCategoryByName(name);
+    this.getFlyout().scrollToCategory(category);
+  }
 }
 
 Blockly.registry.register(
@@ -453,6 +539,25 @@ Blockly.registry.register(
 
 Blockly.registry.register(Blockly.registry.Type.TOOLBOX, 'BlockyardToolbox', BlockyardToolbox, true);
 
+/**
+ * Blockly 自己那幾張圖（垃圾桶、放大縮小、下拉箭頭、游標）住在哪裡。
+ *
+ * **開頭那條斜線是必要的。** 這個字串是相對於**文件的網址**去解的，而編輯器的
+ * 網址現在有一層深度（`/p/prj_ab12cd34`，見 `project/routes.ts`）——寫成
+ * `media/` 的話它會被解成 `/p/media/sprites.png`，而那裡什麼都沒有：右下角的
+ * 垃圾桶與放大縮小當場變成三個破圖圖示。
+ *
+ * 那個 bug 在網址只有 `/` 的時候不存在，所以它是跟著多專案那次改動一起長出來的
+ * ——而症狀（破圖）離原因（網址多了一層）非常遠。
+ *
+ * `public/media/` 由 `scripts/copy-media.mjs` 鋪好，dev 與打包後都在 `/media/`。
+ *
+ * **一個常數兩個地方用**（這裡與 `ProcedureModal` 的預覽工作區）：兩份字串的
+ * 結果是其中一份被修好、另一份留著，而那個「另一份」是一個小小的預覽區，
+ * 沒有人會在那裡發現破圖。
+ */
+export const BLOCKLY_MEDIA = '/media/';
+
 export const workspaceOptions: Partial<Blockly.BlocklyOptions> = {
   renderer: 'zelos',
   theme: blockyardTheme,
@@ -463,7 +568,7 @@ export const workspaceOptions: Partial<Blockly.BlocklyOptions> = {
     // 按住 Alt／Option 拖曳 = 複製這顆以下整串（`duplicate.ts`）。
     blockDragger: DUPLICATING_DRAGGER,
   },
-  media: 'media/',
+  media: BLOCKLY_MEDIA,
   grid: { spacing: 40, length: 3, colour: '#e2e4ee', snap: false },
   zoom: { controls: true, wheel: true, startScale: DEFAULT_SCALE, minScale: 0.3, maxScale: 2 },
   move: { scrollbars: true, drag: true, wheel: true },
@@ -488,4 +593,6 @@ export const workspaceOptions: Partial<Blockly.BlocklyOptions> = {
  */
 export function muteWorkspace(workspace: Blockly.WorkspaceSvg): void {
   workspace.getAudioManager().setMuted(true);
+  // Flyout 有獨立的 AudioManager；beep 不會查主工作區的 muted。
+  workspace.getFlyout()?.getWorkspace().getAudioManager().setMuted(true);
 }

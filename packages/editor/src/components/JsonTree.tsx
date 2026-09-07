@@ -7,6 +7,7 @@
  * 必須長得不一樣：前者有引號、是一行；後者可以展開。
  */
 import { useState } from 'react';
+import { t } from '../i18n';
 
 interface Props {
   value: unknown;
@@ -27,8 +28,8 @@ export function JsonTree({ value, depth = 0 }: Props) {
 function Scalar({ value }: { value: unknown }) {
   if (typeof value === 'string') return <span className="json-string">&quot;{value}&quot;</span>;
   if (typeof value === 'number') return <span className="json-number">{String(value)}</span>;
-  if (typeof value === 'boolean') return <span className="json-boolean">{value ? '真' : '假'}</span>;
-  if (value === null) return <span className="json-null">空值</span>;
+  if (typeof value === 'boolean') return <span className="json-boolean">{value ? t('json.true') : t('json.false')}</span>;
+  if (value === null) return <span className="json-null">{t('json.null')}</span>;
   if (value === undefined) return <span className="json-null">—</span>;
   return <span>{String(value)}</span>;
 }

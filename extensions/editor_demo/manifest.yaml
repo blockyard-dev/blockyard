@@ -1,0 +1,8 @@
+manifestVersion: 1
+id: editor_demo
+name: 編輯器工具示範
+version: 0.1.0
+description: 純 JavaScript 插件：工具列、面板、選取積木與可復原的畫布修改。
+editor:
+  entry: ui/editor.js
+  apiVersion: 1

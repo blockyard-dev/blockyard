@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from blockyard.errors import ExtensionError
-from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT, Manifest, discover, parse_manifest, scan
+from blockyard.extensions import BUNDLED_ROOT, Manifest, discover, load_locales, parse_manifest, scan
 
 BASE = {"manifestVersion": 1, "id": "demo2", "name": "示範", "version": "0.1.0"}
 
@@ -148,9 +148,48 @@ def test_boolean_block_declares_its_return_by_its_shape() -> None:
 
 
 def test_demo_pack_is_valid() -> None:
-    sources = discover(DEFAULT_EXTENSIONS_ROOT)
+    sources = discover(BUNDLED_ROOT)
     assert "demo" in sources
     assert isinstance(sources["demo"].manifest, Manifest)
+
+
+def test_default_locale_is_backward_compatible() -> None:
+    assert parse_manifest(mf(), where="test").defaultLocale == "zh-TW"
+
+
+def test_locale_overlay_is_loaded_and_validated(tmp_path) -> None:
+    manifest = parse_manifest(mf(
+        description="描述",
+        palette=[{
+            "opcode": "say", "type": "command", "text": "說 %(text)",
+            "args": {"text": {"type": "string", "label": "文字"}},
+        }],
+    ), where="test")
+    root = tmp_path / "locales"
+    root.mkdir()
+    (root / "en.yaml").write_text(
+        "name: Demo\ndescription: Description\nblocks:\n  say:\n    text: 'say %(text)'\n"
+        "    args:\n      text: {label: Text}\n",
+        encoding="utf-8",
+    )
+    locales, warnings = load_locales(tmp_path, manifest)
+    assert locales["en"]["blocks"]["say"]["text"] == "say %(text)"
+    assert warnings == ()
+
+
+def test_bad_locale_is_ignored_at_runtime_but_fails_strict_check(tmp_path) -> None:
+    manifest = parse_manifest(mf(palette=[{
+        "opcode": "say", "type": "command", "text": "說 %(text)",
+        "args": {"text": {"type": "string"}},
+    }]), where="test")
+    root = tmp_path / "locales"
+    root.mkdir()
+    (root / "en.yaml").write_text("blocks:\n  say:\n    text: say\n", encoding="utf-8")
+    locales, warnings = load_locales(tmp_path, manifest)
+    assert locales == {}
+    assert "placeholder" in warnings[0]
+    with pytest.raises(ExtensionError, match="placeholder"):
+        load_locales(tmp_path, manifest, strict=True)
 
 
 def assert_problem(root, dirname: str, match: str) -> None:
@@ -200,7 +239,7 @@ def test_builtin_id_must_be_a_builtin_namespace() -> None:
 def test_builtin_cannot_declare_dependencies() -> None:
     """內建沒有 `main.py`，沒有東西可以裝、也沒有邊界可以守。"""
     bad(mf(id="data", builtin=True, requirements=["httpx"]), "不能宣告 requirements")
-    bad(mf(id="data", builtin=True, permissions=["net"]), "不能宣告 requirements")
+    assert "permissions" not in parse_manifest(mf(id="data", builtin=True, permissions=["net"]), where="test").model_dump()
 
 
 def test_packs_cannot_declare_builtin_only_arg_types() -> None:
@@ -444,6 +483,28 @@ def test_open_url_rejects_non_http_schemes() -> None:
     )
 
 
+def test_open_url_accepts_an_internal_docs_path() -> None:
+    m = parse_manifest(
+        mf(palette=[{
+            "button": "docs",
+            "label": "How to setup bot token",
+            "action": "open_url",
+            "url": "/docs/discord/",
+        }]),
+        where="test",
+    )
+    assert m.buttons[0].url == "/docs/discord/"
+
+
+def test_open_url_rejects_other_internal_paths() -> None:
+    bad(
+        mf(palette=[{
+            "button": "x", "label": "點我", "action": "open_url", "url": "/api/keys",
+        }]),
+        "站內 /docs/",
+    )
+
+
 def test_call_button_must_declare_a_handler() -> None:
     bad(mf(palette=[{"button": "t", "label": "測試", "action": "call"}]), "必須宣告 handler")
 
@@ -545,5 +606,6 @@ def test_declared_cover_must_exist(tmp_path) -> None:
     d = tmp_path / "demo2"
     d.mkdir()
     (d / "manifest.yaml").write_text(yaml.safe_dump(mf(cover="preview.png")))
+    (d / "main.py").write_text("")
 
     assert_problem(tmp_path, "demo2", "找不到封面")

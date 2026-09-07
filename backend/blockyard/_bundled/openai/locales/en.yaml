@@ -1,0 +1,15 @@
+name: OpenAI
+description: Ask GPT; return either text or the full response object including usage
+blocks:
+  chat: {text: "ask %(model): %(prompt)"}
+  chat_full:
+    text: "ask %(model): %(prompt) instructions %(instructions) max %(max_output_tokens) tokens"
+    args:
+      instructions: {label: System instructions, help: "Role instructions for the model; left empty when omitted"}
+      max_output_tokens: {help: "When this limit is reached, status is incomplete and the reason is in incomplete_reason"}
+buttons:
+  api_key: {label: Set API key}
+  api_docs: {label: Model and parameter documentation}
+config:
+  api_key: {label: API key, help: "Create one on the platform.openai.com API keys page, then add it under Keys"}
+  base_url: {label: Endpoint URL, help: "Leave empty for the official endpoint; set this only for a compatible self-hosted endpoint or proxy"}

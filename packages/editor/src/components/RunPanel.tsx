@@ -13,6 +13,7 @@ import { JsonTree } from './JsonTree';
 import { ExtPanel } from './ExtPanel';
 import { PanelWindow } from './PanelWindow';
 import { useKeysUi } from './keysStore';
+import { number, t } from '../i18n';
 
 /** §8.3：變數面板預設開著，但要能關。開關記在偏好裡，**不進 IR**（§16 Q15）。 */
 const VARIABLES_OPEN = 'variables-panel-open';
@@ -112,8 +113,8 @@ export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
         className="run-panel-resizer"
         role="separator"
         aria-orientation="vertical"
-        aria-label="調整面板寬度"
-        title="拖曳調整寬度；雙擊回到預設"
+        aria-label={t('run.resize')}
+        title={t('run.resizeHelp')}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
           drag.current = { startX: event.clientX, startWidth: width };
@@ -146,7 +147,7 @@ export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
           className={`run-tab${showRun ? ' is-on' : ''}`}
           onClick={() => pick(RUN_TAB)}
         >
-          執行
+          {t('run.title')}
         </button>
         {declared.map((d) => {
           const key = keyOf(d);
@@ -158,7 +159,7 @@ export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
               aria-selected={tab === key}
               className={`run-tab${tab === key ? ' is-on' : ''}`}
               onClick={() => pick(key)}
-              title={`${d.name}（${d.extId}）`}
+              title={t('run.panelTitle', { name: d.name, extId: d.extId })}
             >
               {d.name}
             </button>
@@ -168,7 +169,7 @@ export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
 
       {activeDeclared && panelProps ? (
         <section className="run-section run-section-panels">
-          {/* **編輯器不畫面板的內容。** 它只給那個包一格 sandbox 的 iframe，
+          {/* **編輯器不畫面板的內容。** 它只給那個包一格 受信任的 iframe，
               裡面畫什麼（折線圖、three.js、地圖）完全是那個包的 `ui/` 的事。
               少了這條，每加一種圖表就要改編輯器一次。 */}
           <div className="panel-view">
@@ -179,13 +180,13 @@ export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
               type="button"
               className="panel-popout"
               onClick={() => setWindowOpen((open) => !open)}
-              aria-label={windowOpen ? '收回這個視窗' : '在新視窗開啟'}
-              title={windowOpen ? '收回來' : '在新視窗開啟'}
+              aria-label={windowOpen ? t('run.popIn') : t('run.popOut')}
+              title={windowOpen ? t('run.popInAction') : t('run.popOut')}
             >
               {windowOpen ? '⤡' : '↗'}
             </button>
             {windowOpen ? (
-              <p className="run-empty">在彈出視窗裡顯示中。</p>
+              <p className="run-empty">{t('run.popped')}</p>
             ) : (
               <ExtPanel {...panelProps} />
             )}
@@ -211,7 +212,7 @@ export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
             onClick={toggleVars}
             aria-expanded={varsOpen}
           >
-            <span className="section-caret">{varsOpen ? '▾' : '▸'}</span> 變數
+            <span className="section-caret">{varsOpen ? '▾' : '▸'}</span> {t('run.variables')}
             {!varsOpen && variables.size > 0 && (
               <span className="section-count">{variables.size}</span>
             )}
@@ -219,7 +220,7 @@ export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
         </h2>
         {varsOpen &&
           (variables.size === 0 ? (
-            <p className="run-empty">還沒有變數被設定。</p>
+            <p className="run-empty">{t('run.noVariables')}</p>
           ) : (
             <ul className="var-list">
               {[...variables].map(([name, value]) => (
@@ -233,9 +234,9 @@ export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
       </section>
 
       <section className="run-section run-section-logs">
-        <h2>輸出</h2>
+        <h2>{t('common.output')}</h2>
         {logs.length === 0 ? (
-          <p className="run-empty">還沒有輸出。</p>
+          <p className="run-empty">{t('run.noOutput')}</p>
         ) : (
           <ol className="log-list">
             {logs.map((line) => (
@@ -254,7 +255,7 @@ export function RunPanel({ declared = [] }: { declared?: DeclaredPanel[] }) {
         )}
         {dropped > 0 && (
           // §6.2：丟掉可以，靜靜地丟掉不行。
-          <p className="run-dropped">跟不上，後端丟棄了 {dropped.toLocaleString()} 筆事件</p>
+          <p className="run-dropped">{t('run.dropped', { count: number(dropped) })}</p>
         )}
       </section>
       </>
@@ -282,7 +283,7 @@ function LogAction({ action }: { action: NonNullable<LogLine['action']> }) {
         })
       }
     >
-      去設定{what}
+      {t('run.configureWhat', { what })}
     </button>
   );
 }

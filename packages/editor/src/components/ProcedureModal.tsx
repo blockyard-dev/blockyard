@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as Blockly from 'blockly/core';
 import { ChevronLeft, ChevronRight, Trash2, X } from 'lucide-react';
-import { blockyardTheme, muteWorkspace } from '../blockly/theme';
+import { BLOCKLY_MEDIA, blockyardTheme, muteWorkspace } from '../blockly/theme';
 import {
   DECLARATION_TYPE,
   buildDeclaration,
@@ -43,7 +43,9 @@ import {
   type ParamType,
 } from '../procedures/draft';
 import { focusableIn, modalKeyAction, nextFocusIndex } from './modalKeys';
+import { ModalActions } from './ModalActions';
 import type { Procedure, Returns } from '../types/project';
+import { t } from '../i18n';
 
 export interface ProcedureDialogTarget {
   /** 既有函式的 id；建立時是 `null`。 */
@@ -64,19 +66,19 @@ interface Props {
  * 預設 `any`（「任何值」）：型別只改靜態檢查的嚴格度（§8.5 的警告只標「執行期
  * 一定會炸」的組合），不知道就別誤報。
  */
-const VALUE_TYPES: { value: ParamType; label: string }[] = [
-  { value: 'any', label: '任何值' },
-  { value: 'number', label: '數字' },
-  { value: 'string', label: '文字' },
-  { value: 'boolean', label: '是非' },
-  { value: 'list', label: '清單' },
-  { value: 'object', label: '物件' },
+const VALUE_TYPES: { value: ParamType; label: () => string }[] = [
+  { value: 'any', label: () => t('procedure.type.any') },
+  { value: 'number', label: () => t('procedure.type.number') },
+  { value: 'string', label: () => t('procedure.type.string') },
+  { value: 'boolean', label: () => t('procedure.type.boolean') },
+  { value: 'list', label: () => t('procedure.type.list') },
+  { value: 'object', label: () => t('procedure.type.object') },
 ];
 
 const WORKSPACE_OPTIONS: Partial<Blockly.BlocklyOptions> = {
   renderer: 'zelos',
   theme: blockyardTheme,
-  media: 'media/',
+  media: BLOCKLY_MEDIA,
   sounds: false,
   trashcan: false,
   // 預覽區沒有工具箱、不捲動、不縮放：裡面只有一顆積木，而它不能被拖走。
@@ -300,13 +302,13 @@ export function ProcedureModal({ target, onCancel, onSubmit }: Props) {
         className="modal"
         role="dialog"
         aria-modal="true"
-        aria-label="建立一個積木"
+        aria-label={t('procedure.create')}
         ref={dialogRef}
         tabIndex={-1}
       >
         <header className="modal-head">
-          <h2>{target.id ? '編輯積木' : '建立一個積木'}</h2>
-          <button type="button" className="modal-close" onClick={onCancel} aria-label="關閉">
+          <h2>{target.id ? t('procedure.edit') : t('procedure.create')}</h2>
+          <button type="button" className="modal-close" onClick={onCancel} aria-label={t('common.close')}>
             <X size={16} strokeWidth={2.5} />
           </button>
         </header>
@@ -326,19 +328,19 @@ export function ProcedureModal({ target, onCancel, onSubmit }: Props) {
 
         <div className="modal-adders">
           <AdderButton
-            label="添加輸入方塊"
-            sub="數字或文字"
+            label={t('procedure.addInput')}
+            sub={t('procedure.numberOrText')}
             shape="round"
             onClick={() => mutate((d) => addParam(d, 'any'))}
           />
           <AdderButton
-            label="添加輸入方塊"
-            sub="布林值"
+            label={t('procedure.addInput')}
+            sub={t('procedure.booleanValue')}
             shape="hex"
             onClick={() => mutate((d) => addParam(d, 'boolean'))}
           />
           <AdderButton
-            label="添加說明文字"
+            label={t('procedure.addLabel')}
             sub="text"
             shape="text"
             onClick={() => mutate(addLabel)}
@@ -351,18 +353,18 @@ export function ProcedureModal({ target, onCancel, onSubmit }: Props) {
             checked={draft.returns != null}
             onChange={(e) => mutate((d) => ({ ...d, returns: e.target.checked ? 'any' : null }))}
           />
-          這個積木會回傳值
+          {t('procedure.returns')}
         </label>
         {draft.returns != null && (
           <label className="modal-return-type">
-            回傳
+            {t('procedure.returnType')}
             <select
               value={draft.returns}
               onChange={(e) => mutate((d) => ({ ...d, returns: e.target.value as Returns }))}
             >
               {VALUE_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>
-                  {t.label}
+                  {t.label()}
                 </option>
               ))}
             </select>
@@ -372,17 +374,15 @@ export function ProcedureModal({ target, onCancel, onSubmit }: Props) {
         <p className="modal-hint">
           {/* §8.5 的那條分工，寫成一句話：文字在積木上、位置與存在在浮動列、
               型別在右鍵。 */}
-          {issue ?? '在積木上直接打字改名字；點一格會浮出移動與刪除，按右鍵可以換型別。'}
+          {issue ?? t('procedure.help')}
         </p>
 
-        <footer className="modal-foot">
-          <button type="button" className="button" onClick={onCancel}>
-            取消
-          </button>
-          <button type="button" className="button button-run" onClick={submit} disabled={!!issue}>
-            確定
-          </button>
-        </footer>
+        <ModalActions
+          confirmClassName="button-run"
+          disabled={!!issue}
+          onConfirm={submit}
+          onCancel={onCancel}
+        />
       </div>
     </div>
   );
@@ -444,17 +444,17 @@ const SegmentToolbar = ({
     {/* 端點的箭頭**不畫**而不是畫成灰色：三個圖示的一列裡，一個灰掉的箭頭
         讀起來像壞了（§8.5）。 */}
     {actions.left && (
-      <SegmentButton label="往左移一格" onPress={() => onMove(-1)}>
+      <SegmentButton label={t('procedure.moveLeft')} onPress={() => onMove(-1)}>
         <ChevronLeft {...ICON} />
       </SegmentButton>
     )}
     {actions.remove && (
-      <SegmentButton label="刪掉這一格" onPress={onRemove}>
+      <SegmentButton label={t('procedure.removeSegment')} onPress={onRemove}>
         <Trash2 {...ICON} />
       </SegmentButton>
     )}
     {actions.right && (
-      <SegmentButton label="往右移一格" onPress={() => onMove(1)}>
+      <SegmentButton label={t('procedure.moveRight')} onPress={() => onMove(1)}>
         <ChevronRight {...ICON} />
       </SegmentButton>
     )}
@@ -575,7 +575,7 @@ function registerSegmentMenu(
       // 最後一段刪掉就沒有積木了。留著它比讓使用者做出一顆沒有名字的積木好。
       return ref.current.draft.segments.length > 1 ? 'enabled' : 'hidden';
     },
-    displayText: () => '刪掉這一格',
+    displayText: () => t('procedure.removeSegment'),
     callback: () => {
       const at = index;
       if (at !== null) ref.current.mutate((d) => removeSegment(d, at));
@@ -594,7 +594,7 @@ function registerSegmentMenu(
         // 目前就是這個型別的話不列——「改成是非」出現在一格布林上只是雜訊。
         return segment.type === item.value ? 'hidden' : 'enabled';
       },
-      displayText: () => `改成 ${item.label}`,
+      displayText: () => t('procedure.changeType', { type: item.label() }),
       callback: () => {
         const at = index;
         if (at !== null) ref.current.mutate((d) => setSegmentType(d, at, item.value));

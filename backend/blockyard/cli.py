@@ -16,8 +16,10 @@ import threading
 import webbrowser
 from pathlib import Path
 
-from blockyard.extensions import DEFAULT_EXTENSIONS_ROOT
+from blockyard.extensions import default_extensions_root
 from blockyard.storage import default_db_path
+from blockyard.errors import ExtensionError
+from blockyard.i18n_cli import check_pack, extract_pack
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
@@ -31,13 +33,42 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--host", default=DEFAULT_HOST)
     serve.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve.add_argument("--db", type=Path, default=None, help=f"預設 {default_db_path()}")
-    serve.add_argument("--extensions", type=Path, default=None, help="積木包目錄")
+    # 指過去就整個蓋掉「家」——開發時要改官方包就是走這條
+    # （`blockyard serve --extensions backend/blockyard/_bundled`）。
+    serve.add_argument(
+        "--extensions",
+        type=Path,
+        default=None,
+        help=f"積木包目錄，預設 {default_extensions_root()}",
+    )
     serve.add_argument("--no-open", action="store_true", help="不要自動開瀏覽器")
     serve.add_argument("--reload", action="store_true", help="改程式碼就重啟（開發用）")
+
+    i18n = sub.add_parser("i18n", help="積木包翻譯工具")
+    i18n_sub = i18n.add_subparsers(dest="i18n_command", required=True)
+    extract = i18n_sub.add_parser("extract", help="產生或更新翻譯檔")
+    extract.add_argument("pack", type=Path)
+    extract.add_argument("--locale", required=True)
+    check = i18n_sub.add_parser("check", help="嚴格驗證翻譯檔")
+    check.add_argument("pack", type=Path)
 
     args = parser.parse_args(argv)
     if args.command == "serve":
         return _serve(args)
+    if args.command == "i18n":
+        try:
+            if args.i18n_command == "extract":
+                target, changed = extract_pack(args.pack, args.locale)
+                print(f"已更新 {target}")
+                for path in changed:
+                    print(f"原文已改動：{path}", file=sys.stderr)
+            else:
+                check_pack(args.pack)
+                print("翻譯檔驗證通過")
+            return 0
+        except ExtensionError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
     parser.error(f"未知的指令 {args.command}")
     return 2
 
@@ -57,7 +88,8 @@ def _serve(args: argparse.Namespace) -> int:
 
     app = create_app(
         db_path=args.db or default_db_path(),
-        extensions_root=args.extensions or DEFAULT_EXTENSIONS_ROOT,
+        # None 就是「用家裡那份，順便鋪好官方包」（`api/app.py`）。
+        extensions_root=args.extensions,
     )
 
     url = f"http://{args.host}:{args.port}/"

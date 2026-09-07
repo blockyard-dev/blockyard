@@ -2,10 +2,10 @@
 
 **比較語意**（原設計文件未定義，這裡補上並進題庫）：
 
-  eq / neq   `fields.op` 選 `exact`（= / ≠，預設）時不做型別轉換：型別不同
-             即不相等，list / object 走深度比較，等同 JS 的 ===。不報錯，
-             因為「這兩個東西一不一樣」對任何輸入都該有答案。
-             選 `approx`（≈ / ≉，D24）時走 `_approx_eq` 的四條規則。
+  eq         `=` 不做型別轉換：型別不同即不相等，list / object 走深度比較，
+             等同 JS 的 ===。
+  approx     `≈` 走 `_approx_eq` 的四條規則。
+  neq        `fields.op` 選 `exact`（≠，預設）或 `approx`（≉）。
   lt/gt/lte/gte  比較方式寫在積木上（D24 的同一招）：`fields.mode` 選 `number`
              （預設）時兩邊 `to_number`，轉不動即錯；選 `text` 時兩邊
              `to_string` 後比字典序。`null` / list / object 兩種模式都不能
@@ -141,7 +141,14 @@ async def _math_op(t: Thread, b: Block) -> Any:
 async def _eq(t: Thread, b: Block) -> bool:
     a = await t.value(b, "a")
     c = await t.value(b, "b")
-    return _compare(t.field(b, "op", _EXACT), a, c)
+    return _deep_eq(a, c)
+
+
+@value("operator.approx")
+async def _approx(t: Thread, b: Block) -> bool:
+    a = await t.value(b, "a")
+    c = await t.value(b, "b")
+    return _approx_eq(a, c)
 
 
 @value("operator.neq")

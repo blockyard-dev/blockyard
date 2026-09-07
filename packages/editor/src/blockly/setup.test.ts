@@ -1,3 +1,9 @@
+import * as Blockly from 'blockly/core';
+import {
+  registerManifests,
+  WARNING_DOT_BOX_SIZE,
+  WARNING_DOT_GAP,
+} from './setup';
 /**
  * 已知缺口 1 的那條規則：**後端的宣告變了沒有**。
  *
@@ -8,6 +14,18 @@ import { describe, expect, it } from 'vitest';
 import { changedManifestIds } from './setup';
 import { isRemovable, visibleGroups, type ToolboxGroup } from './toolbox';
 import type { Manifest } from '../types/manifest';
+
+it('warning 紅點只佔用自己的小方格，不保留三角 icon 的 17px 寬度', () => {
+  const size = Blockly.icons.WarningIcon.prototype.getSize();
+  expect(size).toEqual(new Blockly.utils.Size(WARNING_DOT_BOX_SIZE, WARNING_DOT_BOX_SIZE));
+});
+
+it('warning 紅點與後面欄位不吃 Zelos 預設的 8px 間隔', () => {
+  const warning = Object.create(Blockly.icons.WarningIcon.prototype) as Blockly.icons.WarningIcon;
+  const prev = { icon: warning } as unknown as Blockly.blockRendering.Icon;
+  const next = {} as Blockly.blockRendering.Measurable;
+  expect(Blockly.zelos.RenderInfo.prototype.getInRowSpacing_(prev, next)).toBe(WARNING_DOT_GAP);
+});
 
 function mf(id: string, extra: Record<string, unknown> = {}): Manifest {
   return { manifestVersion: 1, id, name: id, version: '1.0.0', palette: [], ...extra } as Manifest;
@@ -70,4 +88,18 @@ describe('isRemovable / 分類的順序（D31）', () => {
     const groups = [group('operator', true), group('panel', false), group('http', false)];
     expect(visibleGroups(groups, new Set(['http'])).map((g) => g.id)).toEqual(['operator', 'http']);
   });
+});
+
+it('keeps frontend-only manifests in the gallery without empty toolbox categories', () => {
+  const registration = registerManifests([{ id: 'frontend', name: 'Frontend', version: '1', editor: { entry: 'ui.js', apiVersion: 1 } }]);
+  expect(registration.groups.map((g) => g.id)).toEqual(['frontend']);
+  expect(registration.blocks).toHaveLength(0);
+  expect(registration.toolbox.contents).toEqual([]);
+});
+
+it('registers Blockly built-in messages in the requested locale', () => {
+  registerManifests([], undefined, 'en');
+  expect(Blockly.Msg['DELETE_BLOCK']).toBe('Delete Block');
+  registerManifests([], undefined, 'zh-TW');
+  expect(Blockly.Msg['DELETE_BLOCK']).toBe('刪除區塊');
 });

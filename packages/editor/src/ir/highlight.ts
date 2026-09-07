@@ -25,6 +25,8 @@
  * 對不齊。
  */
 
+import { t as translate } from '../i18n';
+
 /** 一段 run 的身分。`ref` 畫成 pill，`error` 畫紅線，`text` 就是文字。 */
 export type RunKind = 'text' | 'ref' | 'error';
 
@@ -79,7 +81,7 @@ const ADD_OPS = '+-';
 const MUL_OPS = '*/%';
 
 /** 錯誤訊息裡列給使用者看的東西，與 `expression.py::_ALLOWED` 同步。 */
-const ALLOWED = '數字、${變數}、+ - * / % 與括號';
+const allowed = () => translate('syntax.allowed');
 
 // --------------------------------------------------------------------------
 // 入口
@@ -129,7 +131,7 @@ export function analyzeTemplate(value: string): Analysis {
     const close = value.indexOf('}', i + 2);
     if (close === -1) {
       flush(i);
-      const message = '「${」沒有對應的「}」';
+      const message = translate('syntax.unclosedReference');
       runs.push({ kind: 'error', start: i, end: value.length, message });
       error ??= message;
       textStart = value.length;
@@ -165,7 +167,7 @@ function pathRun(value: string, start: number, end: number): Run {
   const raw = inner.trim();
   const at = (offset: number) => innerStart + lead + offset;
 
-  if (raw === '') return { kind: 'error', start, end, message: '「${}」是空的' };
+  if (raw === '') return { kind: 'error', start, end, message: translate('syntax.emptyReference') };
 
   const tokens = tokenizePath(raw);
   if ('message' in tokens) return { kind: 'error', start, end, message: tokens.message };
@@ -179,17 +181,17 @@ function pathRun(value: string, start: number, end: number): Run {
         kind: 'error',
         start,
         end,
-        message: `「\${}」內不支援運算（出現了 ${bad.join(' ')}），請改用「運算」積木`,
+        message: translate('syntax.referenceExpression', { chars: bad.join(' ') }),
       };
     }
   }
 
   const root = tokens.parts[0];
   if (root === undefined || typeof root.value !== 'string') {
-    return { kind: 'error', start, end, message: '「${}」必須以變數名稱開頭' };
+    return { kind: 'error', start, end, message: translate('syntax.referenceRoot') };
   }
   if (root.value === '') {
-    return { kind: 'error', start, end, message: '「${}」內的變數名稱是空的' };
+    return { kind: 'error', start, end, message: translate('syntax.referenceNameEmpty') };
   }
 
   return {
@@ -238,11 +240,11 @@ function tokenizePath(raw: string): { parts: PathPart[] } | { message: string } 
     } else if (c === '[') {
       flushName();
       const close = raw.indexOf(']', i);
-      if (close === -1) return { message: '「[」沒有對應的「]」' };
+      if (close === -1) return { message: translate('syntax.unclosedIndex') };
       const token = raw.slice(i + 1, close).trim();
       const index = parseIndex(token);
       if (index === null) {
-        return { message: `「[]」內只能是整數或 last，收到 "${token}"` };
+        return { message: translate('syntax.badIndex', { token }) };
       }
       parts.push({ value: index, start: i, end: close + 1 });
       i = close + 1;
@@ -250,7 +252,7 @@ function tokenizePath(raw: string): { parts: PathPart[] } | { message: string } 
       if (i < raw.length && raw[i] === '.') i += 1;
       bufStart = i;
     } else if (c === ']') {
-      return { message: '多餘的「]」' };
+      return { message: translate('syntax.extraIndexClose') };
     } else {
       if (buf === '') bufStart = i;
       buf += c;
@@ -286,18 +288,18 @@ function analyzeVariableName(value: string): Analysis {
   // 檢查的順序與 `template.py::validate_name` 相同：先空白、再空字串、
   // 最後禁用字元。順序換了，`" "` 會拿到另一句話。
   if (value !== value.trim()) {
-    const message = `變數名稱前後不能有空白："${value}"`;
+    const message = translate('syntax.variableWhitespace', { value });
     return { runs: [{ kind: 'error', start: 0, end: value.length, message }], error: message, whole: false };
   }
   if (value === '') {
-    return { runs: [], error: '變數名稱不能是空的', whole: false };
+    return { runs: [], error: translate('syntax.variableEmpty'), whole: false };
   }
   const bad = [...new Set([...value].filter((c) => NAME_FORBIDDEN.includes(c)))].sort();
   if (bad.length > 0) {
     // 走得到這裡代表 `FieldText.doClassValidation_` 的過濾被繞過了（程式設值、
     // 或載入一份手寫的 IR）。畫紅線而不是默默吃掉：欄位裡看得見的字元與存出去
     // 的值不一樣才是真正查不出來的那種 bug。
-    const message = `變數名稱不能包含 ${bad.join(' ')}："${value}"`;
+    const message = translate('syntax.variableForbidden', { chars: bad.join(' '), value });
     return {
       runs: [{ kind: 'error', start: 0, end: value.length, message }],
       error: message,
@@ -362,11 +364,11 @@ function tokenizeExpression(s: string): { tokens: ExprToken[]; error: LexError |
     if (c === '$') {
       // `${` 之外的 `$` 沒有意義。字串欄位裡它是字面值，這裡不是字串。
       if (!s.startsWith('${', i)) {
-        return { tokens, error: { message: '運算式裡的變數要寫成 ${名稱}', start: i, end: i + 1 } };
+        return { tokens, error: { message: translate('syntax.expressionVariable'), start: i, end: i + 1 } };
       }
       const close = s.indexOf('}', i + 2);
       if (close === -1) {
-        return { tokens, error: { message: '「${」沒有對應的「}」', start: i, end: s.length } };
+        return { tokens, error: { message: translate('syntax.unclosedReference'), start: i, end: s.length } };
       }
       // 路徑的解析與 §4.7 共用，連 `${a+b}` 的錯誤訊息都是同一句
       const run = pathRun(s, i, close + 1);
@@ -401,8 +403,8 @@ function tokenizeExpression(s: string): { tokens: ExprToken[]; error: LexError |
     // 文法裡沒有的東西——比較、函式呼叫、字串常值全部在此止步。字母另給一句：
     // `max(a, b)` 與 `a * 2` 是使用者最常試的兩種寫法。
     const message = /[A-Za-z_]/.test(c)
-      ? '運算式裡不能呼叫函式；變數要寫成 ${名稱}'
-      : `運算式裡不能用「${c}」，只能有${ALLOWED}`;
+      ? translate('syntax.expressionFunction')
+      : translate('syntax.expressionCharacter', { char: c, allowed: allowed() });
     return { tokens, error: { message, start: i, end: i + 1 } };
   }
 
@@ -494,7 +496,7 @@ function parseExpression(tokens: ExprToken[], source: string): ParseError | null
   const fail = (message: string, at?: ExprToken): ParseError => ({ message, ...(at ?? tail()) });
 
   if (tokens.length === 0) {
-    return { message: '運算式是空的', start: 0, end: source.length };
+    return { message: translate('syntax.expressionEmpty'), start: 0, end: source.length };
   }
 
   let failure: ParseError | null = null;
@@ -506,7 +508,7 @@ function parseExpression(tokens: ExprToken[], source: string): ParseError | null
   const primary = (): void => {
     const t = peek();
     if (t === undefined) {
-      bail(fail('運算式在這裡就結束了，少了一個數字或變數'));
+      bail(fail(translate('syntax.expressionEnded')));
       return;
     }
     i += 1;
@@ -516,17 +518,17 @@ function parseExpression(tokens: ExprToken[], source: string): ParseError | null
       if (failure) return;
       const next = peek();
       if (next === undefined || next.kind !== ')') {
-        bail(fail('「(」沒有對應的「)」', t));
+        bail(fail(translate('syntax.unclosedParen'), t));
         return;
       }
       i += 1;
       return;
     }
     if (t.kind === ')') {
-      bail(fail('多餘的「)」', t));
+      bail(fail(translate('syntax.extraParenClose'), t));
       return;
     }
-    bail(fail(`這裡應該是數字或變數，卻是「${t.text}」`, t));
+    bail(fail(translate('syntax.expectedValue', { token: t.text }), t));
   };
 
   const unary = (): void => {
@@ -563,7 +565,7 @@ function parseExpression(tokens: ExprToken[], source: string): ParseError | null
   if (failure) return failure;
 
   const rest = peek();
-  if (rest !== undefined) return fail(`運算式在「${rest.text}」之後多了東西`, rest);
+  if (rest !== undefined) return fail(translate('syntax.trailingExpression', { token: rest.text }), rest);
   return null;
 }
 

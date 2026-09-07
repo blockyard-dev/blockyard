@@ -32,6 +32,7 @@
 import * as Blockly from 'blockly/core';
 import type { DropdownArgs } from './dropdownCache';
 import { fetchDropdownOptions, peekDropdownOptions } from './dropdownCache';
+import { list, t } from '../../i18n';
 
 export const FIELD_DYNAMIC_DROPDOWN_TYPE = 'field_blockyard_dynamic_dropdown';
 
@@ -43,7 +44,7 @@ export const FIELD_DYNAMIC_DROPDOWN_TYPE = 'field_blockyard_dynamic_dropdown';
  * 就擋掉，所以點它等於沒點——不會有一個 `\u0000blockyard.notice` 被存進 IR。
  */
 const NOTICE_VALUE = '\u0000blockyard.notice';
-const LOADING_TEXT = '載入中…';
+const loadingText = () => t('blockly.loadingOptions');
 
 /** 影子積木上那個欄位的名字。與 `define.ts::SHADOW_FIELD` 同一個字串——不從
  * 那邊 import，是為了不讓這個檔案與 `define.ts` 互相 import（define.ts 已經
@@ -130,7 +131,7 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
     this.source = config.source;
     this.depends = config.depends ?? [];
     this.dependsLabels = config.dependsLabels ?? {};
-    this.placeholder = config.placeholder ?? '選擇…';
+    this.placeholder = config.placeholder ?? t('blockly.select');
     const seed = config.value ?? '';
     // 同一個 extId/source 常常在這顆積木被建構之前就已經抓過（工具箱把整份
     // palette 一次畫出來，這顆多半不是畫面上第一個用到這個 source 的）。快取
@@ -274,9 +275,9 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
     if (Array.isArray(this.cachedOptions) && this.cachedOptions.length > 0) return null;
     switch (this.status) {
       case 'loading':
-        return [LOADING_TEXT, NOTICE_VALUE];
+        return [loadingText(), NOTICE_VALUE];
       case 'error':
-        return [this.problem || '讀不到選項', NOTICE_VALUE];
+        return [this.problem || t('blockly.optionsUnavailable'), NOTICE_VALUE];
       case 'empty':
         return [this.emptyText(), NOTICE_VALUE];
       default:
@@ -297,7 +298,9 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
     const missing = this.depends
       .filter((name) => !args[name])
       .map((name) => this.dependsLabels[name] ?? name);
-    return missing.length > 0 ? `先選擇${missing.join('、')}` : '沒有可以選的項目';
+    return missing.length > 0
+      ? t('blockly.selectFirst', { names: list(missing) })
+      : t('blockly.noOptions');
   }
 
   /**
@@ -333,7 +336,7 @@ export class FieldDynamicDropdown extends Blockly.FieldDropdown {
     // 的差別是**點開來會不會有東西**——在清單回來之前，這一格點開只有一行話，
     // 而使用者有權在點下去之前就知道這件事。有值的時候不換：那個值（一串 id）
     // 本來就是這一格現在真正的內容，換成「載入中…」等於把它藏起來。
-    if (!value && this.status === 'loading') return LOADING_TEXT;
+    if (!value && this.status === 'loading') return loadingText();
     if (!value) return this.placeholder;
     const match = this.cachedOptions.find(
       (opt): opt is [string, string, string?] => Array.isArray(opt) && opt[1] === value,
@@ -368,7 +371,7 @@ export function registerDynamicDropdownMenu(): void {
     weight: 100,
     preconditionFn: (scope: { block?: Blockly.BlockSvg }) =>
       fieldOf(scope.block) ? 'enabled' : 'hidden',
-    displayText: () => '重新整理選項',
+    displayText: () => t('blockly.refreshOptions'),
     callback: (scope: { block?: Blockly.BlockSvg }) => {
       fieldOf(scope.block)?.refresh();
     },

@@ -100,7 +100,9 @@ def drain(ws: Any, *, limit: int = 400) -> list[dict[str, Any]]:
 
 
 def test_run_masks_secret_values_in_the_event_stream(client: TestClient) -> None:
-    secret_store.set("leaky", "token", LEAKY_TOKEN)
+    # 金鑰掛在**這個專案**的 `leaky` 底下（§16 Q23）——執行時 `open_project`
+    # 從 IR 的 `meta.id` 讀出同一個主詞。
+    secret_store.set(secret_store.owner_of("p_leak", "leaky"), "token", LEAKY_TOKEN)
     pid = save(client, leaky_project())
 
     run = client.post("/api/runs", json={"projectId": pid})

@@ -44,6 +44,7 @@ import type {
   Block as IRBlock,
   BlockyardProjectIR as ProjectIR,
 } from '../types/project';
+import { t } from '../i18n';
 
 type BlockState = Blockly.serialization.blocks.State;
 type ConnectionState = Blockly.serialization.blocks.ConnectionState;
@@ -149,14 +150,14 @@ function blocklyTypeOf(block: IRBlock): string {
   if (block.opcode === 'procedure.definition') {
     const id = block.fields?.proc;
     if (typeof id !== 'string') {
-      throw new Error('procedure.definition 缺少 fields.proc');
+      throw new Error(t('error.irMissingField', { block: 'procedure.definition', field: 'fields.proc' }));
     }
     return definitionType(id);
   }
   if (block.opcode === 'procedure.call') {
     const id = block.mutation?.proc;
     if (typeof id !== 'string') {
-      throw new Error('procedure.call 缺少 mutation.proc');
+      throw new Error(t('error.irMissingField', { block: 'procedure.call', field: 'mutation.proc' }));
     }
     return callType(id);
   }
@@ -164,7 +165,7 @@ function blocklyTypeOf(block: IRBlock): string {
     const proc = block.mutation?.proc;
     const param = block.mutation?.param;
     if (typeof proc !== 'string' || typeof param !== 'string') {
-      throw new Error('procedure.param 缺少 mutation.proc / mutation.param');
+      throw new Error(t('error.irMissingField', { block: 'procedure.param', field: 'mutation.proc / mutation.param' }));
     }
     return paramType(proc, param);
   }
@@ -248,7 +249,10 @@ function buildInputs(
         out[name] = { shadow: buildShadowState(registered, name, input.value) };
         break;
       default:
-        throw new Error(`未知的 input kind：${String((input as { kind: unknown }).kind)}（${type}.${name}）`);
+        throw new Error(t('error.irUnknownInput', {
+          kind: String((input as { kind: unknown }).kind),
+          input: `${type}.${name}`,
+        }));
     }
   }
   return Object.keys(out).length > 0 ? out : undefined;
@@ -342,6 +346,6 @@ function shadowFields(kind: ShadowKind, value: unknown): Record<string, unknown>
 
 function requireBlock(project: ProjectIR, id: string): IRBlock {
   const block = project.blocks?.[id];
-  if (!block) throw new Error(`找不到積木 ${id}`);
+  if (!block) throw new Error(t('error.irBlockNotFound', { id }));
   return block;
 }

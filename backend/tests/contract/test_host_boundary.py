@@ -20,7 +20,7 @@ import pytest
 
 from blockyard.errors import BlockyardError, ExtensionError
 from blockyard.extensions import (
-    DEFAULT_EXTENSIONS_ROOT,
+    BUNDLED_ROOT,
     CallContexts,
     EventSinkChannel,
     ExtensionHost,
@@ -67,7 +67,7 @@ class Harness:
 async def h(request: pytest.FixtureRequest):
     contexts = CallContexts()
     sink = EventSink()
-    sources = discover(DEFAULT_EXTENSIONS_ROOT)
+    sources = discover(BUNDLED_ROOT)
     # `open_registry` 會注這個函式進去（見 `registry.py`）。harness 自己建
     # channel，所以要自己注——不注的話「宣告過的面板」永遠是空的，而題目會以為
     # 那道檢查在擋，其實是它自己沒接上。
@@ -83,7 +83,7 @@ async def h(request: pytest.FixtureRequest):
         host: ExtensionHost = InProcessHost(sources, channel, contexts)
     elif request.param == "subprocess":
         host = SubprocessHost(
-            sources, channel, contexts, extensions_root=DEFAULT_EXTENSIONS_ROOT
+            sources, channel, contexts, extensions_root=BUNDLED_ROOT
         )
     else:
         raise AssertionError(f"未知的 host 實作 {request.param}")

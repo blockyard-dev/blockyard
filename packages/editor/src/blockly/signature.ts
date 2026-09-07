@@ -12,6 +12,7 @@
  * 或排了版卻漏掉參數，都是存檔期錯誤。這裡只負責畫。
  */
 import type { Procedure, ProcParam } from '../types/project';
+import { t } from '../i18n';
 
 /** 與後端 `ir/schema.py::PLACEHOLDER` 同一套語法。 */
 export const PLACEHOLDER = /%\((\w+)\)/g;
@@ -57,7 +58,7 @@ export function callText(proc: Procedure): string {
   // 相容排版只在「有參數、但簽章沒說它們排在哪裡」時才需要——那時候句子本身
   // 說不出誰是誰（`加總 (孔) (孔)` 讀不懂），所以才補上動詞與參數名。
   if (hasSignatureTemplate(proc.name) || params.length === 0) return proc.name;
-  return [`呼叫 ${proc.name}`, ...params.map((p) => `${p.name}: %(${p.id})`)].join(' ');
+  return [`${t('blockly.call')} ${proc.name}`, ...params.map((p) => `${p.name}: %(${p.id})`)].join(' ');
 }
 
 /**
@@ -74,10 +75,10 @@ export function callText(proc: Procedure): string {
  */
 export function definitionText(proc: Procedure): string {
   const params = paramsOf(proc);
-  if (hasSignatureTemplate(proc.name) || params.length === 0) return `定義 ${proc.name}`;
+  if (hasSignatureTemplate(proc.name) || params.length === 0) return `${t('blockly.define')} ${proc.name}`;
   // 相容排版與 `callText` 一致，理由也一樣：簽章沒說參數排在哪裡時，句子本身
   // 說不出誰是誰。
-  return [`定義 ${proc.name}`, ...params.map((p) => `${p.name}: %(${p.id})`)].join(' ');
+  return [`${t('blockly.define')} ${proc.name}`, ...params.map((p) => `${p.name}: %(${p.id})`)].join(' ');
 }
 
 /** 參數列，`params` 沒給時是空陣列。 */

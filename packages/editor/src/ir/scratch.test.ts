@@ -20,7 +20,7 @@ import type { Manifest } from '../types/manifest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILTINS = resolve(HERE, '../../../../backend/blockyard/interpreter/builtins');
-const DEMO_MANIFEST = resolve(HERE, '../../../../extensions/demo/manifest.yaml');
+const DEMO_MANIFEST = resolve(HERE, '../../../../backend/blockyard/_bundled/demo/manifest.yaml');
 
 const registration = registerManifests([
   ...readdirSync(BUILTINS)

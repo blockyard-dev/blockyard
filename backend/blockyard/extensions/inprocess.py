@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from blockyard.errors import BlockyardError, ExtensionError
 from blockyard.extensions.boundary import (
@@ -25,7 +26,6 @@ from blockyard.extensions.host import CallContext, CallContexts, HostChannel
 from blockyard.extensions.httpclient import new_client
 from blockyard.extensions.loading import (
     check_coverage,
-    check_net_permission,
     collect_exports,
     import_extension_module,
     trigger_error_text,
@@ -238,14 +238,7 @@ class InProcessHost:
         )
 
     def _http_for(self, loaded: _Loaded) -> Any:
-        """`ctx.http` 的落點（§7.4）。
-
-        **權限在這裡才真的守得住**：`permissions: [net]` 在 §12.1 是安裝畫面上
-        的一句話，而一句沒有人檢查的宣告，使用者讀了也不能信。沒宣告就拿不到
-        client——訊息指名是包的宣告漏了，不是使用者的流程錯了。跟 SubprocessHost
-        共用同一段檢查（`loading.check_net_permission`）。
-        """
-        check_net_permission(loaded.manifest)
+        """受信任插件共用的 HTTP client，延遲建立。"""
         if loaded.http is None:
             loaded.http = new_client()
         return loaded.http
